@@ -1,0 +1,26 @@
+name: Unpack the zip
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the zip into the repo
+        run: |
+          unzip -q -o ./*.zip -d unpacked
+          rm -rf unpacked/*/.github
+          cp -R unpacked/*/. .
+          rm -rf unpacked ./*.zip
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Apex v16" || exit 0
+          git push
