@@ -1,0 +1,72 @@
+# XcodeGen spec: the build workflow turns this into Kite.xcodeproj (`xcodegen generate`).
+name: Kite
+options:
+  bundleIdPrefix: app.vela
+  deploymentTarget:
+    iOS: "16.2"
+targets:
+  Kite:
+    type: application
+    platform: iOS
+    sources:
+      - App/Sources
+      - App/Assets.xcassets
+    dependencies:
+      - target: ApexWidgets
+    scheme: {}
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Apex
+        CFBundleShortVersionString: "0.7.5"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Apex shows where you are on the map, finds places near you and guides you turn by turn.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Apex keeps guiding you with the screen off during navigation.
+        NSMicrophoneUsageDescription: Apex listens when you tap the microphone to search by voice.
+        NSSpeechRecognitionUsageDescription: Apex turns what you say into a search.
+        UIBackgroundModes:
+          - location
+          - audio
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        # Kept from the Vela days so updates install over the old app and keep saved places.
+        PRODUCT_BUNDLE_IDENTIFIER: app.vela.ios
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: "0.7.5"
+        CURRENT_PROJECT_VERSION: "1"
+  ApexWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widget
+      - App/Sources/NavActivity.swift
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Apex
+        CFBundleShortVersionString: "0.7.5"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.vela.ios.widgets
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: "YES"
+        MARKETING_VERSION: "0.7.5"
+        CURRENT_PROJECT_VERSION: "1"
