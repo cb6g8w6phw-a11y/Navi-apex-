@@ -556,6 +556,8 @@ final class AppModel: ObservableObject {
                     if autoStart, !r.routes.isEmpty {
                         autoStart = false
                         startNavigation()
+                                // glide.map = map
+        // glide.fix(n, loc, across: across, jump: !animated)
                     }
                 }
             }
@@ -658,13 +660,12 @@ final class AppModel: ObservableObject {
         mapTick += 1
     }
 
-    private func followCamera(_ n: Navigator, _ loc: CLLocation, animated: Bool) {
-        let p = n.progress
-        let speed = max(0, loc.speed)
-        var across = n.route.mode == .drive ? min(1400, max(450, 300 + speed * 30)) : 300
-        // Close to a roundabout, zoom in so the whole of it and its exits fill the view.
-        if n.nextManeuver?.type == .roundabout, let d = p?.distanceToNext, d < 350 { across = min(across, 380) }
-        glide.fix(n, loc, across: across, jump: !animated)
+       private func followCamera(_ n: Navigator, _ loc: CLLocation, animated: Bool) {
+        // let p = n.progress
+        // let speed = max(0, loc.speed)
+        // var across = n.route.mode == .drive ? min(1400, max(450, 300 + speed * 30)) : 300
+        // if n.nextManeuver?.type == .roundabout, let d = p?.distanceToNext, d < 350 { across = min(across, 380) }
+        // glide.fix(n, loc, across: across, jump: false)
     }
 
     // MARK: Map
