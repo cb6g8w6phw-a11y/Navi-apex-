@@ -353,6 +353,19 @@ struct VelaMapView: UIViewRepresentable {
             c.dark = dark
             c.repaint(map)
         }
+        
+        // Włączanie i wyłączanie natywnego śledzenia kamery (naprawia brak auta i "jebnięcie" kamery)
+        if let nav = model.nav, nav.following {
+            if map.userTrackingMode != .followWithHeading {
+                map.userTrackingMode = .followWithHeading
+                map.camera.pitch = 45 // Lekkie pochylenie 3D
+            }
+        } else {
+            if map.userTrackingMode != .none {
+                map.userTrackingMode = .none
+            }
+        }
+        
         c.render(map)
         c.loadCameras(map)
         c.loadWaze(map)
@@ -366,6 +379,7 @@ struct VelaMapView: UIViewRepresentable {
         var dark = false
         private var movedToUser = false
         private var pinDroppedAt = Date.distantPast
+        private var policeSweptAt = Date.distantPast
         /** When the map itself last picked something (a place, a pin, a report), so the empty-map tap stays out of it. */
         private var lastPickAt = Date.distantPast
 
@@ -460,8 +474,6 @@ struct VelaMapView: UIViewRepresentable {
         func render(_ map: MKMapView) {
             let s = model.settings
             let navigating = model.nav != nil
-            // The navigation arrow replaces the blue dot.
-            if map.showsUserLocation == navigating { map.showsUserLocation = !navigating }
             configure(map, navigating: navigating)
 
             let wantTerrain = s.terrain && !s.satellite
@@ -536,19 +548,24 @@ struct VelaMapView: UIViewRepresentable {
 
             let stale = map.overlays.filter { !wanted.contains(ObjectIdentifier($0 as AnyObject)) }
             guard !stale.isEmpty else { return }
-            // The new drawing needs a moment to appear; removing the old one at once left a gap.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, weak map] in
-                guard let self, let map else { return }
-                let gone = stale.filter { !self.wantedOverlays.contains(ObjectIdentifier($0 as AnyObject)) }
-                guard !gone.isEmpty else { return }
-                map.removeOverlays(gone)
-                for o in gone { self.lineStyles[ObjectIdentifier(o as AnyObject)] = nil }
-            }
+            map.removeOverlays(stale)
+            for o in stale { self.lineStyles[ObjectIdentifier(o as AnyObject)] = nil }
         }
 
         private func makeLine(_ pts: [LatLng], _ style: LineStyle) -> StyledLine? {
             guard pts.count >= 2 else { return nil }
-            var coords = pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+            // Wygładzanie: generujemy gęste punkty (co 10m), żeby trasa na zakrętach nie ucinała rogów
+            let cum = Geo.cumulative(pts)
+            let total = cum.last ?? 0
+            var densePts: [LatLng] = []
+            var m = 0.0
+            while m < total {
+                densePts.append(Geo.point(along: pts, meters: m, cumulative: cum))
+                m += 10.0
+            }
+            densePts.append(pts.last!)
+            
+            var coords = densePts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
             let line = MKPolyline(coordinates: &coords, count: coords.count)
             return (line, style)
         }
@@ -772,7 +789,7 @@ struct VelaMapView: UIViewRepresentable {
             replaceAnnotations(&selectedAnns, sel, map)
         }
 
-                private func renderRoutes(_ map: MKMapView) {
+        private func renderRoutes(_ map: MKMapView) {
             var alts: [Route] = []
             var main: Route?
             if let n = model.nav {
@@ -833,10 +850,10 @@ struct VelaMapView: UIViewRepresentable {
             let cum = Geo.cumulative(r.polyline)
             let total = cum.last ?? 0
 
-            // 1. ZAWSZE rysuj PEŁNĄ trasę (to naprawia problem "1/8 trasy")
-            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
+            // 1. ZAWSZE rysuj PEŁNĄ trasę (stała szerokość, brak wielkich trójkątów)
+            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 16, relative: nil))
             add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
-                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
+                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: nil))
 
             // 2. Kropki tylko na pozostałej części (przed tobą)
             if navigating && from > 1 && from < total - 5 {
@@ -926,6 +943,11 @@ struct VelaMapView: UIViewRepresentable {
                 if let h = s.home { places.append(h.location) }
                 if let w = s.work { places.append(w.location) }
                 WazeHistory.shared.sweepIfDue(places)
+                // Waze's live map od października 2026 nie dzieli się policją — bierzemy ją z app servers WazeLive.
+                if settings.wazeOn, settings.wazePolice, Date().timeIntervalSince(policeSweptAt) > 600 {
+                    policeSweptAt = Date()
+                    Task { @MainActor in model.sweepPoliceNearby() }
+                }
             }
             guard s.wazeOn, s.wazeOnMap || s.wazeHeatmap, map.zoomLevel >= 10, wazeFetch == nil, !DemoScript.fakeWaze,
                   Date().timeIntervalSince(wazeFailedAt) > 60 else { return }
@@ -1070,8 +1092,16 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         @objc func userMoved(_ g: UIGestureRecognizer) {
-            guard g.state == .began || g.state == .changed, let n = model.nav, n.following else { return }
-            n.following = false
+            // Only disable following if the user is actually panning/pinching/twisting the map
+            guard g.state == .began || g.state == .changed else { return }
+            if let n = model.nav, n.following {
+                // We add a small delay to distinguish between a real user gesture and a minor map update
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if g.state == .began || g.state == .changed {
+                        n.following = false
+                    }
+                }
+            }
         }
 
         @objc func pressed(_ g: UILongPressGestureRecognizer) {
@@ -1079,7 +1109,7 @@ struct VelaMapView: UIViewRepresentable {
             pinDroppedAt = Date()
             let c = map.convert(g.location(in: map), toCoordinateFrom: map)
             guard model.nav == nil, model.directions == nil else { return }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            Haptics.success()
             model.dropPin(at: LatLng(c.latitude, c.longitude))
         }
 
@@ -1164,16 +1194,16 @@ struct VelaMapView: UIViewRepresentable {
                 if model.directions != nil, !a.routeSelected { model.selectRoute(a.routeIndex) }
             case .waze:
                 guard model.directions == nil, let alert = wazeAlerts.first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
+                Haptics.select()
                 model.wazeInfo = alert
             case .fuel:
                 let fuel = FuelPrices.shared
                 guard let station = (fuel.stations + fuel.ahead).first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
+                Haptics.select()
                 model.fuelInfo = station
             case .roadEvent:
                 guard let event = RoadEvents.shared.events.first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
+                Haptics.select()
                 model.roadInfo = event
             case .mine:
                 guard model.directions == nil, let place = model.myPlace(a.id) else { return }
@@ -1187,17 +1217,10 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         func mapView(_ map: MKMapView, regionWillChangeAnimated animated: Bool) {
-            // The person moving the map themselves stops it following the car.
-            guard let n = model.nav, n.following else { return }
-            let touching = (map.subviews.first?.gestureRecognizers ?? []).contains { r in
-                (r is UIPanGestureRecognizer || r is UIPinchGestureRecognizer || r is UIRotationGestureRecognizer)
-                    && (r.state == .began || r.state == .changed)
-            }
-            if touching { n.following = false }
+            // Obsługę gestów użytkownika robi metoda `userMoved`.
         }
 
         func mapViewDidChangeVisibleRegion(_ map: MKMapView) {
-            noteHeading(map)
             for a in headAnns {
                 if let v = map.view(for: a) as? KiteAnnotationView { v.applyRotation(in: map) }
             }
