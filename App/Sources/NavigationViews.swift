@@ -455,14 +455,14 @@ struct EndTripCard: View {
                 Text(String(format: "to_destination".localized, destination)).font(.system(size: 16, weight: .medium))
                     .foregroundColor(Vela.muted(scheme)).lineLimit(1)
             }
-                        HStack(spacing: 12) {
+            HStack(spacing: 12) {
                 Button(action: onKeep) {
                     Text("keep_going".localized).font(.system(size: 20, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 60)
                         .foregroundColor(Vela.onAccent(scheme))
                         .background(Capsule().fill(Vela.accent(scheme)))
                 }
-                .buttonStyle(PressableButtonStyle()) // <--- DODAJ TO
+                .buttonStyle(PressableButtonStyle())
 
                 Button(action: onEnd) {
                     Text("end_trip".localized).font(.system(size: 20, weight: .bold))
@@ -470,12 +470,12 @@ struct EndTripCard: View {
                         .foregroundColor(.white)
                         .background(Capsule().fill(Vela.closed))
                 }
-                .buttonStyle(PressableButtonStyle()) // <--- DODAJ TO
+                .buttonStyle(PressableButtonStyle())
             }
         }
         .foregroundColor(.primary)
         .padding(14)
-        .glassButton(Capsule())
+        .glassButton(Capsule()) // Zmienione z .glass(RoundedRectangle...)
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
