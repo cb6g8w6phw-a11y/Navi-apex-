@@ -103,7 +103,9 @@ enum MapIcons {
 
     /** A small traffic light, like Waze's: a dark upright box with red, amber and green lamps. */
     static func trafficLight() -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: 14, height: 30)).image { _ in
+        UIGraphicsImageRenderer(size: CGSize(width: 12, height: 25.5)).image { ctx in
+            // Drawn in the old 14x30 space, shrunk to fit: same look, smaller on the map.
+            ctx.cgContext.scaleBy(x: 12.0 / 14.0, y: 12.0 / 14.0)
             UIColor.white.setFill()
             UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 14, height: 30), cornerRadius: 5).fill()
             UIColor(hex: 0x263238).setFill()
@@ -166,10 +168,10 @@ enum MapIcons {
         }
     }
 
-    /** A 46-unit badge drawn at 26 points (sharp when the map scales it up): white rim, colored field, then the glyph. */
+    /** A 46-unit badge drawn at 21 points (sharp when the map scales it up): white rim, colored field, then the glyph. */
     private static func badge(_ color: UIColor, glyph: (UIColor) -> Void) -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: 26, height: 26)).image { ctx in
-            ctx.cgContext.scaleBy(x: 26.0 / 46.0, y: 26.0 / 46.0)
+        UIGraphicsImageRenderer(size: CGSize(width: 21, height: 21)).image { ctx in
+            ctx.cgContext.scaleBy(x: 21.0 / 46.0, y: 21.0 / 46.0)
             UIColor.white.setFill()
             UIBezierPath(roundedRect: CGRect(x: 2, y: 2, width: 42, height: 42), cornerRadius: 11).fill()
             color.setFill()
@@ -183,8 +185,10 @@ enum MapIcons {
 
     /** A warning triangle with a red rim, like the one on the road. */
     private static func triangleSign(fill: UIColor, glyph: (CGRect) -> Void) -> UIImage {
-        let size = CGSize(width: 26, height: 24)
+        let size = CGSize(width: 20, height: 18.5)
         return UIGraphicsImageRenderer(size: size).image { ctx in
+            // Drawn in the old 26x24 space, shrunk to fit: same look, smaller on the map.
+            ctx.cgContext.scaleBy(x: 20.0 / 26.0, y: 20.0 / 26.0)
             let g = ctx.cgContext
             let tri = UIBezierPath()
             tri.move(to: CGPoint(x: 13, y: 3))
@@ -218,8 +222,10 @@ enum MapIcons {
 
     /** A closed road: the red disc with the white bar. */
     static func noEntrySign() -> UIImage {
-        let size = CGSize(width: 24, height: 24)
+        let size = CGSize(width: 19, height: 19)
         return UIGraphicsImageRenderer(size: size).image { ctx in
+            // Drawn in the old 24x24 space, shrunk to fit: same look, smaller on the map.
+            ctx.cgContext.scaleBy(x: 19.0 / 24.0, y: 19.0 / 24.0)
             let g = ctx.cgContext
             let disc = CGRect(x: 2, y: 2, width: 20, height: 20)
             g.setShadow(offset: CGSize(width: 0, height: 1), blur: 2, color: UIColor.black.withAlphaComponent(0.35).cgColor)
@@ -234,9 +240,10 @@ enum MapIcons {
     }
 
     private static func dot(_ symbol: String, _ color: UIColor) -> UIImage {
-        let size = CGSize(width: 28, height: 28)
+        let size = CGSize(width: 22, height: 22)
         return UIGraphicsImageRenderer(size: size).image { ctx in
-            let r = CGRect(origin: .zero, size: size).insetBy(dx: 1.5, dy: 1.5)
+            ctx.cgContext.scaleBy(x: 22.0 / 28.0, y: 22.0 / 28.0)
+            let r = CGRect(x: 0, y: 0, width: 28, height: 28).insetBy(dx: 1.5, dy: 1.5)
             color.setFill()
             UIColor.white.setStroke()
             let path = UIBezierPath(ovalIn: r)
@@ -244,7 +251,6 @@ enum MapIcons {
             path.fill()
             path.stroke()
             draw(symbol, in: r.insetBy(dx: 6, dy: 6), color: .white)
-            _ = ctx
         }
     }
 

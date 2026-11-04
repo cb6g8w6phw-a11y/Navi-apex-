@@ -50,7 +50,7 @@ struct KiteType: ViewModifier {
     }
 }
 
-/** A settings-style list on Kite's own ground, with the taller rows. */
+/** A settings-style list on Kite's own ground: each row its own pane of Liquid Glass, like the menu's cards. */
 struct KiteList: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     func body(content: Content) -> some View {
@@ -58,7 +58,23 @@ struct KiteList: ViewModifier {
             .scrollContentBackground(.hidden)
             .background(PageBackdrop())
             .environment(\.defaultMinListRowHeight, 56)
+            .listRowSeparator(.hidden)
+            .listRowBackground(GlassListRow())
             .tint(Vela.accentText(scheme))
+    }
+}
+
+/** One settings row as its own small glass card, so the pages match the menu's Liquid Glass look. */
+struct GlassListRow: View {
+    @Environment(\.colorScheme) private var scheme
+    var body: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.ultraThinMaterial)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Vela.surface(scheme).opacity(scheme == .dark ? 0.55 : 0.70)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.55), lineWidth: 1))
+            .padding(.vertical, 2.5)
     }
 }
 
