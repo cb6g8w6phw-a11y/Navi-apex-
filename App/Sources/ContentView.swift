@@ -403,9 +403,9 @@ struct SearchBar: View {
                     model.clearSearch()
                     focused.wrappedValue = false
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 19, weight: .bold))
+                    Image(systemName: "xmark").font(.system(size: 18, weight: .bold))
                         .frame(width: 48, height: 48)
-                        .background(Circle().fill(Vela.chip(scheme)))
+                        .background(GlassCircle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -417,9 +417,9 @@ struct SearchBar: View {
                         model.search(text)
                     }, onError: { model.notice = $0 })
                 } label: {
-                    Image(systemName: "mic.fill").font(.system(size: 21, weight: .semibold))
+                    Image(systemName: "mic.fill").font(.system(size: 20, weight: .semibold))
                         .frame(width: 48, height: 48)
-                        .background(Circle().fill(Vela.chip(scheme)))
+                        .background(GlassCircle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Search by voice")
@@ -539,11 +539,8 @@ struct SuggestionsPanel: View {
             .padding(.vertical, 6)
             .font(.system(size: 15))
         }
-        // Smaller and see-through: the map stays readable behind it.
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial).opacity(0.72)
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 0.75))
-        )
+        // See-through, so the map stays readable behind it.
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.trailing, 12)
         .padding(.leading, (settings.weatherOn || settings.fuelOn) ? 70 : 12)
         .frame(maxHeight: 300)
@@ -583,8 +580,8 @@ struct NoticeBanner: View {
             Text(text).font(.footnote).frame(maxWidth: .infinity, alignment: .leading)
             Button(action: dismiss) { Image(systemName: "xmark").font(.footnote) }.buttonStyle(.plain)
         }
-        .padding(12)
-        .glass(RoundedRectangle(cornerRadius: 14))
+        .padding(14)
+        .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .padding(.horizontal, 12)
     }
 }
@@ -626,10 +623,7 @@ struct PlaceTile: View {
             if let p = place { go(); model.openDirections(to: p) } else { unset() }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(place == nil ? Color.gray : color))
+                IconBadge(icon: icon, color: place == nil ? Color(hex: 0x94A3B8) : color, size: 36)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .bold)).lineLimit(1)
                     Text(place.flatMap { p in model.userLatLng.map { $0.distance(to: p.location) } }.map(Fmt.distance) ?? (place == nil ? "Tap to set" : "Tap to go"))

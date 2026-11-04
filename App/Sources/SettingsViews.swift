@@ -52,8 +52,23 @@ struct LayersSheet: View {
                     else { Image(systemName: icon).font(.system(size: 26)) }
                 }
                     .frame(width: 74, height: 64)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Vela.chip(scheme)))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(on ? Vela.accent(scheme) : .clear, lineWidth: 3))
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Vela.chip(scheme))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.06 : 0.45), .clear],
+                                                         startPoint: .top, endPoint: .bottom))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.55), lineWidth: 1)
+                            )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(on ? Vela.accent(scheme) : .clear, lineWidth: 2.5)
+                    )
                 Text(title).font(.caption.weight(on ? .semibold : .regular))
                     .foregroundColor(on ? Vela.accent(scheme) : .primary)
             }
@@ -129,11 +144,7 @@ struct SettingsView: View {
             page()
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(hex: color)))
+                IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 17, weight: .semibold))
                     Text(detail).font(.subheadline).foregroundColor(.secondary)
@@ -199,18 +210,6 @@ struct SettingsView: View {
                 } label: { SettingLabel("Distance units", icon: "ruler.fill", color: 0x0891B2) }
                 Toggle(isOn: $settings.parkingButton) { SettingLabel("Parking button on the map", icon: "parkingsign", color: 0x2563EB) }
                 Toggle(isOn: $settings.weatherOn) { SettingLabel("Weather on the map", icon: "cloud.sun.fill", color: 0x0EA5E9) }
-                
-                // --- TUTAJ JEST TWOJA NOWA OPCJA ---
-                Picker(selection: $settings.hapticLevel) {
-                    Text("haptic_off".localized).tag(Haptics.Level.off)
-                    Text("haptic_light".localized).tag(Haptics.Level.light)
-                    Text("haptic_medium".localized).tag(Haptics.Level.medium)
-                    Text("haptic_strong".localized).tag(Haptics.Level.strong)
-                } label: {
-                    SettingLabel("haptic_feedback".localized, icon: "hand.tap.fill", color: 0x8B5CF6)
-                }
-                // -----------------------------------
-
             } footer: {
                 Text("Black uses pure black pages and always matte glass. Changing to or from Black takes you back to the first page of Settings. The weather badge asks Open-Meteo, with your position rounded to about 10 km.")
             }
@@ -292,11 +291,7 @@ struct SettingLabel: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 29, height: 29)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(hex: color)))
+            IconBadge(icon: icon, color: Color(hex: color), size: 30, radius: 8)
             Text(title)
         }
     }

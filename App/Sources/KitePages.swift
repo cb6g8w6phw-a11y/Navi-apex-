@@ -1,43 +1,93 @@
 import SwiftUI
+import UIKit
 
-/** The bar along the bottom: Map, Saved and Settings, each a big target. */
+/**
+ * The bar along the bottom: Map, Saved and Settings, each a big target.
+ *
+ * One pane of Liquid Glass, with the chosen item sitting in a little pane of its own that
+ * slides from place to place, so a tap reads as one thing moving rather than two repaints.
+ */
 struct KiteDock: View {
     @ObservedObject var model: AppModel
     let bottomInset: CGFloat
     @Environment(\.colorScheme) private var scheme
+    /** Ties the sliding pane to the item that owns it now, so it travels between them. */
+    @Namespace private var pane
 
     static let height: CGFloat = 80
     /** How far the dock sits above the screen's bottom edge. */
-    static func bottomGap(_ inset: CGFloat) -> CGFloat { max(inset - 14, 10) }
+    static func bottomGap(_ inset: CGFloat) -> CGFloat { max(inset - 16, 10) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            item(.map, "map.fill", "Map")
-            item(.saved, "bookmark.fill", "Saved")
-            item(.settings, "gearshape.fill", "Settings")
+        HStack(spacing: 4) {
+            item(.map, on: "map.fill", off: "map", title: "Map")
+            item(.saved, on: "bookmark.fill", off: "bookmark", title: "Saved")
+            item(.settings, on: "gearshape.fill", off: "gearshape", title: "Settings")
         }
+        .padding(6)
         .frame(height: Self.height)
-        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .glass(Capsule(style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, Self.bottomGap(bottomInset))
     }
 
-    private func item(_ tab: AppTab, _ icon: String, _ title: String) -> some View {
-        let on = model.tab == tab
+    private func item(_ tab: AppTab, on: String, off: String, title: String) -> some View {
+        let chosen = model.tab == tab
         return Button {
-            if tab != model.tab, model.tab == .settings { model.reloadRoutes() }
-            model.tab = tab
+            pick(tab)
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 25, weight: .semibold))
-                Text(title).font(.system(size: 14, weight: on ? .bold : .semibold))
+            ZStack {
+                if chosen {
+                    // The pane of glass under the chosen item: teal-tinted, with a bright rim on top.
+                    Capsule(style: .continuous)
+                        .fill(
+                            LinearGradient(colors: [Vela.accent(scheme).opacity(scheme == .dark ? 0.34 : 0.24),
+                                                    Vela.accent(scheme).opacity(scheme == .dark ? 0.16 : 0.10)],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(
+                                    LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.34 : 0.85),
+                                                            Color.white.opacity(0.04)],
+                                                   startPoint: .top, endPoint: .bottom),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: Vela.accent(scheme).opacity(scheme == .dark ? 0.45 : 0.30), radius: 10, y: 3)
+                        .matchedGeometryEffect(id: "dockPane", in: pane)
+                }
+                VStack(spacing: 3) {
+                    Image(systemName: chosen ? on : off)
+                        .font(.system(size: 24, weight: chosen ? .semibold : .regular))
+                        .scaleEffect(chosen ? 1.06 : 1)
+                    Text(title)
+                        .font(.system(size: 14, weight: chosen ? .bold : .medium))
+                }
+                .foregroundColor(chosen ? Vela.accentText(scheme) : Vela.muted(scheme))
             }
-            .foregroundColor(on ? Vela.accentText(scheme) : Vela.muted(scheme))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .contentShape(Capsule(style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
+        .buttonStyle(DockPress())
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+
+    private func pick(_ tab: AppTab) {
+        guard tab != model.tab else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        if model.tab == .settings { model.reloadRoutes() }
+        withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) { model.tab = tab }
+    }
+
+    /** The item sinks a little under the finger before the pane travels. */
+    private struct DockPress: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.94 : 1)
+                .animation(.spring(response: 0.24, dampingFraction: 0.7), value: configuration.isPressed)
+        }
     }
 }
 
@@ -88,7 +138,7 @@ struct SavedPage: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
-                Vela.ground(scheme).ignoresSafeArea()
+                PageBackdrop()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         Text("Saved").font(.system(size: 36, weight: .heavy)).padding(.horizontal, 4)
@@ -98,7 +148,7 @@ struct SavedPage: View {
                         }
                         if let car = settings.parking {
                             row(car, icon: "parkingsign", color: Vela.routeBlue, editable: false)
-                                .background(card)
+                                .glassCard()
                         }
                         if settings.saved.isEmpty {
                             VStack(spacing: 10) {
@@ -116,7 +166,7 @@ struct SavedPage: View {
                                     row(p, icon: "bookmark.fill", color: Color(hex: 0xF59E0B), editable: true)
                                 }
                             }
-                            .background(card)
+                            .glassCard()
                             Text("Hold a place to rename or remove it.").font(.subheadline).foregroundColor(Vela.muted(scheme))
                                 .padding(.horizontal, 4)
                         }
@@ -140,10 +190,6 @@ struct SavedPage: View {
         }
     }
 
-    private var card: some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Vela.surface(scheme))
-    }
-
     private func distance(_ p: Place) -> String? {
         model.userLatLng.map { Fmt.distance($0.distance(to: p.location)) }
     }
@@ -155,9 +201,7 @@ struct SavedPage: View {
             }
         } label: {
             VStack(alignment: .leading) {
-                Image(systemName: icon).font(.system(size: 21, weight: .bold)).foregroundColor(.white)
-                    .frame(width: 48, height: 48)
-                    .background(Circle().fill(place == nil ? Color.gray : color))
+                IconBadge(icon: icon, color: place == nil ? Color(hex: 0x94A3B8) : color, size: 48)
                 Spacer(minLength: 8)
                 HStack(alignment: .firstTextBaseline) {
                     Text(title).font(.system(size: 21, weight: .bold))
@@ -168,7 +212,7 @@ struct SavedPage: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
-            .background(card)
+            .glassCard()
             .contentShape(RoundedRectangle(cornerRadius: 24))
         }
         .buttonStyle(.plain)
@@ -185,9 +229,7 @@ struct SavedPage: View {
         HStack(spacing: 14) {
             Button { show(p) } label: {
                 HStack(spacing: 14) {
-                    Image(systemName: icon).font(.system(size: 20, weight: .bold)).foregroundColor(.white)
-                        .frame(width: 48, height: 48)
-                        .background(Circle().fill(color))
+                    IconBadge(icon: icon, color: color, size: 48)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(p.name).font(.system(size: 20, weight: .bold)).lineLimit(2)
                         if let line = [distance(p), p.address ?? p.category].compactMap({ $0 }).first {
@@ -203,7 +245,15 @@ struct SavedPage: View {
                 Image(systemName: "location.north.fill").font(.system(size: 24, weight: .bold))
                     .foregroundColor(Vela.onAccent(scheme))
                     .frame(width: 60, height: 60)
-                    .background(Circle().fill(Vela.accent(scheme)))
+                    .background(
+                        Circle()
+                            .fill(
+                                LinearGradient(colors: [Vela.accent(scheme).opacity(0.92), Vela.accent(scheme)],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                            .overlay(Circle().stroke(Color.white.opacity(0.30), lineWidth: 1))
+                            .shadow(color: Vela.accent(scheme).opacity(0.35), radius: 8, y: 3)
+                    )
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Go to \(p.name)")
@@ -236,12 +286,11 @@ struct SavedPage: View {
 struct SettingsPage: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
-                Vela.ground(scheme).ignoresSafeArea()
+                PageBackdrop()
                 SettingsView(settings: settings, inTab: true, pick: { model.picking = $0 }, onChange: { model.reloadRoutes() })
                     .safeAreaInset(edge: .bottom) { Color.clear.frame(height: KiteDock.height + 10) }
                 KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)

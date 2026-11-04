@@ -45,9 +45,9 @@ struct WelcomeView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24).padding(.vertical, 12)
-            .background(Vela.ground(scheme))
+            .background(.ultraThinMaterial)
         }
-        .background(Vela.ground(scheme).ignoresSafeArea())
+        .background(PageBackdrop())
     }
 
     private func option(title: String, detail: String, icon: String, picked: Bool, tap: @escaping () -> Void) -> some View {
@@ -64,7 +64,11 @@ struct WelcomeView: View {
                     .font(.system(size: 22)).foregroundColor(picked ? Vela.accent(scheme) : .secondary)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 16).stroke(picked ? Vela.accent(scheme) : Color.secondary.opacity(0.3), lineWidth: picked ? 2 : 1))
+            .glassCard(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(picked ? Vela.accent(scheme) : Color.secondary.opacity(0.25), lineWidth: picked ? 2 : 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -131,9 +135,9 @@ struct WazeIntroView: View {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 24).padding(.vertical, 12)
-            .background(Vela.ground(scheme))
+            .background(.ultraThinMaterial)
         }
-        .background(Vela.ground(scheme).ignoresSafeArea())
+        .background(PageBackdrop())
     }
 
     private func option(title: String, detail: String, icon: String, picked: Bool, tap: @escaping () -> Void) -> some View {
@@ -150,7 +154,11 @@ struct WazeIntroView: View {
                     .font(.system(size: 22)).foregroundColor(picked ? Vela.accent(scheme) : .secondary)
             }
             .padding(16)
-            .background(RoundedRectangle(cornerRadius: 16).stroke(picked ? Vela.accent(scheme) : Color.secondary.opacity(0.3), lineWidth: picked ? 2 : 1))
+            .glassCard(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(picked ? Vela.accent(scheme) : Color.secondary.opacity(0.25), lineWidth: picked ? 2 : 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

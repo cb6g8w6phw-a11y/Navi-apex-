@@ -50,15 +50,37 @@ struct KiteType: ViewModifier {
     }
 }
 
-/** A settings-style list on Kite's own ground colour, with the taller rows. */
+/** A settings-style list on Kite's own ground, with the taller rows. */
 struct KiteList: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     func body(content: Content) -> some View {
         content
             .scrollContentBackground(.hidden)
-            .background(Vela.ground(scheme))
+            .background(PageBackdrop())
             .environment(\.defaultMinListRowHeight, 56)
             .tint(Vela.accentText(scheme))
+    }
+}
+
+/**
+ * Behind the pages of the dock (Saved, Settings): the ground colour with two soft glows, so the
+ * glass cards floating on them have some light to catch instead of sitting on a flat slab.
+ */
+struct PageBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        ZStack {
+            Vela.ground(scheme)
+            if settings.theme != .black {
+                RadialGradient(colors: [Vela.accent(scheme).opacity(scheme == .dark ? 0.22 : 0.16), .clear],
+                               center: .topLeading, startRadius: 16, endRadius: 470)
+                RadialGradient(colors: [Vela.routeBlue.opacity(scheme == .dark ? 0.16 : 0.10), .clear],
+                               center: .bottomTrailing, startRadius: 8, endRadius: 430)
+            }
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -262,6 +284,7 @@ func maneuverSymbol(_ t: ManeuverType) -> String {
  * Glass for everything that floats over the map (buttons, the search bar, cards).
  * On iOS 26 and later this is Apple's real Liquid Glass; on older iPhones it falls back to
  * the frosted look Kite had before: the map shows through, blurred, with a thin bright edge.
+ * Either way a sheen runs along the top, the way a real pane catches the light.
  */
 /** (Named KiteGlass so it doesn't clash with SwiftUI's own Glass type on iOS 26.) */
 struct KiteGlass<S: Shape>: ViewModifier {
@@ -269,48 +292,143 @@ struct KiteGlass<S: Shape>: ViewModifier {
     var tint: Color? = nil
     var interactive = false
     @Environment(\.colorScheme) private var scheme
+    /** Watching the settings so a change of theme or glass repaints at once. */
     @ObservedObject private var settings = AppSettings.shared
 
     private var matte: Bool { settings.glassStyle == .matte || settings.theme == .black }
 
     func body(content: Content) -> some View {
         if matte {
-            content.background(
-                shape.fill(.ultraThinMaterial)
-                    .overlay(shape.fill(settings.theme == .black ? Color.black.opacity(0.58) : Vela.sheet(scheme).opacity(0.56)))
-                    .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.45), lineWidth: 0.75))
-                    .shadow(color: .black.opacity(0.3), radius: 14, y: -2)
-            )
+            content.background(matteBackground)
         } else if #available(iOS 26.0, *) {
-            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+            content.glassEffect(glassStyle, in: shape)
         } else {
-            // Elegancki, lekki fallback dla starszych iOS
-            content
-                .background(
-                    shape.fill(.ultraThinMaterial)
-                        .overlay(shape.fill(Color.white.opacity(scheme == .dark ? 0.05 : 0.15)))
-                        .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.1 : 0.4), lineWidth: 0.5))
-                        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
-                )
+            content.background(frosted)
         }
+    }
+
+    /** The light a pane of glass throws back: a soft glow at the top and a bright rim that fades away downwards. */
+    private func sheen(glow: Double, rim: Double) -> some View {
+        ZStack {
+            shape.fill(
+                LinearGradient(colors: [Color.white.opacity(glow), Color.white.opacity(0)],
+                               startPoint: .top, endPoint: .center)
+            )
+            shape.stroke(
+                LinearGradient(colors: [Color.white.opacity(rim), Color.white.opacity(rim * 0.15)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 1
+            )
+        }
+    }
+
+    /** Before iOS 26: the map blurred behind the pane, a sheen on top and a soft shadow beneath. */
+    private var frosted: some View {
+        shape.fill(.ultraThinMaterial)
+            .overlay(shape.fill(Vela.surface(scheme).opacity(scheme == .dark ? 0.80 : 0.84)))
+            .overlay(sheen(glow: scheme == .dark ? 0.09 : 0.50, rim: scheme == .dark ? 0.16 : 0.75))
+            .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 14, y: 6)
+    }
+
+    /** Matte: a calm frosted pane with no shine. In the Black theme it is smoked black glass. */
+    @ViewBuilder private var matteBackground: some View {
+        if settings.theme == .black {
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(Color.black.opacity(0.68)))
+                .overlay(sheen(glow: 0.05, rim: 0.14))
+                .shadow(color: .black.opacity(0.55), radius: 12, y: 4)
+        } else {
+            shape.fill(.regularMaterial)
+                .overlay(shape.fill(Vela.surface(scheme).opacity(0.58)))
+                .overlay(sheen(glow: scheme == .dark ? 0.06 : 0.34, rim: scheme == .dark ? 0.12 : 0.55))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.14), radius: 12, y: 5)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var glassStyle: Glass {
+        var g = Glass.regular
+        if let tint { g = g.tint(tint) }
+        if interactive { g = g.interactive() }
+        return g
     }
 }
 
 extension View {
     func glass<S: Shape>(_ shape: S) -> some View { modifier(KiteGlass(shape: shape)) }
-    
+    /** Glass that lights up under your finger, for buttons. */
     func glassButton<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
         modifier(KiteGlass(shape: shape, tint: tint, interactive: true))
     }
+    /** A card on a page rather than over the map (Saved, Settings): frosted, with a bright top edge. */
+    func glassCard(_ radius: CGFloat = 24) -> some View { modifier(GlassCard(radius: radius)) }
 }
 
-// --- NOWY STYL PRZYCISKÓW Z ANIMACJĄ ---
-struct PressableButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
-            .opacity(configuration.isPressed ? 0.8 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+/** The card look of the dock's pages: frosted with a sheen along the top and a soft shadow. */
+struct GlassCard: ViewModifier {
+    var radius: CGFloat = 24
+    @Environment(\.colorScheme) private var scheme
+    @ObservedObject private var settings = AppSettings.shared
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: radius, style: .continuous) }
+
+    func body(content: Content) -> some View {
+        content.background(
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(Vela.surface(scheme).opacity(scheme == .dark ? 0.62 : 0.76)))
+                .overlay(shape.fill(
+                    LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.07 : 0.45), .clear],
+                                   startPoint: .top, endPoint: .center)
+                ))
+                .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.60), lineWidth: 1))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.38 : 0.08), radius: 16, y: 8)
+        )
+    }
+}
+
+/** A round pane inside a glass bar (the mic, the clear cross): glass on glass, without a second blur. */
+struct GlassCircle: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Circle()
+            .fill(Vela.chip(scheme).opacity(scheme == .dark ? 0.55 : 0.75))
+            .overlay(Circle().stroke(Color.white.opacity(scheme == .dark ? 0.14 : 0.60), lineWidth: 1))
+    }
+}
+
+/**
+ * A small coloured badge with a white symbol in it (Saved's rows, Settings' menu), lit from the top
+ * with a thin white rim and a shadow of its own colour, so the icons read at a glance.
+ */
+struct IconBadge: View {
+    let icon: String
+    var color: Color
+    var size: CGFloat = 44
+    /** A corner radius for a squircle badge; leave it out for a circle. */
+    var radius: CGFloat? = nil
+
+    private var r: CGFloat { radius ?? size / 2 }
+
+    var body: some View {
+        Image(systemName: icon)
+            .font(.system(size: size * 0.42, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: size, height: size)
+            .background(
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .fill(color)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: r, style: .continuous)
+                            .fill(LinearGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0)],
+                                                 startPoint: .top, endPoint: .bottom))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: r, style: .continuous)
+                            .stroke(Color.white.opacity(0.26), lineWidth: 1)
+                    )
+                    .shadow(color: color.opacity(0.38), radius: 6, y: 3)
+            )
     }
 }
 
@@ -359,6 +477,7 @@ struct PillButton: View {
 
 struct CircleIconButton: View {
     let icon: String
+    var tint: Color? = nil
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
 
@@ -366,9 +485,13 @@ struct CircleIconButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.primary)
+                .foregroundColor(tint ?? .primary)
                 .frame(width: 44, height: 44)
-                .background(Circle().fill(Vela.chip(scheme)))
+                .background(
+                    Circle()
+                        .fill(Vela.chip(scheme).opacity(scheme == .dark ? 0.75 : 0.9))
+                        .overlay(Circle().stroke(Color.white.opacity(scheme == .dark ? 0.12 : 0.55), lineWidth: 1))
+                )
         }
         .buttonStyle(.plain)
     }
