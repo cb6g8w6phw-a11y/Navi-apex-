@@ -300,7 +300,8 @@ struct CarPage: View {
                 }
             }
 
-            Section("Auto") {
+            Section(header: Text("Auto"),
+                    footer: Text("Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją.")) {
                 Toggle(isOn: $settings.carBallOn) { SettingLabel("Ikona auta na mapie", icon: "map", color: 0x7C3AED) }
                 TextField("Model (np. VW Golf 7)", text: $settings.carName)
                 Picker(selection: $settings.carFuel) {
@@ -312,8 +313,6 @@ struct CarPage: View {
                 .onChange(of: settings.carOdometer) { _ in
                     Haptics.light()
                 }
-            } footer: {
-                Text("Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją.")
             }
 
             Section("Terminy") {
@@ -321,7 +320,8 @@ struct CarPage: View {
                 DatePicker("Przegląd (TÜV) do", selection: dateBinding(\.inspectionEnd), displayedComponents: .date)
             }
 
-            Section("Olej, filtry i reszta") {
+            Section(header: Text("Olej, filtry i reszta"),
+                    footer: Text("Wpisz, przy jakim przebiegu ostatnio coś wymieniono — pasek pokaże, ile zostało do następnej wymiany. Przesuń w lewo, żeby usunąć pozycję.")) {
                 ForEach($settings.carParts) { $part in
                     CarPartRow(part: $part)
                 }
@@ -331,8 +331,6 @@ struct CarPage: View {
                 } label: {
                     Label("Dodaj pozycję", systemImage: "plus.circle.fill")
                 }
-            } footer: {
-                Text("Wpisz, przy jakim przebiegu ostatnio coś wymieniono — pasek pokaże, ile zostało do następnej wymiany. Przesuń w lewo, żeby usunąć pozycję.")
             }
         }
         .toolbar {
@@ -355,7 +353,13 @@ struct CarPage: View {
     private func dateBinding(_ key: WritableKeyPath<AppSettings, Date?>) -> Binding<Date> {
         Binding(
             get: { settings[keyPath: key] ?? Date().addingTimeInterval(30 * 24 * 3600) },
-            set: { settings[keyPath: key] = $0 }
+            set: { v in
+                switch key {
+                case \.insuranceEnd: settings.insuranceEnd = v
+                case \.inspectionEnd: settings.inspectionEnd = v
+                default: break
+                }
+            }
         )
     }
 
