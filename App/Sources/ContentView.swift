@@ -127,6 +127,20 @@ struct ContentView: View {
                 }
                 .inSidePanel(panel)
             }
+            if model.showActivityChip, model.tab == .map, model.nav == nil {
+                VStack {
+                    if let m = model.activity {
+                        ActivityCard(mode: m,
+                                     apply: { withAnimation { model.applyActivity(m) } },
+                                     close: { withAnimation { model.dismissActivity() } })
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    Spacer()
+                }
+                .inSidePanel(panel)
+                .padding(.leading, stripPad)
+                .padding(.top, model.topBannerShowing ? 130 : 64)
+            }
             if let event = model.roadInfo, model.tab == .map, model.nav == nil {
                 VStack {
                     RoadEventCard(event: event) { withAnimation { model.roadInfo = nil } }
@@ -706,6 +720,55 @@ struct StatusCards: View {
             }
         }
         .padding(14)
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 16)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/**
+ * The one-tap offer to switch to walking or cycling: shown once Apex has seen sustained
+ * walking or cycling pace, it turns on the matching mode (routes and the paths layer).
+ */
+struct ActivityCard: View {
+    let mode: TravelMode
+    let apply: () -> Void
+    let close: () -> Void
+
+    private var walk: Bool { mode == .walk }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: walk ? "figure.walk" : "figure.outdoor.cycle")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 40, height: 40)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(hex: walk ? 0xB08D57 : 0x22A55B)))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(walk ? "Idziesz pieszo?" : "Jedziesz rowerem?")
+                    .font(.system(size: 16, weight: .semibold))
+                Text(walk ? "Tryb pieszy prowadzi chodnikami i ścieżkami." : "Tryb rowerowy prowadzi ścieżkami rowerowymi.")
+                    .font(.system(size: 13)).foregroundColor(.secondary).lineLimit(2)
+            }
+            Spacer(minLength: 4)
+            Button(action: apply) {
+                Text("Włącz")
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(Color(hex: walk ? 0xB08D57 : 0x22A55B)))
+                    .foregroundColor(.white)
+            }
+            .buttonStyle(.plain)
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
         .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)

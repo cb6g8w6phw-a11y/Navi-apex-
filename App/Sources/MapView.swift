@@ -417,6 +417,11 @@ struct VelaMapView: UIViewRepresentable {
         private var cameraCells: Set<String> = []
         private var cameraFetch: Task<Void, Never>?
         private var railFetch: Task<Void, Never>?
+        /** Walking paths and cycle lanes around, drawn only in the foot and bike modes. */
+        private var pathShapes: [(cycle: Bool, points: [LatLng])] = []
+        private var pathLines: [StyledLine] = []
+        private var pathFetch: Task<Void, Never>?
+        private var pathBox: (s: Double, w: Double, n: Double, e: Double, z: Int)?
         /** Live Waze reports for the box last asked about, and when. */
         private var wazeAlerts: [WazeAlert] = []
         /** Everything the Waze icons currently stand for (map box, route reports, fresh history). */
@@ -506,6 +511,9 @@ struct VelaMapView: UIViewRepresentable {
             let railWanted = s.transitLines && !navigating
             if railWanted == railLines.isEmpty && !railShapes.isEmpty { rebuildRail() }
             if s.transitLines { loadRail(map) }
+            let pathsWanted = model.softMode == .walk || model.softMode == .bike
+            if pathsWanted == pathLines.isEmpty && !pathShapes.isEmpty { rebuildPaths() }
+            if pathsWanted { loadPaths(map) }
             if overlaysDirty { syncOverlays(map) }
         }
 
@@ -557,7 +565,7 @@ struct VelaMapView: UIViewRepresentable {
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
             if let h = heatOverlay { ordered.append(h) }
-            for group in [railLines, routeLines, arrowLines] {
+            for group in [railLines, pathLines, routeLines, arrowLines] {
                 for item in group {
                     styles[ObjectIdentifier(item.line)] = item.style
                     ordered.append(item.line)
@@ -853,6 +861,8 @@ struct VelaMapView: UIViewRepresentable {
             // of being torn down and redrawn every few seconds, which made the path blink off.
             let staticKey = (navigating ? "nav" : "") + (trip?.id.uuidString ?? "") + (main?.id.uuidString ?? "")
                 + alts.map(\.id.uuidString).joined() + "\(dark)"
+                // Shape too, so a route replaced under the same id (a cached answer) still redraws.
+                + "\(main?.polyline.count ?? 0)" + "\(main?.polyline.last?.lat ?? 0)"
             let dynKey = staticKey + "\(Int(from / 50))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)"
             let staticChanged = staticKey != lastStaticRouteKey
             let dynChanged = dynKey != lastDynRouteKey
@@ -1059,6 +1069,45 @@ struct VelaMapView: UIViewRepresentable {
                 }
                 // The map may have moved on while this was loading.
                 if lines != nil, let map { self.loadRail(map) }
+            }
+        }
+
+        /** Walking paths and cycle lanes in their own colours, from the cached shapes. */
+        private func rebuildPaths() {
+            var out: [StyledLine] = []
+            let on = model.softMode == .walk || model.softMode == .bike
+            if on {
+                for shape in pathShapes {
+                    let style = shape.cycle
+                        ? LineStyle(color: UIColor(hex: 0x22A55B), width: 2.4, alpha: 0.9)
+                        : LineStyle(color: UIColor(hex: 0xB08D57), width: 2, alpha: 0.8)
+                    if let l = makeLine(shape.points, style) { out.append(l) }
+                }
+            }
+            pathLines = out
+            overlaysDirty = true
+        }
+
+        /** Paths for the view and a margin around it, but only while walking or cycling mode is on. */
+        func loadPaths(_ map: MKMapView) {
+            guard model.softMode == .walk || model.softMode == .bike, map.zoomLevel >= 13, pathFetch == nil else { return }
+            let b = map.visibleCoordinateBounds
+            let z = Int(map.zoomLevel)
+            if let p = pathBox, b.sw.latitude >= p.s, b.sw.longitude >= p.w, b.ne.latitude <= p.n, b.ne.longitude <= p.e,
+               abs(z - p.z) <= 2 { return }
+            let dLat = (b.ne.latitude - b.sw.latitude) * 0.5, dLng = (b.ne.longitude - b.sw.longitude) * 0.5
+            let box = (s: b.sw.latitude - dLat, w: b.sw.longitude - dLng, n: b.ne.latitude + dLat, e: b.ne.longitude + dLng, z: z)
+            pathFetch = Task { [weak self, weak map] in
+                let lines = await Paths.fetch(south: box.s, west: box.w, north: box.n, east: box.e)
+                guard let self else { return }
+                self.pathFetch = nil
+                if let lines {
+                    self.pathBox = box
+                    self.pathShapes = lines.map { (cycle: $0.cycle, points: $0.points) }
+                    self.rebuildPaths()
+                    if let map { self.syncOverlays(map) }
+                }
+                if lines != nil, let map { self.loadPaths(map) }
             }
         }
 

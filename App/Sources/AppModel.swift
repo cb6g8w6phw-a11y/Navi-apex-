@@ -101,6 +101,15 @@ final class AppModel: ObservableObject {
     @Published var searching = false
     /** The search box is open (so weather and fuel step aside to the left edge). */
     @Published var searchActive = false
+    /**
+     * What the phone's movement looks like when not navigating: sustained walking or cycling
+     * pace. Apex then offers the matching mode (and draws the paths layer) — on foot the
+     * router already follows footpaths, on a bike the cycle lanes.
+     */
+    @Published var activity: TravelMode?
+    private var speedSamples: [Double] = []
+    private var activityAt = Date.distantPast
+    private var activityDismissedAt = Date.distantPast
     /** Something is showing in the strip under the search bar (a notice, a report, roadworks, a station). */
     var topBannerShowing: Bool { notice != nil || wazeInfo != nil || roadInfo != nil || fuelInfo != nil }
     @Published var notice: String?
@@ -652,10 +661,59 @@ final class AppModel: ObservableObject {
     }
 
     private func locationChanged(_ loc: CLLocation) {
+        detectActivity(loc)
         guard let n = nav else { return }
         n.handle(loc)
         followCamera(n, loc, animated: true)
         mapTick += 1
+    }
+
+    // MARK: Foot and bike
+
+    /** The mode Apex is working in right now: the one being navigated, planned, or detected. */
+    var softMode: TravelMode? {
+        nav?.route.mode ?? directions?.mode ?? activity
+            ?? (settings.defaultMode == .drive ? nil : settings.defaultMode)
+    }
+
+    /** Walking or cycling pace, kept up for a while: not one bad GPS point. */
+    private func detectActivity(_ loc: CLLocation) {
+        guard nav == nil, loc.horizontalAccuracy < 50 else { return }
+        speedSamples.append(max(0, loc.speed))
+        if speedSamples.count > 24 { speedSamples.removeFirst(speedSamples.count - 24) }
+        guard speedSamples.count >= 8, Date().timeIntervalSince(activityAt) > 10 else { return }
+        activityAt = Date()
+        let sorted = speedSamples.sorted()
+        let med = sorted[sorted.count / 2], fast = sorted.last ?? 0
+        if med >= 9 {
+            // Clearly a car: forget the samples, the chip should not come back while driving.
+            speedSamples = []
+            if activity != nil { withAnimation { activity = nil } }
+        } else if med >= 0.5, fast < 9 {
+            let found: TravelMode = med < 2.4 ? .walk : .bike
+            if activity != found { withAnimation { activity = found } }
+        }
+    }
+
+    /** The chip's "turn it on": the default mode and any open trip plan move to walking or cycling. */
+    func applyActivity(_ m: TravelMode) {
+        settings.defaultMode = m
+        if directions != nil { setMode(m) }
+        speedSamples = []
+        withAnimation { activity = nil }
+    }
+
+    /** Not now: the detection keeps running, but the chip stays away for a while. */
+    func dismissActivity() {
+        activityDismissedAt = Date()
+        speedSamples = []
+        withAnimation { activity = nil }
+    }
+
+    /** The one-tap offer to switch modes, once walking or cycling has been going on for a bit. */
+    var showActivityChip: Bool {
+        activity != nil && settings.defaultMode != activity
+            && Date().timeIntervalSince(activityDismissedAt) > 600
     }
 
     private func followCamera(_ n: Navigator, _ loc: CLLocation, animated: Bool) {
