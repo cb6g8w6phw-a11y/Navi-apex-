@@ -354,18 +354,6 @@ struct VelaMapView: UIViewRepresentable {
             c.repaint(map)
         }
         
-        // Włączanie i wyłączanie natywnego śledzenia kamery
-        if let nav = model.nav, nav.following {
-            if map.userTrackingMode != .followWithHeading {
-                map.userTrackingMode = .followWithHeading
-                map.camera.pitch = 45 // Lekkie pochylenie 3D
-            }
-        } else {
-            if map.userTrackingMode != .none {
-                map.userTrackingMode = .none
-            }
-        }
-        
         c.render(map)
         c.loadCameras(map)
         c.loadWaze(map)
@@ -474,6 +462,10 @@ struct VelaMapView: UIViewRepresentable {
         func render(_ map: MKMapView) {
             let s = model.settings
             let navigating = model.nav != nil
+            // The navigation arrow replaces the blue dot, and the NavGlide camera replaces
+            // MapKit's own tracking: the car is drawn where the road-name bar sits under it.
+            if map.showsUserLocation == navigating { map.showsUserLocation = !navigating }
+            if map.userTrackingMode != .none { map.userTrackingMode = .none }
             configure(map, navigating: navigating)
 
             let wantTerrain = s.terrain && !s.satellite
