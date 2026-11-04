@@ -41,7 +41,9 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
     private let d = UserDefaults.standard
 
-    @Published var hapticLevel: Haptics.Level { didSet { d.set(hapticLevel.rawValue, forKey: "hapticLevel") } }
+    @Published var hapticLevel: Haptics.Level {
+        didSet { d.set(hapticLevel.rawValue, forKey: "hapticLevel") }
+    }
     @Published var theme: ThemeMode { didSet { d.set(theme.rawValue, forKey: "theme") } }
     @Published var glassStyle: GlassStyle { didSet { d.set(glassStyle.rawValue, forKey: "glassStyle") } }
     @Published var units: UnitsMode { didSet { d.set(units.rawValue, forKey: "units") } }
@@ -106,7 +108,6 @@ final class AppSettings: ObservableObject {
     @Published var recentPlaces: [Place] { didSet { save(recentPlaces, "recentPlaces") } }
 
     private init() {
-        hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         theme = ThemeMode(rawValue: d.string(forKey: "theme") ?? "") ?? .system
         glassStyle = GlassStyle(rawValue: d.string(forKey: "glassStyle") ?? "") ?? .liquid
         units = UnitsMode(rawValue: d.string(forKey: "units") ?? "") ?? .auto
@@ -150,6 +151,7 @@ final class AppSettings: ObservableObject {
         saved = (d.data(forKey: "saved")).flatMap { try? JSONDecoder().decode([Place].self, from: $0) } ?? []
         recents = d.stringArray(forKey: "recents") ?? []
         recentPlaces = d.data(forKey: "recentPlaces").flatMap { try? JSONDecoder().decode([Place].self, from: $0) } ?? []
+        hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         // The OpenWeb Ninja key and counter from 0.7.3, no longer used: don't leave the key on the phone.
         for k in ["ninjaKey", "ninjaMonth", "ninjaUsed"] { d.removeObject(forKey: k) }
     }
