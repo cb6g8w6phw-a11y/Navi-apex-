@@ -97,7 +97,7 @@ struct SettingsView: View {
 
     private var main: some View {
         NavigationView {
-            // A short menu like Waze's: a few big cards of brushed metal, each opening a page with its switches.
+            // A short menu like Waze's: a few big Liquid Glass cards, each opening a page with its switches.
             ScrollView {
                 VStack(spacing: 12) {
                     menuRow("Głos i jazda", detail: "Głos, tryb podróży, unikanie opłat i autostrad",
@@ -146,20 +146,19 @@ struct SettingsView: View {
         NavigationLink {
             page()
         } label: {
-            MetalCard {
-                HStack(spacing: 14) {
-                    IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(.primary)
-                        Text(detail).font(.subheadline).foregroundColor(.secondary)
-                    }
-                    Spacer(minLength: 4)
-                    if let value { Text(value).font(.subheadline.weight(.medium)).foregroundColor(.secondary) }
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.secondary.opacity(0.7))
+            HStack(spacing: 14) {
+                IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(.primary)
+                    Text(detail).font(.subheadline).foregroundColor(.secondary)
                 }
-                .padding(14)
+                Spacer(minLength: 4)
+                if let value { Text(value).font(.subheadline.weight(.medium)).foregroundColor(.secondary) }
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.7))
             }
+            .padding(14)
+            .glassCard(18)
         }
         .buttonStyle(.plain)
     }

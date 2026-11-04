@@ -22,22 +22,22 @@ struct SplashView: View {
             VStack(spacing: 26) {
                 Spacer()
 
-                // The logo: a card in brushed metal that turns on its Y axis as it arrives.
+                // The logo: a pane of Liquid Glass that turns on its Y axis as it arrives.
                 ZStack {
-                    BrushedMetal()
+                    Color.clear
                         .frame(width: 160, height: 160)
-                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-                        .shadow(color: .black.opacity(0.55), radius: 26, y: 14)
+                        .glassCard(34)
                     Image("Logo")
                         .resizable().scaledToFit()
                         .frame(width: 118, height: 118)
-                    // The sheen: a bright band that sweeps across the metal, over and over.
+                    // The sheen: a bright band that sweeps across the glass, over and over.
                     RoundedRectangle(cornerRadius: 34, style: .continuous)
                         .fill(LinearGradient(colors: [.clear, .white.opacity(0.75), .clear],
                                              startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 90, height: 260)
                         .blur(radius: 6)
                         .rotationEffect(.degrees(24))
+                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
                         .offset(x: sheen ? 220 : -220)
                 }
                 .frame(width: 160, height: 160)
