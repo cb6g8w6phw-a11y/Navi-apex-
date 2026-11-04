@@ -377,9 +377,10 @@ struct SpeedBadge: View {
                 .background(Capsule().fill(over ? Vela.closed : Color.clear))
                 .glass(Capsule())
                 .accessibilityElement(children: .ignore)
-                .                        let tip = pt(out, edge - size.width * 0.07)
-            path.addLine(to: tip)
-            ctx.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: size.width * 0.1, lineCap: .round, lineJoin: .round))
+                speed
+                    .frame(width: 84, height: 84)
+                    .glass(Circle())
+            } else {
                 speed
                     .frame(width: 84, height: 84)
                     .glass(Circle())
