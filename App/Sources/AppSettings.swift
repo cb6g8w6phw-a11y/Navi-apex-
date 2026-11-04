@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Settings modes
+
 enum ThemeMode: String, CaseIterable, Identifiable {
     case system, light, dark, black
     var id: String { rawValue }
@@ -104,6 +106,7 @@ final class AppSettings: ObservableObject {
     @Published var recentPlaces: [Place] { didSet { save(recentPlaces, "recentPlaces") } }
 
     private init() {
+        hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         theme = ThemeMode(rawValue: d.string(forKey: "theme") ?? "") ?? .system
         glassStyle = GlassStyle(rawValue: d.string(forKey: "glassStyle") ?? "") ?? .liquid
         units = UnitsMode(rawValue: d.string(forKey: "units") ?? "") ?? .auto
