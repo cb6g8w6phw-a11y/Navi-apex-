@@ -24,9 +24,9 @@ struct SplashView: View {
 
                 // The logo: a card in brushed metal that turns on its Y axis as it arrives.
                 ZStack {
-                    RoundedRectangle(cornerRadius: 34, style: .continuous)
-                        .fill(BrushedMetal())
+                    BrushedMetal()
                         .frame(width: 160, height: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
                         .shadow(color: .black.opacity(0.55), radius: 26, y: 14)
                     Image("Logo")
                         .resizable().scaledToFit()

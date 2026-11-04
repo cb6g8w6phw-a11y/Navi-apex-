@@ -540,8 +540,8 @@ struct MetalCard<Content: View>: View {
     var body: some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(BrushedMetal())
+                BrushedMetal()
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .shadow(color: .black.opacity(scheme == .dark ? 0.4 : 0.18), radius: 10, y: 5)
             )
             // A bright line along the top edge, a dark one below, like a machined bevel.
