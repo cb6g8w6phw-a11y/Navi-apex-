@@ -189,29 +189,32 @@ struct CarCapsule: View {
 
 // MARK: The map ball
 
-/** The car under the weather: the most urgent counter at a glance, in the glass circle. */
+/** The car under the weather: the most urgent counter at a glance, in the same glass circle. */
 struct CarBall: View {
     let status: CarStatus
     let open: () -> Void
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Button(action: open) {
-            VStack(spacing: 3) {
+            VStack(spacing: 0) {
                 Image(systemName: "car.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(urgent.map { color($0.urgency) } ?? Color(hex: 0x0F9D58))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(tint)
                 Text(urgent?.text ?? "—")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(urgent.map { color($0.urgency) } ?? Color(hex: 0x0F9D58))
-                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .font(.system(size: 12, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundColor(tint)
+                    .lineLimit(1).minimumScaleFactor(0.5)
             }
             .frame(width: 46, height: 46)
-            .background(Circle().fill(scheme == .dark ? Color.black.opacity(0.5) : Color.white.opacity(0.75))
-                .background(.ultraThinMaterial))
             .glassButton(Circle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Moje auto")
+    }
+
+    private var tint: Color {
+        urgent.map { color($0.urgency) } ?? Color(hex: 0x0F9D58)
     }
 
     private var urgent: (text: String, urgency: CarUrgency)? { status.mostUrgent }
@@ -313,6 +316,17 @@ struct CarPage: View {
                 .onChange(of: settings.carOdometer) { _ in
                     Haptics.light()
                 }
+                // Typing the odometer in, for when the whole number has to jump at once.
+                HStack {
+                    Text("Wpisz stan licznika").font(.footnote).foregroundColor(.secondary)
+                    Spacer()
+                    TextField("0", text: odoText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 120)
+                        .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    Text("km").font(.footnote).foregroundColor(.secondary)
+                }
             }
 
             Section("Terminy") {
@@ -342,6 +356,17 @@ struct CarPage: View {
         }
         .environment(\.locale, Locale(identifier: "pl_PL"))
         .kiteList()
+    }
+
+    /** The typed odometer: digits only, capped, empty when the car is brand new. */
+    private var odoText: Binding<String> {
+        Binding(
+            get: { settings.carOdometer > 0 ? "\(settings.carOdometer)" : "" },
+            set: { s in
+                let digits = s.filter(\.isNumber)
+                settings.carOdometer = min(Int(digits) ?? 0, 1_000_000)
+            }
+        )
     }
 
     private var nothingTracked: Bool {
