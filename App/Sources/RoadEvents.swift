@@ -29,7 +29,7 @@ struct RoadEvent: Identifiable, Equatable {
 
     var symbol: String {
         switch kind {
-        case .roadworks: return "hammer.fill"
+        case .roadworks: return "wrench.and.screwdriver.fill"
         case .closure: return "nosign"
         case .warning: return "exclamationmark.triangle.fill"
         }
@@ -281,7 +281,7 @@ struct RoadSign: View {
                     Triangle()
                         .stroke(Color(hex: 0xD32F2F), style: StrokeStyle(lineWidth: size * 0.12, lineJoin: .round))
                         .padding(size * 0.12)
-                    Image(systemName: kind == .roadworks ? "hammer.fill" : "exclamationmark")
+                    Image(systemName: kind == .roadworks ? "wrench.and.screwdriver.fill" : "exclamationmark")
                         .font(.system(size: size * 0.34, weight: .heavy))
                         .foregroundColor(Color(hex: 0x1F1F1F))
                         .offset(y: size * 0.14)

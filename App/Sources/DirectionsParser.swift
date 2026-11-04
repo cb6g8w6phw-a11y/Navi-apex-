@@ -56,7 +56,15 @@ enum DirectionsParser {
         guard let routes = arr(at(root, 0, 1)) else { return [] }
         let geoms = arr(at(root, 0, 7))
         return routes.enumerated().compactMap { i, r in
-            parseRoute(r, geometry: decodeGeometry(geoms.flatMap { i < $0.count ? $0[i] : nil }), mode: mode)
+            // Google sends each route's geometry as its own node: latitude deltas, then longitude.
+            // Picking index [i] out of every node instead (the old way) mixed one route's latitudes
+            // with another's longitudes, failed the length check, and every route came back as a
+            // two-point line across its bounding box — the route on the map cut corners, the
+            // tracker called it off-road every few hundred meters and rerouted in a loop.
+            let own = i < (geoms?.count ?? 0) ? geoms?[i] : nil
+            let geometry = decodeGeometry(own)
+                ?? decodeGeometry(geoms.flatMap { i < $0.count ? $0[i] : nil })
+            return parseRoute(r, geometry: geometry, mode: mode)
         }
     }
 

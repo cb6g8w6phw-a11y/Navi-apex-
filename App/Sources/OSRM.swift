@@ -505,7 +505,11 @@ public enum Directions {
                 let reroute = heading != nil && !alternatives
                 let wait: Double = reroute ? 5 : 25
                 var vias: [Int: Route] = [:]
-                for i in g.indices {
+                // Google's own steps usually cover the whole line; only a route with a gap in them
+                // needs the open router's turn-by-turn. Asking for every route at once — three
+                // per mode, one burst per mode switch — is what the FOSSGIS server turns away,
+                // and the mode tabs then sat loading for ages.
+                for i in g.indices where !g[i].stepsComplete {
                     let line = g[i].polyline
                     if let r = (await deadline(wait, { try? await OSRM.routeVia(line, mode: mode) })).flatMap({ $0 }) { vias[i] = r }
                 }

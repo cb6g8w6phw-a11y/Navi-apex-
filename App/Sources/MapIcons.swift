@@ -50,7 +50,7 @@ enum MapIcons {
             case "turn-head": img = turnHead()
             case "fuel": img = dot("fuelpump.fill", UIColor(hex: 0x2563EB))
             case "fuel-best": img = dot("fuelpump.fill", UIColor(hex: 0x16A34A))
-            case "road-works": img = roadworksSign()
+            case "road-works": img = waze(.roadworks)
             case "road-closure": img = noEntrySign()
             case "road-warning": img = warningSign()
             case "pin-stop": img = dot("smallcircle.filled.circle", UIColor(hex: 0x5F6368))
@@ -137,7 +137,6 @@ enum MapIcons {
     /** Waze report badges, in Waze's own colors: blue police, red crashes, amber hazards… */
     static func waze(_ k: WazeAlert.Kind) -> UIImage {
         switch k {
-        case .roadworks: return roadworksSign()
         case .closure: return noEntrySign()
         case .hazard: return warningSign()
         default: break
@@ -208,11 +207,6 @@ enum MapIcons {
             tri.stroke()
             glyph(CGRect(x: 8.5, y: 9.5, width: 9, height: 9))
         }
-    }
-
-    /** Roadworks: a yellow triangle with a hammer. */
-    static func roadworksSign() -> UIImage {
-        triangleSign(fill: UIColor(hex: 0xFFC400)) { r in draw("hammer.fill", in: r, color: UIColor(hex: 0x1F1F1F)) }
     }
 
     /** A traffic warning: the white triangle with the exclamation mark. */

@@ -224,47 +224,47 @@ struct InstructionBanner: View {
         let leftTraffic = Geo.drivesOnLeft(m?.location ?? LatLng(0, 0))
         let refs = RoadRefs.find(m?.instruction ?? "")
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
                 if m?.type == .roundabout {
                     RoundaboutDiagram(shape: m?.roundabout, exit: m?.exit ?? 1, clockwise: leftTraffic)
-                        .frame(width: 100, height: 100)
+                        .frame(width: 68, height: 68)
                 } else {
                     Image(systemName: maneuverSymbol(m?.type ?? .straight))
-                        .font(.system(size: 62, weight: .heavy))
-                        .frame(width: 100, height: 100)
+                        .font(.system(size: 42, weight: .heavy))
+                        .frame(width: 68, height: 68)
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     if let p = nav.progress {
                         Text(Fmt.distance(p.distanceToNext))
-                            .font(.system(size: 46, weight: .heavy))
+                            .font(.system(size: 30, weight: .heavy))
                             .monospacedDigit()
                             .lineLimit(1).minimumScaleFactor(0.6)
                     }
                     if let parts = Self.split(Self.headline(m)) {
                         // "At the end of the road, turn left" small, the road you turn onto big, like Waze.
                         Text(parts.0)
-                            .font(.system(size: 17, weight: .semibold)).opacity(0.9)
+                            .font(.system(size: 13, weight: .semibold)).opacity(0.9)
                             .lineLimit(1).minimumScaleFactor(0.75)
                         Text(parts.1)
-                            .font(.system(size: 25, weight: .heavy))
+                            .font(.system(size: 19, weight: .heavy))
                             .lineLimit(2).minimumScaleFactor(0.7)
                     } else {
                         Text(Self.headline(m))
-                            .font(.system(size: 23, weight: .bold))
+                            .font(.system(size: 18, weight: .bold))
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
                     }
                     if !refs.isEmpty {
                         HStack(spacing: 6) { ForEach(refs, id: \.self) { RoadShield(ref: $0) } }
-                            .padding(.top, 2)
+                            .padding(.top, 1)
                     } else if m?.type == .roundabout, let road = m?.road {
-                        Text(String(format: "onto_road".localized, road)).font(.system(size: 18, weight: .semibold)).opacity(0.9).lineLimit(1)
+                        Text(String(format: "onto_road".localized, road)).font(.system(size: 14, weight: .semibold)).opacity(0.9).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             if let m, let p = nav.progress, p.distanceToNext < 1_500, let lanes = LaneGuide.lanes(for: m, leftTraffic: leftTraffic) {
                 HStack(spacing: 14) {
                     LaneStrip(lanes: lanes.lanes, turn: m.type, exitAngle: m.roundabout.map { $0.exits[$0.taken] })
