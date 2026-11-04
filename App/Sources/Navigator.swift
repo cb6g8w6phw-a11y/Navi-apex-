@@ -145,7 +145,7 @@ final class Navigator: ObservableObject {
         loadCameras()
         loadWaze()
         loadRoundabouts()
-        speak("Starting route to \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
+        speak("Wyruszam do \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
         // That was the heads-up for the first step: don't say it again a moment later.
         if let f = first, f.alongMeters < 1500, let i = route.maneuvers.firstIndex(of: f) { spokenStage[i] = f.alongMeters < 100 ? 3 : f.alongMeters < 300 ? 2 : 1 }
     }
@@ -212,7 +212,7 @@ final class Navigator: ObservableObject {
         let parked = stoppedNearEnd.map { loc.timestamp.timeIntervalSince($0) > (offRoad ? 20 : 90) } ?? false
         if p.arrived || parked {
             arrived = true
-            speak("You have arrived at \(destination.name)" + (destinationSide.map { ", on the \($0)." } ?? "."))
+            speak("Jesteś na miejscu: \(destination.name)" + (destinationSide.map { ", po stronie \($0)." } ?? "."))
             // Parked, the phone goes in a pocket: let the screen sleep, and a few minutes on, end
             // the trip so full-power GPS doesn't run all day in the background.
             UIApplication.shared.isIdleTimerDisabled = false
@@ -242,14 +242,14 @@ final class Navigator: ObservableObject {
         checkStops(p)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
-            speak("You're over the speed limit.")
+            speak("Przekraczasz dozwoloną prędkość.")
         }
     }
 
     /** A stop picked on the way (search along the route): go there first, then on. */
     func addStop(_ p: Place) {
         stops.insert(p, at: 0)
-        speak("Adding a stop at \(p.name).")
+        speak("Dodaję przystanek: \(p.name).")
         if let fix = lastFix { reroute(from: fix, quiet: true) }
     }
 
@@ -259,7 +259,7 @@ final class Navigator: ObservableObject {
         let at = Geo.project(next.location, on: route.polyline)
         guard at.offset < 150, p.alongMeters >= at.along - 40 else { return }
         stops.removeFirst()
-        speak("You've reached \(next.name). Continuing to \(stops.first?.name ?? destination.name).")
+        speak("Jesteś w \(next.name). Jedź dalej do \(stops.first?.name ?? destination.name).")
     }
 
     /** Cameras and speed limits along the route, from OpenStreetMap, in one query per route. */
@@ -407,7 +407,7 @@ final class Navigator: ObservableObject {
         if AppSettings.shared.cameraWarnings, cam.kind == .speed {
             chime()
             if !repeatRun {
-                speak((cam.average ? "Average speed camera ahead" : "Speed camera ahead") + (limit.map { ", limit \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak((cam.average ? "Przed tobą odcinek pomiaru średniej" : "Przed tobą fotoradar") + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
             cameraSpokenAt = Date()
             cameraSpokenLimit = limit
@@ -480,7 +480,7 @@ final class Navigator: ObservableObject {
         if s.wazeVoice {
             chime()
             // "Police reported ahead, in 400 yards."
-            speak("\(String(next.alert.spoken.dropLast())), in \(Fmt.spokenDistance(ahead)).")
+            speak("\(String(next.alert.spoken.dropLast())), za \(Fmt.spokenDistance(ahead)).")
         }
     }
 
@@ -503,7 +503,7 @@ final class Navigator: ObservableObject {
         if PoliceRisk.level(score) == .high, was != .high, s.wazeVoice, Date().timeIntervalSince(riskSpokenAt) > 600,
            live == 0 || PoliceRisk.level(PoliceRisk.score(ahead: ahead, past: riskPast ?? [], live: 0)) == .high {
             riskSpokenAt = Date()
-            speak("Police hotspot ahead.")
+            speak("Przed tobą miejsce częstych kontroli policji.")
         }
     }
 
@@ -527,7 +527,7 @@ final class Navigator: ObservableObject {
                 self.spokenAircraft.insert(a.id)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 self.chime()
-                self.speak("\(a.title) nearby.")
+                self.speak("\(a.title) w pobliżu.")
             }
         }
     }
@@ -540,7 +540,7 @@ final class Navigator: ObservableObject {
         if let entry = zoneEntry, entry.index != inside {
             zoneEntry = nil
             averageCheck = nil
-            if AppSettings.shared.cameraWarnings { speak("Average speed check ended.") }
+            if AppSettings.shared.cameraWarnings { speak("Koniec pomiaru średniej prędkości.") }
         }
         guard let i = inside else { return }
         let z = zones[i]
@@ -549,7 +549,7 @@ final class Navigator: ObservableObject {
             zoneEntry = (i, Date(), at)
             if AppSettings.shared.cameraWarnings {
                 chime()
-                speak("Average speed check for \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", limit \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak("Pomiar średniej przez \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
         }
         guard let entry = zoneEntry else { return }
@@ -645,7 +645,7 @@ final class Navigator: ObservableObject {
         guard let offer = detourOffer else { return }
         detourOffer = nil
         roadAhead = nil
-        speak("Taking the detour.")
+        speak("Jadę objazdem.")
         adopt(offer.route)
     }
 
@@ -765,7 +765,7 @@ final class Navigator: ObservableObject {
             self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: ev.id)
             let minutes = Int((abs(extra) / 60).rounded())
             let cost = extra >= 60 ? "adding \(minutes) minutes" : extra <= -60 ? "saving \(minutes) minutes" : "taking about the same time"
-            self.speak("There's a detour around the closure, \(cost). Tap to take it.")
+            self.speak("Jest objazd wokół zamknięcia, \(cost). Dotknij, aby z niego skorzystać.")
         }
     }
 
@@ -817,12 +817,12 @@ final class Navigator: ObservableObject {
             // "In 200 yards, your destination is on the left", the way Google says it.
             let words = m.type == .arrive ? destinationSide.map { "your destination is on the \($0)" } ?? m.instruction.lowercasedFirst
                 : m.instruction.lowercasedFirst
-            speak("In \(Fmt.spokenDistance(d)), \(words)\(lane)")
+            speak("Za \(Fmt.spokenDistance(d)), \(words)\(lane)")
         } else if d <= far && d > near + 150 && stage < 1 && m.type != .arrive {
             spokenStage[i] = 1
             // On a phone call only what's needed now is said; the early heads-up would talk over it.
             if onCall { return }
-            speak("In \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
+            speak("Za \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
         } else if drive && d > 3000 && stage < 1 && !toldContinue.contains(i) && justPassed(p) {
             // A long way to the next turn, like after joining a motorway: say so once, the way
             // Google does ("Continue on M27 for 7 miles"), so a quiet stretch doesn't feel lost.
@@ -855,7 +855,7 @@ final class Navigator: ObservableObject {
             let sameWay = abs(fresh.distanceMeters - now.remainingMeters) < max(300, now.remainingMeters * 0.03)
             if !sameWay, saving > max(300, current * 0.1) {
                 self.adopt(fresh)
-                self.speak("Found a faster route. It saves \(Int((saving / 60).rounded())) minutes.")
+                self.speak("Znalazłem szybszą trasę. Oszczędza \(Int((saving / 60).rounded())) minut.")
             } else if sameWay {
                 self.trafficScale = min(3, max(0.5, fresh.durationSeconds / planned))
             }
@@ -877,7 +877,7 @@ final class Navigator: ObservableObject {
            route.maneuvers[..<next].contains(where: { $0.alongMeters > p.alongMeters && $0.road != nil && $0.road != road }) {
             road = nil
         }
-        return "Continue " + (road.map { "on \($0) " } ?? "") + "for \(Fmt.spokenDistance(meters))."
+        return "Jedź dalej " + (road.map { "wzdłuż \($0) " } ?? "") + "przez \(Fmt.spokenDistance(meters))."
     }
 
     /** Right after a reroute: the first thing to do on the new route, so "Rerouting" isn't the last word. */
@@ -892,7 +892,7 @@ final class Navigator: ObservableObject {
             speak(continueWords(d))
         } else {
             spokenStage[i] = d <= near ? 2 : 1
-            speak("In \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
+            speak("Za \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
         }
     }
 
@@ -908,11 +908,11 @@ final class Navigator: ObservableObject {
             // Without signal there's no new route to get: say so once, not every few seconds.
             if !quiet && !toldNoSignal {
                 toldNoSignal = true
-                speak("No signal. Keep going, and Apex will find a new route when it's back.")
+                speak("Brak sygnału. Jedź dalej, Apex znajdzie nową trasę, gdy sygnał wróci.")
             }
         } else if !quiet && Date().timeIntervalSince(rerouteSpokenAt) > 45 {
             rerouteSpokenAt = Date()
-            speak("Rerouting.")
+            speak("Przeliczam trasę.")
         }
         let from = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         // Only while driving: on foot or a bike, turning round is fine.

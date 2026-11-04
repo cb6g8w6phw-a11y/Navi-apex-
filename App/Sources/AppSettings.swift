@@ -8,10 +8,10 @@ enum ThemeMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .system: return "System"
-        case .light: return "Light"
-        case .dark: return "Dark"
-        case .black: return "Black, matte glass"
+        case .system: return "Systemowy"
+        case .light: return "Jasny"
+        case .dark: return "Ciemny"
+        case .black: return "Czarny, matowe szkło"
         }
     }
 }
@@ -20,7 +20,7 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 enum GlassStyle: String, CaseIterable, Identifiable {
     case liquid, matte
     var id: String { rawValue }
-    var label: String { self == .liquid ? "Liquid Glass" : "Matte glass" }
+    var label: String { self == .liquid ? "Liquid Glass" : "Matowe szkło" }
 }
 
 enum UnitsMode: String, CaseIterable, Identifiable {
@@ -28,10 +28,10 @@ enum UnitsMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .auto: return "Automatic"
-        case .metric: return "Kilometers"
-        case .imperial: return "Miles and feet"
-        case .yards: return "Miles and yards (UK)"
+        case .auto: return "Automatyczne"
+        case .metric: return "Kilometry"
+        case .imperial: return "Mile i stopy"
+        case .yards: return "Mile i jardy (UK)"
         }
     }
 }

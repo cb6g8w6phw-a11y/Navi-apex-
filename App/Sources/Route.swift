@@ -7,9 +7,9 @@ public enum TravelMode: Int, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .drive: return "Drive"
-        case .bike: return "Bike"
-        case .walk: return "Walk"
+        case .drive: return "Jazda"
+        case .bike: return "Rower"
+        case .walk: return "Pieszo"
         }
     }
 

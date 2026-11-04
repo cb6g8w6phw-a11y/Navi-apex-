@@ -15,18 +15,18 @@ struct WelcomeView: View {
                 .resizable()
                 .frame(width: 72, height: 72)
             VStack(alignment: .leading, spacing: 8) {
-                Text("Welcome to Apex").font(.largeTitle.weight(.bold))
-                Text("Maps, search and turn-by-turn directions with no account and no tracking.")
+                Text("Witaj w Apexie").font(.largeTitle.weight(.bold))
+                Text("Mapy, wyszukiwanie i nawigacja krok po kroku, bez konta i bez śledzenia.")
                     .font(.title3).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 12) {
-                option(title: "Best results", detail: "Search, place details, live traffic and routes from Google, asked anonymously. The map itself is open data.",
+                option(title: "Najlepsze wyniki", detail: "Wyszukiwanie, szczegóły miejsc, ruch na żywo i trasy z Google, pytane anonimowo. Sama mapa to otwarte dane.",
                        icon: "sparkles", picked: !openOnly) { openOnly = false }
-                option(title: "Open data only", detail: "Nothing is sent to Google. Search from OpenStreetMap and routes from open servers.",
+                option(title: "Tylko otwarte dane", detail: "Nic nie jest wysyłane do Google. Wyszukiwanie z OpenStreetMap, trasy z otwartych serwerów.",
                        icon: "lock.shield", picked: openOnly) { openOnly = true }
             }
-            Text("You can change this any time in Settings. Next, Apex asks to use your location, so it can show where you are and guide you.")
+            Text("Możesz to zmienić w każdej chwili w ustawieniach. Następnie Apex poprosi o dostęp do lokalizacji, żeby pokazać, gdzie jesteś, i Cię poprowadzić.")
                 .font(.footnote).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
@@ -38,7 +38,7 @@ struct WelcomeView: View {
                 if openOnly { settings.wazeAsked = true }
                 settings.welcomed = true
             } label: {
-                Text("Get started").font(.headline)
+                Text("Zaczynajmy").font(.headline)
                     .frame(maxWidth: .infinity).frame(height: 54)
                     .foregroundColor(Vela.onAccent(scheme))
                     .background(Capsule().fill(Vela.accent(scheme)))
@@ -101,24 +101,24 @@ struct WazeIntroView: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text("Road alerts").font(.largeTitle.weight(.bold))
+                    Text("Ostrzeżenia drogowe").font(.largeTitle.weight(.bold))
                     Text("BETA").font(.caption.weight(.heavy))
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .foregroundColor(.white)
                         .background(Capsule().fill(Color(hex: 0xF29900)))
                 }
                 Text(Self.police
-                     ? "Live police, crash and hazard reports from Waze drivers, on the map and as warnings while you drive, plus a police heat map and risk score."
-                     : "Live road closures from Waze, on the map and as warnings while you drive.")
+                     ? "Raporty o policji, wypadkach i zagrożeniach na żywo od kierowców Waze, na mapie i jako ostrzeżenia podczas jazdy, plus mapa zagrożeń policji i wynik ryzyka."
+                     : "Zamknięcia dróg na żywo z Waze, na mapie i jako ostrzeżenia podczas jazdy.")
                     .font(.title3).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(spacing: 12) {
-                option(title: "Turn on road alerts", detail: "Apex asks Waze anonymously about the area you're looking at and your route. Reports Apex sees are kept only on this phone.",
+                option(title: "Włącz ostrzeżenia drogowe", detail: "Apex pyta Waze anonimowo o obszar, który oglądasz, i o Twoją trasę. Raporty, które Apex widzi, zostają tylko na tym telefonie.",
                        icon: "bell.badge", picked: on) { on = true }
-                option(title: "Not now", detail: "Nothing is sent to Waze.", icon: "bell.slash", picked: !on) { on = false }
+                option(title: "Nie teraz", detail: "Nic nie jest wysyłane do Waze.", icon: "bell.slash", picked: !on) { on = false }
             }
-            Text("This is a beta: Waze doesn't officially allow other apps to read its live map, so it may stop working. You can change this any time in Settings › Road alerts.")
+            Text("To beta: Waze nie pozwala oficjalnie innym aplikacjom czytać swojej mapy na żywo, więc może to przestać działać. Możesz to zmienić w każdej chwili w Ustawienia › Ostrzeżenia drogowe.")
                 .font(.footnote).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
@@ -128,7 +128,7 @@ struct WazeIntroView: View {
                 settings.waze = on
                 settings.wazeAsked = true
             } label: {
-                Text("Continue").font(.headline)
+                Text("Dalej").font(.headline)
                     .frame(maxWidth: .infinity).frame(height: 54)
                     .foregroundColor(Vela.onAccent(scheme))
                     .background(Capsule().fill(Vela.accent(scheme)))

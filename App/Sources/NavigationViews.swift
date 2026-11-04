@@ -348,7 +348,10 @@ enum LaneGuide {
         if m.lanes.count > 1 { return named(m.lanes) }
         // Google's own advice ("Use the right lane") where the open map has no lanes: words only.
         if let hint = m.laneHint, !hint.localizedCaseInsensitiveContains("any lane"), m.type != .roundabout {
-            let words = hint.replacingOccurrences(of: "use the ", with: "", options: .caseInsensitive)
+            var words = hint.replacingOccurrences(of: "use the ", with: "", options: .caseInsensitive)
+            for (en, pl) in [("left lanes", "lewe pasy"), ("right lanes", "prawe pasy"),
+                             ("left lane", "lewy pas"), ("right lane", "prawy pas"), ("center lane", "środkowy pas")]
+                where words.lowercased().contains(en) { words = pl }
             return ([], words.prefix(1).uppercased() + words.dropFirst())
         }
         // The road's painted arrows, Google's advice, or the Highway Code's lanes, as many as the road in has.
@@ -360,7 +363,7 @@ enum LaneGuide {
     static func named(_ lanes: [Lane]) -> (lanes: [Lane], words: String)? {
         let valid = lanes.enumerated().filter(\.element.valid).map(\.offset)
         guard let first = valid.first, let last = valid.last, valid.count < lanes.count else { return nil }
-        let n = lanes.count, count = valid.count, many = count > 1 ? "\(count) lanes" : "lane"
+        let n = lanes.count, count = valid.count, many = count > 1 ? "\(count) pasy" : "pas"
         let words: String
         if first == 0 { words = String(format: "left_lanes".localized, many) }
         else if last == n - 1 { words = String(format: "right_lanes".localized, many) }

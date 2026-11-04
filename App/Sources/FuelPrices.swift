@@ -187,23 +187,23 @@ struct FuelSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $settings.fuelOn) { SettingLabel("Show fuel prices", icon: "fuelpump.fill", color: 0x2563EB) }
+                Toggle(isOn: $settings.fuelOn) { SettingLabel("Pokazuj ceny paliw", icon: "fuelpump.fill", color: 0x2563EB) }
                 Picker(selection: $settings.fuelType) {
                     ForEach(types, id: \.0) { Text($0.1).tag($0.0) }
-                } label: { SettingLabel("Fuel", icon: "drop.fill", color: 0x0891B2) }
+                } label: { SettingLabel("Paliwo", icon: "drop.fill", color: 0x0891B2) }
                 Picker(selection: $settings.fuelCount) {
-                    Text("Cheapest 3").tag(3)
-                    Text("Cheapest 5").tag(5)
-                    Text("Cheapest 10").tag(10)
-                } label: { SettingLabel("Stations on the map", icon: "mappin.and.ellipse", color: 0x7C3AED) }
+                    Text("3 najtańsze").tag(3)
+                    Text("5 najtańszych").tag(5)
+                    Text("10 najtańszych").tag(10)
+                } label: { SettingLabel("Stacje na mapie", icon: "mappin.and.ellipse", color: 0x7C3AED) }
                 Stepper(value: $settings.fuelTank, in: 20...120, step: 5) {
-                    SettingLabel("Fill-up: \(settings.fuelTank) litres", icon: "gauge.with.needle.fill", color: 0x16A34A)
+                    SettingLabel("Tankowanie: \(settings.fuelTank) litrów", icon: "gauge.with.needle.fill", color: 0x16A34A)
                 }
             } footer: {
-                Text("Shows the cheapest stations on the map and, while driving, the cheapest one on your route with what you'd save on a fill-up. Germany only.")
+                Text("Pokazuje najtańsze stacje na mapie, a podczas jazdy najtańszą na Twojej trasie wraz z oszczędnością przy pełnym baku. Tylko Niemcy.")
             }
             Section {
-                SecureField("Tankerkönig API key", text: $settings.fuelKey)
+                SecureField("Klucz API Tankerkönig", text: $settings.fuelKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 Button {
@@ -217,20 +217,20 @@ struct FuelSettingsView: View {
                     }
                 } label: {
                     HStack {
-                        Text("Check the key")
+                        Text("Sprawdź klucz")
                         if checking { Spacer(); ProgressView() }
                     }
                 }
                 .disabled(checking || settings.fuelKey.isEmpty)
                 if let result { Text(result).font(.footnote).foregroundColor(.secondary) }
             } header: {
-                Text("Your key")
+                Text("Twój klucz")
             } footer: {
-                Text("Free from creativecommons.tankerkoenig.de. The key stays on this phone. To find stations, your position (to about 10 m) goes to Tankerkönig. Prices: Tankerkönig / MTS-K, CC BY 4.0.")
+                Text("Darmowy z creativecommons.tankerkoenig.de. Klucz zostaje na tym telefonie. Żeby znaleźć stacje, Twoja pozycja (z dokładnością ok. 10 m) trafia do Tankerkönig. Ceny: Tankerkönig / MTS-K, CC BY 4.0.")
             }
         }
         .kiteList()
-        .navigationTitle("Fuel prices")
+        .navigationTitle("Ceny paliw")
     }
 }
 

@@ -21,6 +21,8 @@ struct ContentView: View {
     }
 
     @State private var showWeather = false
+    /** The 3D launch film, dropped again after a couple of seconds. */
+    @State private var splash = true
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
     private var plainMap: Bool {
@@ -151,6 +153,8 @@ struct ContentView: View {
                 }
             }
         }
+        // The launch film sits over everything until it's played out (or tapped away).
+        .overlay { if splash { SplashView(isShown: $splash) } }
         .background(GeometryReader { g in
             Color.clear
                 .onAppear { screen = g.size }

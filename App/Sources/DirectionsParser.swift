@@ -159,21 +159,92 @@ enum DirectionsParser {
 
     static func phrase(_ t: ManeuverType) -> String {
         switch t {
-        case .turnLeft: return "Turn left"
-        case .turnRight: return "Turn right"
-        case .slightLeft: return "Slight left"
-        case .slightRight: return "Slight right"
-        case .sharpLeft: return "Sharp left"
-        case .sharpRight: return "Sharp right"
-        case .uturn: return "Make a U-turn"
-        case .merge: return "Merge"
-        case .rampLeft: return "Take the slip road on the left"
-        case .rampRight: return "Take the slip road on the right"
-        case .forkLeft, .keepLeft: return "Keep left"
-        case .forkRight, .keepRight: return "Keep right"
-        case .roundabout: return "At the roundabout, continue"
-        default: return "Continue"
+        case .turnLeft: return "Skręć w lewo"
+        case .turnRight: return "Skręć w prawo"
+        case .slightLeft: return "Łagodnie w lewo"
+        case .slightRight: return "Łagodnie w prawo"
+        case .sharpLeft: return "Ostro w lewo"
+        case .sharpRight: return "Ostro w prawo"
+        case .uturn: return "Zawróć"
+        case .merge: return "Włącz się"
+        case .rampLeft: return "Weź zjazd po lewej"
+        case .rampRight: return "Weź zjazd po prawej"
+        case .forkLeft, .keepLeft: return "Trzymaj się lewej"
+        case .forkRight, .keepRight: return "Trzymaj się prawej"
+        case .roundabout: return "Na rondzie jedź prosto"
+        default: return "Jedź dalej"
         }
+    }
+
+    /**
+     * The routing services send their instructions in English; this puts the common ones into Polish,
+     * leaving road names alone. Longest phrases first, so "Turn left onto" wins over "Turn left".
+     */
+    static func polish(_ text: String) -> String {
+        var t = " " + text + " "
+        func sub(_ pattern: String, _ replacement: String) {
+            t = t.replacingOccurrences(of: pattern, with: replacement, options: [.regularExpression, .caseInsensitive])
+        }
+        // Roundabouts
+        sub(#"\bAt the roundabout,? take the (\d+)(st|nd|rd|th) exit\b"#, "Na rondzie weź zjazd nr $1")
+        sub(#"\btake the (\d+)(st|nd|rd|th) exit\b"#, "weź zjazd nr $1")
+        sub(#"\bEnter the roundabout\b"#, "Wjedź na rondo")
+        sub(#"\b(Exit|Leave) the roundabout\b"#, "Zjedź z ronda")
+        sub(#"\bAt the roundabout\b"#, "Na rondzie")
+        // Turns, merges and forks
+        sub(#"\bTurn left onto\b"#, "Skręć w lewo na")
+        sub(#"\bTurn right onto\b"#, "Skręć w prawo na")
+        sub(#"\bTurn left\b"#, "Skręć w lewo")
+        sub(#"\bTurn right\b"#, "Skręć w prawo")
+        sub(#"\bSlight left onto\b"#, "Łagodnie w lewo na")
+        sub(#"\bSlight right onto\b"#, "Łagodnie w prawo na")
+        sub(#"\bSlight left\b"#, "Łagodnie w lewo")
+        sub(#"\bSlight right\b"#, "Łagodnie w prawo")
+        sub(#"\bSharp left onto\b"#, "Ostro w lewo na")
+        sub(#"\bSharp right onto\b"#, "Ostro w prawo na")
+        sub(#"\bSharp left\b"#, "Ostro w lewo")
+        sub(#"\bSharp right\b"#, "Ostro w prawo")
+        sub(#"\bMake a U-turn\b"#, "Zawróć")
+        sub(#"\bMerge onto\b"#, "Włącz się na")
+        sub(#"\bMerge\b"#, "Włącz się")
+        sub(#"\bKeep left onto\b"#, "Trzymaj się lewej na")
+        sub(#"\bKeep right onto\b"#, "Trzymaj się prawej na")
+        sub(#"\bKeep left\b"#, "Trzymaj się lewej")
+        sub(#"\bKeep right\b"#, "Trzymaj się prawej")
+        // Ramps and exits
+        sub(#"\bTake the ramp on the left\b"#, "Weź zjazd po lewej")
+        sub(#"\bTake the ramp on the right\b"#, "Weź zjazd po prawej")
+        sub(#"\bTake the ramp\b"#, "Weź zjazd")
+        sub(#"\bTake the exit on the left\b"#, "Zjedź po lewej")
+        sub(#"\bTake the exit on the right\b"#, "Zjedź po prawej")
+        sub(#"\bTake the exit\b"#, "Weź zjazd")
+        sub(#"\bTake the ferry\b"#, "Weź prom")
+        // Arriving and continuing
+        sub(#"\bYou have arrived at\b"#, "Jesteś na miejscu:")
+        sub(#"\bYou have arrived\b"#, "Jesteś na miejscu")
+        sub(#"\bArrive at\b"#, "Dojeżdżasz do")
+        sub(#"\bContinue onto\b"#, "Jedź dalej na")
+        sub(#"\bContinue on\b"#, "Jedź dalej po")
+        sub(#"\bContinue\b"#, "Jedź dalej")
+        // Lanes
+        sub(#"\bUse the left lanes\b"#, "Użyj lewych pasów")
+        sub(#"\bUse the right lanes\b"#, "Użyj prawych pasów")
+        sub(#"\bUse the left lane\b"#, "Użyj lewego pasa")
+        sub(#"\bUse the right lane\b"#, "Użyj prawego pasa")
+        sub(#"\bUse the center lane\b"#, "Użyj środkowego pasa")
+        // Setting off, with the compass points
+        sub(#"\bHead northeast\b"#, "Kieruj się na północny wschód")
+        sub(#"\bHead northwest\b"#, "Kieruj się na północny zachód")
+        sub(#"\bHead southeast\b"#, "Kieruj się na południowy wschód")
+        sub(#"\bHead southwest\b"#, "Kieruj się na południowy zachód")
+        sub(#"\bHead north\b"#, "Kieruj się na północ")
+        sub(#"\bHead south\b"#, "Kieruj się na południe")
+        sub(#"\bHead east\b"#, "Kieruj się na wschód")
+        sub(#"\bHead west\b"#, "Kieruj się na zachód")
+        // Leftovers that read naturally in Polish
+        sub(#"\btoward\b"#, "w stronę")
+        sub(#"\bonto\b"#, "na")
+        return t.trimmingCharacters(in: .whitespaces)
     }
 
     static func parseStep(_ s: String) -> Maneuver {
@@ -213,6 +284,8 @@ enum DirectionsParser {
         }
         // Google says the exit only in words: keep the number too, for the roundabout picture.
         if m.type == .roundabout { m.exit = exitNumber(in: m.instruction) }
+        // The service's words are English; say them in Polish.
+        m.instruction = polish(m.instruction)
         return m
     }
 

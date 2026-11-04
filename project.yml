@@ -19,15 +19,18 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Apex
+        CFBundleDevelopmentRegion: pl
+        CFBundleLocalizations:
+          - pl
         CFBundleShortVersionString: "0.7.5"
         CFBundleVersion: "1"
         UILaunchScreen: {}
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: Apex shows where you are on the map, finds places near you and guides you turn by turn.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Apex keeps guiding you with the screen off during navigation.
-        NSMicrophoneUsageDescription: Apex listens when you tap the microphone to search by voice.
-        NSSpeechRecognitionUsageDescription: Apex turns what you say into a search.
+        NSLocationWhenInUseUsageDescription: Apex pokazuje na mapie, gdzie jesteś, znajduje miejsca w pobliżu i prowadzi krok po kroku.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Apex prowadzi dalej z wyłączonym ekranem podczas nawigacji.
+        NSMicrophoneUsageDescription: Apex słucha, gdy dotkniesz mikrofonu, aby szukać głosem.
+        NSSpeechRecognitionUsageDescription: Apex zamienia to, co mówisz, na wyszukiwanie.
         UIBackgroundModes:
           - location
           - audio
