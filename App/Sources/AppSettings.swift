@@ -132,6 +132,7 @@ final class AppSettings: ObservableObject {
         cameraWarnings = d.object(forKey: "cameraWarnings") as? Bool ?? !Self.camerasRestricted
         speedingAlert = d.bool(forKey: "speedingAlert")
         parkingButton = d.object(forKey: "parkingButton") as? Bool ?? true
+        hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         // Off until the person says yes on the Waze screen.
         waze = d.bool(forKey: "waze")
         wazeAsked = d.bool(forKey: "wazeAsked")
