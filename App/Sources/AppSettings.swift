@@ -41,7 +41,7 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
     private let d = UserDefaults.standard
 
-    @Published var hapticLevel: Haptics.Level {
+       @Published var hapticLevel: Haptics.Level {
         didSet { d.set(hapticLevel.rawValue, forKey: "hapticLevel") }
     }
     @Published var theme: ThemeMode { didSet { d.set(theme.rawValue, forKey: "theme") } }
