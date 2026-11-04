@@ -123,9 +123,9 @@ struct NavigationOverlay: View {
                 .frame(maxWidth: .infinity)
                 .padding(.leading, panel)
             }
-            // Arriving answers the question: the trip bar's Done takes over.
+                      // Arriving answers the question: the trip bar's Done takes over.
             if confirmEnd, !nav.arrived {
-                .padding(18)(destination: nav.destination.name,
+                EndTripCard(destination: nav.destination.name,
                             onKeep: { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = false } },
                             onEnd: { model.endNavigation() })
                     .inSidePanel(panel)
