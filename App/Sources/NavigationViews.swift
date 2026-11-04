@@ -377,8 +377,9 @@ struct SpeedBadge: View {
                 .background(Capsule().fill(over ? Vela.closed : Color.clear))
                 .glass(Capsule())
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(v) \(metric ? \"kilometres\" : \"miles\") an hour" + (over ? ", over the limit" : ""))
-            } else {
+                .                        let tip = pt(out, edge - size.width * 0.07)
+            path.addLine(to: tip)
+            ctx.stroke(path, with: .color(.white), style: StrokeStyle(lineWidth: size.width * 0.1, lineCap: .round, lineJoin: .round))
                 speed
                     .frame(width: 84, height: 84)
                     .glass(Circle())
