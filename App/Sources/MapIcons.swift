@@ -48,7 +48,6 @@ enum MapIcons {
             case "cam-plate": img = plateCamera()
             case "traffic-light": img = trafficLight()
             case "turn-head": img = turnHead()
-            case "route-chevron": img = routeChevron()
             case "fuel": img = dot("fuelpump.fill", UIColor(hex: 0x2563EB))
             case "fuel-best": img = dot("fuelpump.fill", UIColor(hex: 0x16A34A))
             case "road-works": img = roadworksSign()
@@ -66,7 +65,6 @@ enum MapIcons {
         return img
     }
 
-    /** Vela's speed camera badge: amber rounded square, head-on camera with a big lens and flash slit. */
     /** The head of the turn arrow drawn on the road: chunky white with a dark teal edge and a soft shadow, pointing up. */
     static func turnHead() -> UIImage {
         let size = CGSize(width: 44, height: 40)
@@ -331,30 +329,4 @@ enum MapIcons {
         }
     }
 
-    /** A chevron along the route line, pointing the way you go (right, along the line). */
-    static func routeChevron() -> UIImage {
-        UIGraphicsImageRenderer(size: CGSize(width: 14, height: 16)).image { _ in
-            let p = UIBezierPath()
-            p.move(to: CGPoint(x: 4, y: 3)); p.addLine(to: CGPoint(x: 10, y: 8)); p.addLine(to: CGPoint(x: 4, y: 13))
-            p.lineWidth = 3
-            p.lineCapStyle = .round
-            p.lineJoinStyle = .round
-            UIColor(hex: 0x0B3B36).setStroke()
-            p.stroke()
-        }
-    }
-
-    private static func bubble(fill: UIColor, stroke: UIColor) -> UIImage {
-        // A pill, like the rest of Kite's chips.
-        let size = CGSize(width: 30, height: 26)
-        let img = UIGraphicsImageRenderer(size: size).image { _ in
-            let p = UIBezierPath(roundedRect: CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 1), cornerRadius: 12)
-            fill.setFill()
-            stroke.setStroke()
-            p.lineWidth = 1.5
-            p.fill()
-            p.stroke()
-        }
-        return img.resizableImage(withCapInsets: UIEdgeInsets(top: 12, left: 13, bottom: 12, right: 13), resizingMode: .stretch)
-    }
 }

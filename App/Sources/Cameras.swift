@@ -190,8 +190,6 @@ public enum Overpass {
     }
 
     /** Traffic light nodes in an answer (OSM `highway=traffic_signals`). */
-    static func parseSignals(_ data: Data) -> [LatLng] { parseSignalNodes(data).map(\.at) }
-
     static func parseSignalNodes(_ data: Data) -> [(id: Int64, at: LatLng)] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let elements = root["elements"] as? [[String: Any]] else { return [] }

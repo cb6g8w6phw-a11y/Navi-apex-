@@ -289,13 +289,19 @@ public enum Geo {
         guard line.count >= 2 else { return line.first ?? LatLng(0, 0) }
         let c = cum ?? cumulative(line)
         if meters <= 0 { return line[0] }
-        for i in 1..<line.count where c[i] >= meters {
-            let seg = c[i] - c[i - 1]
-            let f = seg > 0 ? (meters - c[i - 1]) / seg : 0
-            let a = line[i - 1], b = line[i]
-            return LatLng(a.lat + (b.lat - a.lat) * f, a.lng + (b.lng - a.lng) * f)
+        // Binary search: the distances are sorted, and this runs every animation frame
+        // while navigating, so a linear scan over a long route cost real smoothness.
+        if c[c.count - 1] <= meters { return line[line.count - 1] }
+        var lo = 1, hi = c.count - 1
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if c[mid] >= meters { hi = mid } else { lo = mid + 1 }
         }
-        return line[line.count - 1]
+        let i = lo
+        let seg = c[i] - c[i - 1]
+        let f = seg > 0 ? (meters - c[i - 1]) / seg : 0
+        let a = line[i - 1], b = line[i]
+        return LatLng(a.lat + (b.lat - a.lat) * f, a.lng + (b.lng - a.lng) * f)
     }
 
     /** The part of [line] between two along-distances. */

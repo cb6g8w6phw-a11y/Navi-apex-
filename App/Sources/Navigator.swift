@@ -102,7 +102,6 @@ final class Navigator: ObservableObject {
     private var spokenCameras: Set<Int64> = []
     private var zones: [AverageSpeedZone] = []
     private var zoneEntry: (index: Int, time: Date, along: Double)?
-    private var demoAlerts = false
     private var speeding = SpeedingAlerts()
     private var routeWaze: [(alert: WazeAlert, along: Double)] = []
     /** Reports already warned about, by Waze's id, so a refresh doesn't warn again. */
@@ -163,11 +162,10 @@ final class Navigator: ObservableObject {
 
     /** The posted limit where the user is now, in km/h. */
     var speedLimitKmh: Double? {
-        demoLimitKmh ?? route.speedLimit(at: progress?.alongMeters ?? 0)
+        route.speedLimit(at: progress?.alongMeters ?? 0)
     }
 
     var nextManeuver: Maneuver? {
-        if let demoManeuver { return demoManeuver }
         guard let i = progress?.nextIndex, i < route.maneuvers.count else { return route.maneuvers.first }
         return route.maneuvers[i]
     }
@@ -192,8 +190,7 @@ final class Navigator: ObservableObject {
     func handle(_ loc: CLLocation) {
         guard !arrived else { return }
         lastFix = loc
-        // The build's screenshots keep their made-up speed.
-        if !demoAlerts { speedMps = max(0, loc.speed) }
+        speedMps = max(0, loc.speed)
         var p = tracker.update(LatLng(loc.coordinate.latitude, loc.coordinate.longitude),
                                accuracy: max(loc.horizontalAccuracy, 5), heading: Self.heading(loc))
         // The arrival time follows the traffic as it changes on the way, not only as it was at the start.
@@ -378,7 +375,6 @@ final class Navigator: ObservableObject {
     }
 
     private func checkCameras(_ p: RouteTracker.Progress) {
-        guard !demoAlerts else { return }
         let meters = routeCameras.map(\.along)
         if let ahead = cameraAhead {
             // Keep the card up, counting down, until the camera is passed.
@@ -416,7 +412,7 @@ final class Navigator: ObservableObject {
 
     /** Live Waze reports along the route; asked again every 90 seconds, since they come and go. */
     private func loadWaze() {
-        guard route.mode == .drive, AppSettings.shared.wazeOn, !wazeLoading, !demoAlerts else { return }
+        guard route.mode == .drive, AppSettings.shared.wazeOn, !wazeLoading else { return }
         wazeLoading = true
         wazeAt = Date()
         let line = route.polyline, id = route.id
@@ -451,7 +447,6 @@ final class Navigator: ObservableObject {
     }
 
     private func checkWaze(_ p: RouteTracker.Progress) {
-        guard !demoAlerts else { return }
         let s = AppSettings.shared
         if Date().timeIntervalSince(wazeAt) > 90 { loadWaze() }
         if let ahead = wazeAhead {
@@ -486,7 +481,6 @@ final class Navigator: ObservableObject {
 
     /** The police risk for the next 3 km, worked out again every 20 seconds. */
     private func checkRisk(_ p: RouteTracker.Progress) {
-        guard !demoAlerts else { return }
         let s = AppSettings.shared
         guard route.mode == .drive, s.wazeOn, s.policeRisk, s.wazePolice else { policeRisk = nil; return }
         guard Date().timeIntervalSince(riskAt) > 20 else { return }
@@ -509,7 +503,6 @@ final class Navigator: ObservableObject {
 
     /** Police aircraft near the user, asked every 30 seconds while driving. */
     private func checkAircraft(_ loc: CLLocation) {
-        guard !demoAlerts else { return }
         guard route.mode == .drive, AppSettings.shared.policeAircraft else { aircraftNear = nil; return }
         let here = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         if let near = aircraftNear { aircraftNear = (near.aircraft, near.aircraft.location.distance(to: here)) }
@@ -534,7 +527,6 @@ final class Navigator: ObservableObject {
 
     /** Average speed checks: say when one starts and ends, and keep the user's average on screen. */
     private func checkZones(_ p: RouteTracker.Progress) {
-        guard !demoAlerts else { return }
         let at = p.alongMeters
         let inside = zones.firstIndex { at >= $0.startMeters && at <= $0.endMeters }
         if let entry = zoneEntry, entry.index != inside {
@@ -558,37 +550,6 @@ final class Navigator: ObservableObject {
         averageCheck = AverageCheck(limitKmh: limit, averageKmh: avg, metersLeft: z.endMeters - at)
     }
 
-    /** For the build's screenshots: a camera coming up and an average speed check. */
-    /** For the build's screenshots: the next turn swapped for a made-up one. */
-    private(set) var demoManeuver: Maneuver?
-    private var demoLimitKmh: Double?
-
-    /** For the build's screenshots: the M27 roundabout at Park Gate, 6th exit, with its seven roads. */
-    func showDemoRoundabout() {
-        var m = Maneuver(type: .roundabout, instruction: "At the roundabout, take the 6th exit onto M27",
-                         location: LatLng(50.87, -1.27), alongMeters: 0, distanceMeters: 400, road: "M27", laneHint: nil)
-        m.exit = 6
-        m.roundabout = RoundaboutShape(exits: [262, 300, 338, 20, 62, 108], taken: 5, entriesOnly: [150],
-                                       clockwise: true, complete: true)
-        demoManeuver = m
-        objectWillChange.send()
-    }
-
-    func showDemoAlerts() {
-        demoAlerts = true
-        cameraAhead = CameraAlert(kind: .speed, meters: 180, startMeters: 400, limitKmh: 48.3)
-        averageCheck = AverageCheck(limitKmh: 80.5, averageKmh: 77, metersLeft: 2400)
-        // 38 in a 30, so the screenshots show the speed sign gone red.
-        showDemoSpeed(limitKmh: 48.3, mph: 38)
-    }
-
-    /** For the build's screenshots: a made-up speed and limit. */
-    func showDemoSpeed(limitKmh: Double, mph: Double) {
-        demoAlerts = true
-        demoLimitKmh = limitKmh
-        speedMps = mph / 2.23694
-    }
-
     /** Tapping the Waze card puts it away; the report still won't be warned about again. */
     func dismissWaze() { wazeAhead = nil }
     func dismissRoad() { roadAhead = nil; detourOffer = nil }
@@ -602,7 +563,7 @@ final class Navigator: ObservableObject {
      *  compared with the others along the way. Looked at every 20 seconds; the distance counts down in between. */
     private func checkFuel(_ p: RouteTracker.Progress) {
         let s = AppSettings.shared
-        guard route.mode == .drive, !demoAlerts, s.fuelOn, !s.fuelKey.isEmpty else {
+        guard route.mode == .drive, s.fuelOn, !s.fuelKey.isEmpty else {
             if fuelAhead != nil { fuelAhead = nil }
             return
         }
@@ -693,7 +654,7 @@ final class Navigator: ObservableObject {
     }
 
     private func checkRoadEvents(_ p: RouteTracker.Progress, _ loc: CLLocation) {
-        guard route.mode == .drive, !demoAlerts, AppSettings.shared.traffic else {
+        guard route.mode == .drive, AppSettings.shared.traffic else {
             if roadAhead != nil { roadAhead = nil }
             if detourOffer != nil { detourOffer = nil }
             return
@@ -769,17 +730,6 @@ final class Navigator: ObservableObject {
         }
     }
 
-    /** For the build's screenshots: police reported up the road. */
-    func showDemoWaze() {
-        demoAlerts = true
-        let here = progress.map { Geo.point(along: route.polyline, meters: $0.alongMeters + 300) } ?? route.polyline.first ?? LatLng(0, 0)
-        let a = WazeAlert(id: "demo-police", kind: .police, subtype: "POLICE_HIDING", location: here,
-                          street: "A9", reportedAt: Date().addingTimeInterval(-7 * 60), thumbsUp: 3, reliability: 8)
-        wazeAhead = WazeAhead(alert: a, meters: 260, startMeters: 600)
-        policeRisk = 72
-        aircraftNear = (PoliceAircraft(id: "demo-heli", callsign: "NPAS15", location: here, altitudeFeet: 1400, helicopter: true), 3200)
-    }
-
     /** A short tone before a camera warning, the way Waze does it. */
     private func chime() {
         guard !muted, !stopped, !onCall else { return }
@@ -837,7 +787,7 @@ final class Navigator: ObservableObject {
      * with a word about it.
      */
     private func checkTraffic(_ p: RouteTracker.Progress, _ loc: CLLocation) {
-        guard route.mode == .drive, !AppSettings.shared.noGoogle, !rerouting, !trafficLoading, !demoAlerts,
+        guard route.mode == .drive, !AppSettings.shared.noGoogle, !rerouting, !trafficLoading,
               p.remainingMeters > 5000, !p.offRoute, Date().timeIntervalSince(trafficAt) > 240 else { return }
         trafficLoading = true
         trafficAt = Date()

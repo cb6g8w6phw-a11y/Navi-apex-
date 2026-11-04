@@ -372,7 +372,8 @@ struct VelaMapView: UIViewRepresentable {
         private var lastPickAt = Date.distantPast
 
         private var lastResultsKey = ""
-        private var lastRouteKey = ""
+        private var lastStaticRouteKey = ""
+        private var lastDynRouteKey = ""
         private var lastMineKey = ""
         private var lastCameraKey = ""
         private var lastSignalsKey = ""
@@ -400,6 +401,10 @@ struct VelaMapView: UIViewRepresentable {
         private var radarOverlay: DWDRadarOverlay?
         private var railLines: [StyledLine] = []
         private var routeLines: [StyledLine] = []
+        private var routeBase: [StyledLine] = []
+        private var routeMain: [StyledLine] = []
+        private var routeSpans: [StyledLine] = []
+        private var routeDynamic: [StyledLine] = []
         private var arrowLines: [StyledLine] = []
         private var lineStyles: [ObjectIdentifier: LineStyle] = [:]
         private var overlaysDirty = false
@@ -414,6 +419,8 @@ struct VelaMapView: UIViewRepresentable {
         private var railFetch: Task<Void, Never>?
         /** Live Waze reports for the box last asked about, and when. */
         private var wazeAlerts: [WazeAlert] = []
+        /** Everything the Waze icons currently stand for (map box, route reports, fresh history). */
+        private var wazeShown: [WazeAlert] = []
         private var wazeBox: (s: Double, w: Double, n: Double, e: Double)?
         private var wazeAt = Date.distantPast
         private var wazeFetch: Task<Void, Never>?
@@ -428,7 +435,7 @@ struct VelaMapView: UIViewRepresentable {
 
         func repaint(_ map: MKMapView) {
             map.overrideUserInterfaceStyle = dark ? .dark : .light
-            lastResultsKey = ""; lastRouteKey = ""; lastMineKey = ""; lastCameraKey = ""; lastSignalsKey = ""; lastWazeKey = ""; lastRoadKey = ""; lastFuelKey = ""
+            lastResultsKey = ""; lastStaticRouteKey = ""; lastDynRouteKey = ""; lastMineKey = ""; lastCameraKey = ""; lastSignalsKey = ""; lastWazeKey = ""; lastRoadKey = ""; lastFuelKey = ""
             for a in map.annotations {
                 if let ka = a as? KiteAnnotation, let v = map.view(for: ka) as? KiteAnnotationView { v.configure(ka, dark: dark) }
             }
@@ -502,10 +509,44 @@ struct VelaMapView: UIViewRepresentable {
             if overlaysDirty { syncOverlays(map) }
         }
 
+        /**
+         * Swaps in the new set with as little churn as possible: a pin that is already on the
+         * map (same id) just moves and gets its icon refreshed, instead of every camera and
+         * report blinking out and popping back in on each pan. Only pins that really come or
+         * go are removed or added.
+         */
         private func replaceAnnotations(_ old: inout [KiteAnnotation], _ new: [KiteAnnotation], _ map: MKMapView) {
-            if !old.isEmpty { map.removeAnnotations(old) }
-            if !new.isEmpty { map.addAnnotations(new) }
-            old = new
+            let oldIds = Set(old.map(\.id))
+            let newIds = Set(new.map(\.id))
+            if oldIds == newIds, old.count == new.count {
+                for a in new { if let ex = old.first(where: { $0.id == a.id }) { refresh(ex, from: a, map) } }
+                return
+            }
+            var byId: [String: KiteAnnotation] = [:]
+            for a in old { byId[a.id] = a }
+            var kept = [KiteAnnotation](), added = [KiteAnnotation](), used = Set<String>()
+            for a in new {
+                if let ex = byId[a.id], used.insert(a.id).inserted {
+                    refresh(ex, from: a, map)
+                    kept.append(ex)
+                } else {
+                    added.append(a)
+                }
+            }
+            let gone = old.filter { !used.contains($0.id) }
+            if !gone.isEmpty { map.removeAnnotations(gone) }
+            if !added.isEmpty { map.addAnnotations(added) }
+            old = kept + added
+        }
+
+        private func refresh(_ ex: KiteAnnotation, from a: KiteAnnotation, _ map: MKMapView) {
+            let changed = ex.icon != a.icon || ex.label != a.label || ex.big != a.big || ex.opacity != a.opacity
+                || ex.routeSelected != a.routeSelected || ex.rank != a.rank || ex.anchorBottom != a.anchorBottom
+            ex.coordinate = a.coordinate
+            ex.icon = a.icon; ex.label = a.label; ex.big = a.big; ex.opacity = a.opacity
+            ex.routeSelected = a.routeSelected; ex.rank = a.rank; ex.bearing = a.bearing
+            ex.anchorBottom = a.anchorBottom
+            if changed, let v = map.view(for: ex) as? KiteAnnotationView { v.configure(ex, dark: dark) }
         }
 
         /** All lines and the glow, put on the map in the order they must be stacked. */
@@ -540,24 +581,23 @@ struct VelaMapView: UIViewRepresentable {
 
             let stale = map.overlays.filter { !wanted.contains(ObjectIdentifier($0 as AnyObject)) }
             guard !stale.isEmpty else { return }
-            map.removeOverlays(stale)
-            for o in stale { self.lineStyles[ObjectIdentifier(o as AnyObject)] = nil }
+            // The new lines need a moment to draw; taking the old ones off at once left the route
+            // blinking out for a frame on every rebuild, which read as the path constantly breaking.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self, weak map] in
+                guard let self, let map else { return }
+                let gone = stale.filter { !self.wantedOverlays.contains(ObjectIdentifier($0 as AnyObject)) }
+                guard !gone.isEmpty else { return }
+                map.removeOverlays(gone)
+                for o in gone { self.lineStyles[ObjectIdentifier(o as AnyObject)] = nil }
+            }
         }
 
         private func makeLine(_ pts: [LatLng], _ style: LineStyle) -> StyledLine? {
             guard pts.count >= 2 else { return nil }
-            // Wygładzanie: generujemy gęste punkty (co 10m), żeby trasa na zakrętach nie ucinała rogów
-            let cum = Geo.cumulative(pts)
-            let total = cum.last ?? 0
-            var densePts: [LatLng] = []
-            var m = 0.0
-            while m < total {
-                densePts.append(Geo.point(along: pts, meters: m, cumulative: cum))
-                m += 10.0
-            }
-            densePts.append(pts.last!)
-            
-            var coords = densePts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+            // The routing services already send full geometry (overview=full), so the line is
+            // as dense as the road itself. Re-densifying it here every rebuild walked the whole
+            // route once per generated point (a quadratic crawl that froze the map on long trips).
+            var coords = pts.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
             let line = MKPolyline(coordinates: &coords, count: coords.count)
             return (line, style)
         }
@@ -626,11 +666,24 @@ struct VelaMapView: UIViewRepresentable {
             let kinds = s.wazeKinds.map(\.rawValue).sorted().joined()
             // While navigating, drivers' reports from Waze's app servers too (the live map has only closures).
             let live = model.nav?.liveAlerts ?? []
-            let key = "\(s.wazeOn)\(s.wazeOnMap)\(s.wazeHeatmap)\(s.wazeMaxAge)\(kinds)\(wazeAt.timeIntervalSince1970)\(history.count)\(live.map(\.id).joined())\(gates[2])"
+            // Re-check every few minutes, so a report's icon fades out with its age.
+            let key = "\(s.wazeOn)\(s.wazeOnMap)\(s.wazeHeatmap)\(s.wazeMaxAge)\(kinds)\(wazeAt.timeIntervalSince1970)\(history.count)\(live.map(\.id).joined())\(gates[2])\(Int(Date().timeIntervalSince1970 / 300))"
             guard key != lastWazeKey else { return }
             lastWazeKey = key
             let ids = Set(wazeAlerts.map(\.id))
-            let all = wazeAlerts + live.filter { !ids.contains($0.id) }
+            var all = wazeAlerts + live.filter { !ids.contains($0.id) }
+            // Recent police sightings kept on this phone still show as tappable icons when Waze's
+            // live answer is empty or late: the red glow alone can't be tapped or read, which
+            // looked like "a red field with nothing in it" where a camera or police report was.
+            if s.wazeOn && s.wazeOnMap && gates[2] && s.wants(.police), s.wazeMaxAge > 0 {
+                let have = Set(all.map(\.id))
+                let window = Double(s.wazeMaxAge) * 60
+                for h in history where !have.contains(h.id) && Date().timeIntervalSince(h.t) <= window {
+                    all.append(WazeAlert(id: h.id, kind: .police, subtype: "POLICE", location: LatLng(h.lat, h.lng),
+                                         street: nil, reportedAt: h.t, thumbsUp: 0, reliability: 5))
+                }
+            }
+            wazeShown = all
             let shown = s.wazeOn && s.wazeOnMap && gates[2] ? all.filter { s.shows($0) } : []
             let anns: [KiteAnnotation] = shown.map { a in
                 let m = KiteAnnotation(layer: .waze, id: a.id, coordinate: coord(a.location))
@@ -794,134 +847,137 @@ struct VelaMapView: UIViewRepresentable {
             let trip = navigating ? nil : model.directions?.pickedTrip
             let from = model.nav?.progress?.alongMeters ?? 0
 
-            // Klucz zmienia się co ~50m jazdy, żeby trasa rysowała się na bieżąco
-            let key = (navigating ? "nav" : "") + (trip?.id.uuidString ?? "") + (main?.id.uuidString ?? "")
-                + alts.map(\.id.uuidString).joined() + "\(Int(from / 50))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)" + "\(dark)"
-            guard key != lastRouteKey else { return }
-            lastRouteKey = key
+            // The route itself is rebuilt only when the routes change. The parts that depend on
+            // where the car is (traveled line, dots, turn arrow) are separate overlays updated
+            // about every 50 m: the main line stays the same object for the whole trip instead
+            // of being torn down and redrawn every few seconds, which made the path blink off.
+            let staticKey = (navigating ? "nav" : "") + (trip?.id.uuidString ?? "") + (main?.id.uuidString ?? "")
+                + alts.map(\.id.uuidString).joined() + "\(dark)"
+            let dynKey = staticKey + "\(Int(from / 50))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)"
+            let staticChanged = staticKey != lastStaticRouteKey
+            let dynChanged = dynKey != lastDynRouteKey
+            guard staticChanged || dynChanged else { return }
+            lastStaticRouteKey = staticKey
+            lastDynRouteKey = dynKey
             overlaysDirty = true
-
-            var altsG: [StyledLine] = []
-            var transitG: [StyledLine] = []
-            var fullRoute: [StyledLine] = []
-            var traveled: [StyledLine] = []
-            var dots: [StyledLine] = []
-            var spansOut: [StyledLine] = []
 
             func add(_ group: inout [StyledLine], _ pts: [LatLng], _ style: LineStyle) {
                 if let l = makeLine(pts, style) { group.append(l) }
             }
 
-            // Trasy alternatywne
-            for r in alts { add(&altsG, r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 11, alpha: 0.6, relative: 0.85)) }
-            for r in alts { add(&altsG, r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.6, relative: 0.55)) }
-
-            // Komunikacja miejska (jeśli wybrana)
-            if let t = trip {
-                let legs = t.legs.filter { $0.path.count >= 2 }
-                for leg in legs where leg.isWalk {
-                    add(&transitG, leg.path, LineStyle(color: UIColor(hex: 0x5F6368), width: 5, dash: [0.1, 9]))
+            // 1. What changes only when the routes do: alternatives, transit legs, the full
+            //    route and the traffic colours along it.
+            if staticChanged {
+                var base: [StyledLine] = [], mainOut: [StyledLine] = [], spansOut: [StyledLine] = []
+                for r in alts { add(&base, r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 11, alpha: 0.6, relative: 0.85)) }
+                for r in alts { add(&base, r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.6, relative: 0.55)) }
+                if let t = trip {
+                    let legs = t.legs.filter { $0.path.count >= 2 }
+                    for leg in legs where leg.isWalk {
+                        add(&base, leg.path, LineStyle(color: UIColor(hex: 0x5F6368), width: 5, dash: [0.1, 9]))
+                    }
+                    for leg in legs where !leg.isWalk {
+                        add(&base, leg.path, LineStyle(color: UIColor(white: 0.1, alpha: 1), width: 10, alpha: 0.55))
+                    }
+                    for leg in legs where !leg.isWalk {
+                        add(&base, leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
+                    }
                 }
-                for leg in legs where !leg.isWalk {
-                    add(&transitG, leg.path, LineStyle(color: UIColor(white: 0.1, alpha: 1), width: 10, alpha: 0.55))
+                if let r = main {
+                    let cum = Geo.cumulative(r.polyline)
+                    let total = cum.last ?? 0
+                    // Full route; the line's width follows the road's width on screen (relative 1.0 = road).
+                    add(&mainOut, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
+                    add(&mainOut, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
+                                                          gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
+                    // Traffic: coloured spans, only on the part still ahead of the car.
+                    let levelColors: [Int: UInt32] = [1: 0xF59E0B, 2: 0xEF4444, 3: 0xB91C1C]
+                    for level in 1...3 {
+                        for s in r.trafficSpans where min(s.level, 3) == level {
+                            let a = max(s.startMeters, navigating ? from : 0), b = min(s.startMeters + s.lengthMeters, total)
+                            guard b > a else { continue }
+                            add(&spansOut, Geo.slice(r.polyline, from: a, to: b, cumulative: cum),
+                                LineStyle(color: UIColor(hex: levelColors[level] ?? 0xF59E0B), width: 10, relative: 0.70))
+                        }
+                    }
                 }
-                for leg in legs where !leg.isWalk {
-                    add(&transitG, leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
-                }
+                routeBase = base
+                routeMain = mainOut
+                routeSpans = spansOut
             }
 
-            routeLines = altsG + transitG
+            // 2. What moves with the car, every ~50 m: the traveled line, the dots ahead and
+            //    the turn arrow.
+            if dynChanged {
+                var traveled: [StyledLine] = [], dots: [StyledLine] = []
+                var arrow: [StyledLine] = []
+                var heads: [KiteAnnotation] = []
+                if let r = main {
+                    let cum = Geo.cumulative(r.polyline)
+                    let total = cum.last ?? 0
+                    if navigating && from > 1 && from < total - 5 {
+                        let remaining = Geo.slice(r.polyline, from: from, to: total, cumulative: cum)
+                        add(&dots, remaining, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
+                    } else if !navigating {
+                        add(&dots, r.polyline, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
+                    }
+                    if navigating && from > 1 {
+                        add(&traveled, Geo.slice(r.polyline, from: 0, to: from, cumulative: cum),
+                            LineStyle(color: UIColor(hex: 0x94A3B8), width: 10, alpha: 0.8, relative: 0.7))
+                    }
+                    if let n = model.nav, let m = n.nextManeuver, m.type != .arrive, m.type != .depart, m.type != .straight,
+                       let p = n.progress, m.alongMeters - p.alongMeters < 600 {
+                        var end = m.alongMeters + 22
+                        if m.type == .roundabout,
+                           let out = n.route.maneuvers.first(where: { $0.leavesRoundabout && $0.alongMeters > m.alongMeters }),
+                           out.alongMeters - m.alongMeters < 250 {
+                            end = out.alongMeters + 22
+                        }
+                        let a = max(m.alongMeters - 35, from), b = min(end, total)
+                        let shaft = Geo.slice(r.polyline, from: a, to: b, cumulative: cum)
+                        if shaft.count >= 2 {
+                            let tip = shaft[shaft.count - 1]
+                            let prev = Geo.point(along: r.polyline, meters: max(a, b - 4), cumulative: cum)
+                            add(&arrow, shaft, LineStyle(color: .black, width: 17, alpha: 0.35, relative: 0.85))
+                            add(&arrow, shaft, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 0.72))
+                            add(&arrow, shaft, LineStyle(color: .white, width: 9, relative: 0.42))
+                            let head = KiteAnnotation(layer: .turnHead, id: "turn-head", coordinate: coord(tip))
+                            head.icon = "turn-head"
+                            head.bearing = Geo.bearing(prev, tip)
+                            heads.append(head)
+                        }
+                    }
+                }
+                routeDynamic = traveled + dots
+                arrowLines = arrow
+                replaceAnnotations(&headAnns, heads, map)
+            }
 
-            guard let r = main else {
-                arrowLines = []
+            routeLines = routeBase + routeMain + routeDynamic + routeSpans
+
+            // 3. Time bubbles on each route (while planning).
+            if model.nav == nil, let d = model.directions {
+                var bubbles: [KiteAnnotation] = []
+                for (i, route) in d.current.enumerated() {
+                    let others = d.current.enumerated().filter { $0.offset != i }.map(\.element.polyline)
+                    let c = Geo.cumulative(route.polyline)
+                    let len = c.last ?? 0
+                    var spot = Geo.point(along: route.polyline, meters: len * 0.5, cumulative: c)
+                    for f in stride(from: 0.5, through: 0.9, by: 0.1) {
+                        let p = Geo.point(along: route.polyline, meters: len * f, cumulative: c)
+                        let shared = others.contains { o in o.contains { $0.distance(to: p) < 120 } }
+                        if !shared { spot = p; break }
+                    }
+                    let b = KiteAnnotation(layer: .bubble, id: "bubble\(i)", coordinate: coord(spot))
+                    b.label = Fmt.duration(route.durationSeconds)
+                    b.routeSelected = route.id == main?.id
+                    b.routeIndex = i
+                    bubbles.append(b)
+                }
+                replaceAnnotations(&bubbleAnns, bubbles, map)
+            } else {
                 replaceAnnotations(&bubbleAnns, [], map)
-                replaceAnnotations(&headAnns, [], map)
-                return
             }
-
-            let cum = Geo.cumulative(r.polyline)
-            let total = cum.last ?? 0
-
-            // 1. Zawsze pełna trasa; grubość linii skaluje się z szerokością drogi na ekranie (relative 1.0 = droga).
-            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
-            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
-                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
-
-            // 2. Kropki tylko na pozostałej części (przed tobą)
-            if navigating && from > 1 && from < total - 5 {
-                let remaining = Geo.slice(r.polyline, from: from, to: total, cumulative: cum)
-                add(&dots, remaining, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
-            } else if !navigating {
-                add(&dots, r.polyline, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
-            }
-
-            // 3. Przejechany odcinek przygaszony (szary, na wierzchu)
-            if navigating && from > 1 {
-                let traveledPts = Geo.slice(r.polyline, from: 0, to: from, cumulative: cum)
-                add(&traveled, traveledPts, LineStyle(color: UIColor(hex: 0x94A3B8), width: 10, alpha: 0.8, relative: 0.7))
-            }
-
-            // 4. Korki (kolorowe odcinki)
-            let levelColors: [Int: UInt32] = [1: 0xF59E0B, 2: 0xEF4444, 3: 0xB91C1C]
-            for level in 1...3 {
-                for s in r.trafficSpans where min(s.level, 3) == level {
-                    let a = max(s.startMeters, 0), b = min(s.startMeters + s.lengthMeters, total)
-                    guard b > a else { continue }
-                    add(&spansOut, Geo.slice(r.polyline, from: a, to: b, cumulative: cum),
-                        LineStyle(color: UIColor(hex: levelColors[level] ?? 0xF59E0B), width: 10, relative: 0.70))
-                }
-            }
-
-            routeLines = altsG + transitG + fullRoute + traveled + dots + spansOut
-
-            // 5. Strzałka skrętu i groty
-            var arrow: [StyledLine] = []
-            var heads: [KiteAnnotation] = []
-            if let n = model.nav, let m = n.nextManeuver, m.type != .arrive, m.type != .depart, m.type != .straight,
-               let p = n.progress, m.alongMeters - p.alongMeters < 600 {
-                var end = m.alongMeters + 22
-                if m.type == .roundabout,
-                   let out = n.route.maneuvers.first(where: { $0.leavesRoundabout && $0.alongMeters > m.alongMeters }),
-                   out.alongMeters - m.alongMeters < 250 {
-                    end = out.alongMeters + 22
-                }
-                let a = max(m.alongMeters - 35, from), b = min(end, total)
-                let shaft = Geo.slice(r.polyline, from: a, to: b, cumulative: cum)
-                if shaft.count >= 2 {
-                    let tip = shaft[shaft.count - 1]
-                    let prev = Geo.point(along: r.polyline, meters: max(a, b - 4), cumulative: cum)
-                    add(&arrow, shaft, LineStyle(color: .black, width: 17, alpha: 0.35, relative: 0.85))
-                    add(&arrow, shaft, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 0.72))
-                    add(&arrow, shaft, LineStyle(color: .white, width: 9, relative: 0.42))
-                    let head = KiteAnnotation(layer: .turnHead, id: "turn-head", coordinate: coord(tip))
-                    head.icon = "turn-head"
-                    head.bearing = Geo.bearing(prev, tip)
-                    heads.append(head)
-                }
-            }
-            arrowLines = arrow
-            replaceAnnotations(&headAnns, heads, map)
-
-            // 6. Dymki z czasem (przy planowaniu trasy)
-            guard model.nav == nil, let d = model.directions else { replaceAnnotations(&bubbleAnns, [], map); return }
-            var bubbles: [KiteAnnotation] = []
-            for (i, route) in d.current.enumerated() {
-                let others = d.current.enumerated().filter { $0.offset != i }.map(\.element.polyline)
-                let c = Geo.cumulative(route.polyline)
-                let len = c.last ?? 0
-                var spot = Geo.point(along: route.polyline, meters: len * 0.5, cumulative: c)
-                for f in stride(from: 0.5, through: 0.9, by: 0.1) {
-                    let p = Geo.point(along: route.polyline, meters: len * f, cumulative: c)
-                    let shared = others.contains { o in o.contains { $0.distance(to: p) < 120 } }
-                    if !shared { spot = p; break }
-                }
-                let b = KiteAnnotation(layer: .bubble, id: "bubble\(i)", coordinate: coord(spot))
-                b.label = Fmt.duration(route.durationSeconds)
-                b.routeSelected = route.id == r.id
-                b.routeIndex = i
-                bubbles.append(b)
-            }
-            replaceAnnotations(&bubbleAnns, bubbles, map)
         }
 
         // MARK: Loading things for the view
@@ -967,15 +1023,6 @@ struct VelaMapView: UIViewRepresentable {
                 self.model.updateAreaRisk(live: found)
                 if let map { self.render(map) }
             }
-        }
-
-        /** For the build's screenshots: made-up reports, so the badges and glow show without Waze. */
-        func showDemoWaze(_ list: [WazeAlert], map: MKMapView) {
-            wazeAlerts = list
-            wazeAt = Date()
-            model.wazeLiveCount = list.count
-            model.updateAreaRisk(live: list)
-            render(map)
         }
 
         /** Metro, tram and rail lines in their own colours, from the cached shapes. */
@@ -1089,16 +1136,11 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         @objc func userMoved(_ g: UIGestureRecognizer) {
-            // Only disable following if the user is actually panning/pinching/twisting the map
+            // The person moving the map themselves stops it following the car. These recognizers
+            // only fire on real touches, never on the camera NavGlide sets itself, so this can
+            // be immediate — a delay here let the camera snap back onto the car for a moment.
             guard g.state == .began || g.state == .changed else { return }
-            if let n = model.nav, n.following {
-                // We add a small delay to distinguish between a real user gesture and a minor map update
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if g.state == .began || g.state == .changed {
-                        n.following = false
-                    }
-                }
-            }
+            if let n = model.nav, n.following { n.following = false }
         }
 
         @objc func pressed(_ g: UILongPressGestureRecognizer) {
@@ -1190,7 +1232,8 @@ struct VelaMapView: UIViewRepresentable {
             case .bubble:
                 if model.directions != nil, !a.routeSelected { model.selectRoute(a.routeIndex) }
             case .waze:
-                guard model.directions == nil, let alert = wazeAlerts.first(where: { $0.id == a.id }) else { return }
+                // The icons stand for the map box, the route's reports and fresh history alike.
+                guard model.directions == nil, let alert = wazeShown.first(where: { $0.id == a.id }) else { return }
                 Haptics.select()
                 model.wazeInfo = alert
             case .fuel:
