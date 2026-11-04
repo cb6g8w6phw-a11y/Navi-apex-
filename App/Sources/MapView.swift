@@ -842,10 +842,10 @@ struct VelaMapView: UIViewRepresentable {
             let cum = Geo.cumulative(r.polyline)
             let total = cum.last ?? 0
 
-            // 1. ZAWSZE rysuj PEŁNĄ trasę (stała szerokość, brak wielkich trójkątów)
-            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 16, relative: nil))
+            // 1. Zawsze pełna trasa; grubość linii skaluje się z szerokością drogi na ekranie (relative 1.0 = droga).
+            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
             add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
-                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: nil))
+                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
 
             // 2. Kropki tylko na pozostałej części (przed tobą)
             if navigating && from > 1 && from < total - 5 {
