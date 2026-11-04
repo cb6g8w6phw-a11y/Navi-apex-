@@ -314,38 +314,6 @@ struct PressableButtonStyle: ButtonStyle {
     }
 }
 
-    /** Matte: a calm frosted pane with no shine. In the Black theme it is smoked black glass. */
-    @ViewBuilder private var matteBackground: some View {
-        if settings.theme == .black {
-            shape.fill(.ultraThinMaterial)
-                .overlay(shape.fill(Color.black.opacity(0.68)))
-                .overlay(shape.stroke(Color.white.opacity(0.10), lineWidth: 0.75))
-                .shadow(color: .black.opacity(0.55), radius: 10, y: 4)
-        } else {
-            shape.fill(.regularMaterial)
-                .overlay(shape.fill(Vela.surface(scheme).opacity(0.58)))
-                .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.45), lineWidth: 0.75))
-                .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.14), radius: 10, y: 4)
-        }
-    }
-
-    @available(iOS 26.0, *)
-    private var glassStyle: Glass {
-        var g = Glass.regular
-        if let tint { g = g.tint(tint) }
-        if interactive { g = g.interactive() }
-        return g
-    }
-}
-
-extension View {
-    func glass<S: Shape>(_ shape: S) -> some View { modifier(KiteGlass(shape: shape)) }
-    /** Glass that lights up under your finger, for buttons. */
-    func glassButton<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
-        modifier(KiteGlass(shape: shape, tint: tint, interactive: true))
-    }
-}
-
 /** Round buttons floating on the map (layers, location, compass). */
 struct MapFab: View {
     let icon: String
