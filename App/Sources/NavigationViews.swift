@@ -125,7 +125,7 @@ struct NavigationOverlay: View {
             }
             // Arriving answers the question: the trip bar's Done takes over.
             if confirmEnd, !nav.arrived {
-                EndTripCard(destination: nav.destination.name,
+                .padding(18)(destination: nav.destination.name,
                             onKeep: { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = false } },
                             onEnd: { model.endNavigation() })
                     .inSidePanel(panel)
@@ -464,7 +464,7 @@ struct EndTripCard: View {
                 }
                 Button(action: onEnd) {
                     Text("end_trip".localized).font(.system(size: 20, weight: .bold))
-                        .frame(maxWidth: .infinity).frame(height: 60)
+                        .frame(maxWidth: .infinity).frame(height: 50)
                         .foregroundColor(.white)
                         .background(Capsule().fill(Vela.closed))
                 }
@@ -472,8 +472,8 @@ struct EndTripCard: View {
             .buttonStyle(.plain)
         }
         .foregroundColor(.primary)
-        .padding(18)
-        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(14)
+        .glassButton(Capsule())
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
@@ -519,7 +519,7 @@ struct TripBar: View {
         .foregroundColor(.primary)
         .padding(.horizontal, 16)
         .frame(height: 100)
-        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .glassButton(Capsule())
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
