@@ -274,18 +274,20 @@ struct KiteGlass<S: Shape>: ViewModifier {
 
     private var matte: Bool { settings.glassStyle == .matte || settings.theme == .black }
 
-    func body(content: Content) -> some View {
+        func body(content: Content) -> some View {
         if matte {
             content.background(matteBackground)
         } else if #available(iOS 26.0, *) {
-            content.glassEffect(glassStyle, in: shape)
+            // Prawdziwy Liquid Glass w iOS 26+ (interaktywne pastylki)
+            content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
+            // Elegancki, lekki fallback dla starszych iOS
             content
                 .background(
                     shape.fill(.ultraThinMaterial)
-                        .overlay(shape.fill(Vela.surface(scheme).opacity(scheme == .dark ? 0.86 : 0.88)))
-                        .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.08 : 0.5), lineWidth: 0.75))
-                        .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 12, y: 5)
+                        .overlay(shape.fill(Color.white.opacity(scheme == .dark ? 0.05 : 0.15)))
+                        .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.1 : 0.4), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
                 )
         }
     }
