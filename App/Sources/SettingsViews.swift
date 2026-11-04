@@ -199,6 +199,18 @@ struct SettingsView: View {
                 } label: { SettingLabel("Distance units", icon: "ruler.fill", color: 0x0891B2) }
                 Toggle(isOn: $settings.parkingButton) { SettingLabel("Parking button on the map", icon: "parkingsign", color: 0x2563EB) }
                 Toggle(isOn: $settings.weatherOn) { SettingLabel("Weather on the map", icon: "cloud.sun.fill", color: 0x0EA5E9) }
+                
+                // --- TUTAJ JEST TWOJA NOWA OPCJA ---
+                Picker(selection: $settings.hapticLevel) {
+                    Text("haptic_off".localized).tag(Haptics.Level.off)
+                    Text("haptic_light".localized).tag(Haptics.Level.light)
+                    Text("haptic_medium".localized).tag(Haptics.Level.medium)
+                    Text("haptic_strong".localized).tag(Haptics.Level.strong)
+                } label: {
+                    SettingLabel("haptic_feedback".localized, icon: "hand.tap.fill", color: 0x8B5CF6)
+                }
+                // -----------------------------------
+
             } footer: {
                 Text("Black uses pure black pages and always matte glass. Changing to or from Black takes you back to the first page of Settings. The weather badge asks Open-Meteo, with your position rounded to about 10 km.")
             }
