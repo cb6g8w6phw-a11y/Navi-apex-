@@ -269,16 +269,19 @@ struct KiteGlass<S: Shape>: ViewModifier {
     var tint: Color? = nil
     var interactive = false
     @Environment(\.colorScheme) private var scheme
-    /** Watching the settings so a change of theme or glass repaints at once. */
     @ObservedObject private var settings = AppSettings.shared
 
     private var matte: Bool { settings.glassStyle == .matte || settings.theme == .black }
 
-        func body(content: Content) -> some View {
+    func body(content: Content) -> some View {
         if matte {
-            content.background(matteBackground)
+            content.background(
+                shape.fill(.ultraThinMaterial)
+                    .overlay(shape.fill(settings.theme == .black ? Color.black.opacity(0.58) : Vela.sheet(scheme).opacity(0.56)))
+                    .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.10 : 0.45), lineWidth: 0.75))
+                    .shadow(color: .black.opacity(0.3), radius: 14, y: -2)
+            )
         } else if #available(iOS 26.0, *) {
-            // Prawdziwy Liquid Glass w iOS 26+ (interaktywne pastylki)
             content.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             // Elegancki, lekki fallback dla starszych iOS
@@ -291,6 +294,25 @@ struct KiteGlass<S: Shape>: ViewModifier {
                 )
         }
     }
+}
+
+extension View {
+    func glass<S: Shape>(_ shape: S) -> some View { modifier(KiteGlass(shape: shape)) }
+    
+    func glassButton<S: Shape>(_ shape: S, tint: Color? = nil) -> some View {
+        modifier(KiteGlass(shape: shape, tint: tint, interactive: true))
+    }
+}
+
+// --- NOWY STYL PRZYCISKÓW Z ANIMACJĄ ---
+struct PressableButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
 
     /** Matte: a calm frosted pane with no shine. In the Black theme it is smoked black glass. */
     @ViewBuilder private var matteBackground: some View {
