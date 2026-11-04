@@ -354,7 +354,7 @@ struct VelaMapView: UIViewRepresentable {
             c.repaint(map)
         }
         
-        // Włączanie i wyłączanie natywnego śledzenia kamery (naprawia brak auta i "jebnięcie" kamery)
+        // Włączanie i wyłączanie natywnego śledzenia kamery
         if let nav = model.nav, nav.following {
             if map.userTrackingMode != .followWithHeading {
                 map.userTrackingMode = .followWithHeading
@@ -944,9 +944,14 @@ struct VelaMapView: UIViewRepresentable {
                 if let w = s.work { places.append(w.location) }
                 WazeHistory.shared.sweepIfDue(places)
                 // Waze's live map od października 2026 nie dzieli się policją — bierzemy ją z app servers WazeLive.
-                if settings.wazeOn, settings.wazePolice, Date().timeIntervalSince(policeSweptAt) > 600 {
+                if s.wazeOn, s.wazePolice, Date().timeIntervalSince(policeSweptAt) > 600 {
                     policeSweptAt = Date()
-                    Task { @MainActor in model.sweepPoliceNearby() }
+                    Task { @MainActor in
+                        // Wywołanie tego, co jest w AppModel
+                        if let live = await Waze.alerts(south: map.centerCoordinate.latitude - 0.01, west: map.centerCoordinate.longitude - 0.01, north: map.centerCoordinate.latitude + 0.01, east: map.centerCoordinate.longitude + 0.01) {
+                            model.updateAreaRisk(live: live)
+                        }
+                    }
                 }
             }
             guard s.wazeOn, s.wazeOnMap || s.wazeHeatmap, map.zoomLevel >= 10, wazeFetch == nil, !DemoScript.fakeWaze,
