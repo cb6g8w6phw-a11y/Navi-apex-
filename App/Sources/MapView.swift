@@ -772,56 +772,58 @@ struct VelaMapView: UIViewRepresentable {
             replaceAnnotations(&selectedAnns, sel, map)
         }
 
-        private func renderRoutes(_ map: MKMapView) {
+                private func renderRoutes(_ map: MKMapView) {
             var alts: [Route] = []
             var main: Route?
-            var from = 0.0
             if let n = model.nav {
                 main = n.route
-                from = n.progress?.alongMeters ?? 0
             } else if let d = model.directions {
                 main = d.route
                 alts = d.current.filter { $0.id != main?.id }
             }
             let navigating = model.nav != nil
             let trip = navigating ? nil : model.directions?.pickedTrip
-            // While driving the route is redrawn about once a second (every 25 m), not on every metre.
+            let from = model.nav?.progress?.alongMeters ?? 0
+
+            // Klucz zmienia się co ~50m jazdy, żeby trasa rysowała się na bieżąco
             let key = (navigating ? "nav" : "") + (trip?.id.uuidString ?? "") + (main?.id.uuidString ?? "")
-                + alts.map(\.id.uuidString).joined() + "\(Int(from / 25))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)" + "\(dark)"
+                + alts.map(\.id.uuidString).joined() + "\(Int(from / 50))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)" + "\(dark)"
             guard key != lastRouteKey else { return }
             lastRouteKey = key
             overlaysDirty = true
 
-            var done: [StyledLine] = [], altEdge: [StyledLine] = [], altFill: [StyledLine] = []
-            var edge: [StyledLine] = [], fill: [StyledLine] = [], dots: [StyledLine] = []
-            var transit: [StyledLine] = [], spansOut: [StyledLine] = []
+            var altsG: [StyledLine] = []
+            var transitG: [StyledLine] = []
+            var fullRoute: [StyledLine] = []
+            var traveled: [StyledLine] = []
+            var dots: [StyledLine] = []
+            var spansOut: [StyledLine] = []
+
             func add(_ group: inout [StyledLine], _ pts: [LatLng], _ style: LineStyle) {
                 if let l = makeLine(pts, style) { group.append(l) }
             }
-            func assemble() {
-                routeLines = done + altEdge + altFill + edge + fill + dots + transit + spansOut
-            }
 
-            // Other routes, soft and see-through.
-            for r in alts { add(&altEdge, r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 11, alpha: 0.6, relative: 0.85)) }
-            for r in alts { add(&altFill, r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.6, relative: 0.55)) }
+            // Trasy alternatywne
+            for r in alts { add(&altsG, r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 11, alpha: 0.6, relative: 0.85)) }
+            for r in alts { add(&altsG, r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.6, relative: 0.55)) }
 
-            // A transit trip: each ride in its line's colour, walks dotted.
+            // Komunikacja miejska (jeśli wybrana)
             if let t = trip {
                 let legs = t.legs.filter { $0.path.count >= 2 }
                 for leg in legs where leg.isWalk {
-                    add(&transit, leg.path, LineStyle(color: UIColor(hex: 0x5F6368), width: 5, dash: [0.1, 9]))
+                    add(&transitG, leg.path, LineStyle(color: UIColor(hex: 0x5F6368), width: 5, dash: [0.1, 9]))
                 }
                 for leg in legs where !leg.isWalk {
-                    add(&transit, leg.path, LineStyle(color: UIColor(white: 0.1, alpha: 1), width: 10, alpha: 0.55))
+                    add(&transitG, leg.path, LineStyle(color: UIColor(white: 0.1, alpha: 1), width: 10, alpha: 0.55))
                 }
                 for leg in legs where !leg.isWalk {
-                    add(&transit, leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
+                    add(&transitG, leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
                 }
             }
 
+            routeLines = altsG + transitG
+
             guard let r = main else {
-                assemble()
                 arrowLines = []
                 replaceAnnotations(&bubbleAnns, [], map)
                 replaceAnnotations(&headAnns, [], map)
@@ -830,33 +832,44 @@ struct VelaMapView: UIViewRepresentable {
 
             let cum = Geo.cumulative(r.polyline)
             let total = cum.last ?? 0
-            let ahead = from > 1 ? Geo.slice(r.polyline, from: from, to: total, cumulative: cum) : r.polyline
-            if navigating, from > 1 {
-                add(&done, Geo.slice(r.polyline, from: 0, to: from, cumulative: cum), LineStyle(color: UIColor(hex: 0x64748B), width: 10, alpha: 0.5, relative: 0.7))
-            }
-            add(&edge, ahead, LineStyle(color: UIColor(hex: 0x0F766E), width: navigating ? 22 : 15, relative: 1.0))
-            add(&fill, ahead, LineStyle(color: UIColor(hex: 0x2DD4BF), width: navigating ? 16 : 10,
-                                        gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
-            // Little dots along the line stand in for the direction chevrons.
-            add(&dots, ahead, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
 
+            // 1. ZAWSZE rysuj PEŁNĄ trasę (to naprawia problem "1/8 trasy")
+            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
+            add(&fullRoute, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
+                                                  gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
+
+            // 2. Kropki tylko na pozostałej części (przed tobą)
+            if navigating && from > 1 && from < total - 5 {
+                let remaining = Geo.slice(r.polyline, from: from, to: total, cumulative: cum)
+                add(&dots, remaining, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
+            } else if !navigating {
+                add(&dots, r.polyline, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
+            }
+
+            // 3. Przejechany odcinek przygaszony (szary, na wierzchu)
+            if navigating && from > 1 {
+                let traveledPts = Geo.slice(r.polyline, from: 0, to: from, cumulative: cum)
+                add(&traveled, traveledPts, LineStyle(color: UIColor(hex: 0x94A3B8), width: 10, alpha: 0.8, relative: 0.7))
+            }
+
+            // 4. Korki (kolorowe odcinki)
             let levelColors: [Int: UInt32] = [1: 0xF59E0B, 2: 0xEF4444, 3: 0xB91C1C]
             for level in 1...3 {
                 for s in r.trafficSpans where min(s.level, 3) == level {
-                    let a = max(s.startMeters, from), b = min(s.startMeters + s.lengthMeters, total)
+                    let a = max(s.startMeters, 0), b = min(s.startMeters + s.lengthMeters, total)
                     guard b > a else { continue }
                     add(&spansOut, Geo.slice(r.polyline, from: a, to: b, cumulative: cum),
                         LineStyle(color: UIColor(hex: levelColors[level] ?? 0xF59E0B), width: 10, relative: 0.70))
                 }
             }
-            assemble()
 
-            // Turn arrow: 35 m of road before the next turn and 22 m after it, from 14 m away.
+            routeLines = altsG + transitG + fullRoute + traveled + dots + spansOut
+
+            // 5. Strzałka skrętu i groty
             var arrow: [StyledLine] = []
             var heads: [KiteAnnotation] = []
             if let n = model.nav, let m = n.nextManeuver, m.type != .arrive, m.type != .depart, m.type != .straight,
                let p = n.progress, m.alongMeters - p.alongMeters < 600 {
-                // At a roundabout, all the way round to your exit and a little beyond, like Waze.
                 var end = m.alongMeters + 22
                 if m.type == .roundabout,
                    let out = n.route.maneuvers.first(where: { $0.leavesRoundabout && $0.alongMeters > m.alongMeters }),
@@ -880,7 +893,7 @@ struct VelaMapView: UIViewRepresentable {
             arrowLines = arrow
             replaceAnnotations(&headAnns, heads, map)
 
-            // Time bubbles: on each route, at a point the others don't share.
+            // 6. Dymki z czasem (przy planowaniu trasy)
             guard model.nav == nil, let d = model.directions else { replaceAnnotations(&bubbleAnns, [], map); return }
             var bubbles: [KiteAnnotation] = []
             for (i, route) in d.current.enumerated() {
