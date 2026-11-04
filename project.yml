@@ -11,6 +11,7 @@ targets:
     sources:
       - App/Sources
       - App/Assets.xcassets
+      - App/Resources
     dependencies:
       - target: ApexWidgets
     scheme: {}
