@@ -635,6 +635,10 @@ final class AppModel: ObservableObject {
     }
 
     func endNavigation() {
+        // The car's odometer ticks up by itself: every kilometre driven with Apex navigating counts.
+        if let driven = nav?.progress?.alongMeters, driven > 500 {
+            settings.carOdometer += Int(driven)
+        }
         nav?.stop()
         glide.stop()
         nav = nil

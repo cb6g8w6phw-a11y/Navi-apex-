@@ -19,6 +19,7 @@ enum Haptics {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "hapticLevel") }
     }
     static func tap() { play(.light) }
+    static func light() { play(.light) }
     static func select() { play(.light) }
     static func success() { play(.medium) }
     static func warning() { play(.strong) }

@@ -112,6 +112,10 @@ struct SettingsView: View {
                             value: settings.fuelOn && !settings.fuelKey.isEmpty ? "Włączone" : nil, icon: "fuelpump.fill", color: 0x2563EB) {
                         FuelSettingsView(settings: settings)
                     }
+                    menuRow("Moje auto", detail: "Ubezpieczenie, przegląd, olej i filtry",
+                            value: CarStatus(settings: settings).mostUrgent?.text, icon: "car.fill", color: 0x16A34A) {
+                        CarPage(settings: settings)
+                    }
                     menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
                     menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,

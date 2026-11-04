@@ -125,6 +125,14 @@ extension UIColor {
 }
 
 enum Fmt {
+    /** 12345 -> "12 345", the odometer way. */
+    static func thousand(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = " "
+        return f.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
     static var metric: Bool {
         switch AppSettings.shared.units {
         case .metric: return true

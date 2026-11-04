@@ -21,6 +21,7 @@ struct ContentView: View {
     }
 
     @State private var showWeather = false
+    @State private var showCar = false
     /** The 3D launch film, dropped again after a couple of seconds. */
     @State private var splash = true
 
@@ -32,6 +33,12 @@ struct ContentView: View {
         plainMap && settings.fuelOn && model.fuelBest != nil && model.fuelInfo == nil && model.roadInfo == nil
     }
     private var showWeatherBall: Bool { plainMap && settings.weatherOn }
+    /** The car ball under the weather, once anything about the car has been filled in. */
+    private var showCarBall: Bool {
+        plainMap && settings.carBallOn
+            && (!settings.carName.isEmpty || settings.insuranceEnd != nil
+                || settings.inspectionEnd != nil || settings.carOdometer > 0)
+    }
     /** Weather and fuel stand in a column on the left while the search is open or a notice or card is showing. */
     private var columnMode: Bool { model.searchActive || model.topBannerShowing }
     /** Room kept on the left of those cards while the column is there. */
@@ -77,12 +84,13 @@ struct ContentView: View {
                 }
             }
             // Fuel and weather share one row under the search bar; while searching they stand in a column on the left.
-            if showFuelChip || showWeatherBall {
+            if showFuelChip || showWeatherBall || showCarBall {
                 VStack {
                     if columnMode {
                         HStack {
                             VStack(spacing: 10) {
                                 if showWeatherBall { WeatherBall { showWeather = true } }
+                                if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
                                 if showFuelChip, let best = model.fuelBest {
                                     FuelMini(station: best) { withAnimation { model.fuelInfo = best } }
                                 }
@@ -99,7 +107,10 @@ struct ContentView: View {
                                 }
                             }
                             Spacer()
-                            if showWeatherBall { WeatherBall { showWeather = true } }
+                            VStack(spacing: 10) {
+                                if showWeatherBall { WeatherBall { showWeather = true } }
+                                if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
+                            }
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 78)
@@ -185,6 +196,10 @@ struct ContentView: View {
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showCar) {
+            CarSheet(settings: settings)
+                .presentationDetents([.large])
         }
         .task { await DemoScript.run(model) }
         .onReceive(launch.$pending) { kind in

@@ -106,6 +106,15 @@ final class AppSettings: ObservableObject {
     @Published var recents: [String] { didSet { d.set(recents, forKey: "recents") } }
     /** Places you opened lately, newest first. */
     @Published var recentPlaces: [Place] { didSet { save(recentPlaces, "recentPlaces") } }
+    // The car: what it is, and everything about it that runs out.
+    @Published var carName: String { didSet { d.set(carName, forKey: "carName") } }
+    @Published var carFuel: String { didSet { d.set(carFuel, forKey: "carFuel") } }
+    @Published var carOdometer: Int { didSet { d.set(carOdometer, forKey: "carOdometer") } }
+    @Published var insuranceEnd: Date? { didSet { d.set(insuranceEnd, forKey: "insuranceEnd") } }
+    @Published var inspectionEnd: Date? { didSet { d.set(inspectionEnd, forKey: "inspectionEnd") } }
+    @Published var carParts: [CarPart] { didSet { save(carParts, "carParts") } }
+    /** The car ball under the weather on the map. */
+    @Published var carBallOn: Bool { didSet { d.set(carBallOn, forKey: "carBallOn") } }
 
     private init() {
         theme = ThemeMode(rawValue: d.string(forKey: "theme") ?? "") ?? .system
@@ -152,6 +161,20 @@ final class AppSettings: ObservableObject {
         saved = (d.data(forKey: "saved")).flatMap { try? JSONDecoder().decode([Place].self, from: $0) } ?? []
         recents = d.stringArray(forKey: "recents") ?? []
         recentPlaces = d.data(forKey: "recentPlaces").flatMap { try? JSONDecoder().decode([Place].self, from: $0) } ?? []
+        // The car. The parts list is born with the usual suspects — oil, filters, brakes, timing
+        // belt — ready to be filled in; it's only left empty when everything was deleted on purpose.
+        carName = d.string(forKey: "carName") ?? ""
+        carFuel = d.string(forKey: "carFuel") ?? "diesel"
+        carOdometer = d.object(forKey: "carOdometer") as? Int ?? 0
+        insuranceEnd = d.object(forKey: "insuranceEnd") as? Date
+        inspectionEnd = d.object(forKey: "inspectionEnd") as? Date
+        if let data = d.data(forKey: "carParts"), let parts = try? JSONDecoder().decode([CarPart].self, from: data) {
+            carParts = parts
+        } else {
+            carParts = d.bool(forKey: "carPartsInit") ? [] : AppSettings.defaultCarParts
+            d.set(true, forKey: "carPartsInit")
+        }
+        carBallOn = d.object(forKey: "carBallOn") as? Bool ?? true
         hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         // The OpenWeb Ninja key and counter from 0.7.3, no longer used: don't leave the key on the phone.
         for k in ["ninjaKey", "ninjaMonth", "ninjaUsed"] { d.removeObject(forKey: k) }
