@@ -41,13 +41,6 @@ struct ContentView: View {
     }
     /** Weather and fuel stand in a column on the left while the search is open or a notice or card is showing. */
     private var columnMode: Bool { model.searchActive || model.topBannerShowing }
-    /** Where the layers button starts: right under the weather and car balls, with a small gap. */
-    private var mapFabTop: CGFloat {
-        if panel > 0 { return 10 }
-        if !idle { return 86 }
-        let balls: CGFloat = (showWeatherBall ? 54 : 0) + (showCarBall ? 54 : 0)
-        return balls > 0 ? 88 + balls : 176
-    }
     /** Room kept on the left of those cards while the column is there. */
     private var stripPad: CGFloat {
         plainMap && (settings.weatherOn || (settings.fuelOn && model.fuelBest != nil)) ? 58 : 0
@@ -273,6 +266,22 @@ struct BrowseOverlay: View {
     }
     /** Only the map and the dock when nothing is open. */
     private var idle: Bool { !hasSheet && !searchFocused && !voice.listening }
+    /** The weather and car balls' column height, when they stand on the right of the plain map. */
+    private var ballsHeight: CGFloat {
+        guard model.tab == .map, model.nav == nil, model.directions == nil,
+              model.selected == nil, model.results.isEmpty else { return 0 }
+        var h: CGFloat = 0
+        if settings.weatherOn { h += 54 }
+        if settings.carBallOn, !settings.carName.isEmpty || settings.insuranceEnd != nil
+            || settings.inspectionEnd != nil || settings.carOdometer > 0 { h += 54 }
+        return h
+    }
+    /** Where the layers button starts: right under those balls, joining their column. */
+    private var mapFabTop: CGFloat {
+        if panel > 0 { return 10 }
+        if !idle { return 86 }
+        return ballsHeight > 0 ? 88 + ballsHeight : 176
+    }
 
     var body: some View {
         GeometryReader { geo in
