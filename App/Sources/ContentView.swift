@@ -41,6 +41,13 @@ struct ContentView: View {
     }
     /** Weather and fuel stand in a column on the left while the search is open or a notice or card is showing. */
     private var columnMode: Bool { model.searchActive || model.topBannerShowing }
+    /** Where the layers button starts: right under the weather and car balls, with a small gap. */
+    private var mapFabTop: CGFloat {
+        if panel > 0 { return 10 }
+        if !idle { return 86 }
+        let balls: CGFloat = (showWeatherBall ? 54 : 0) + (showCarBall ? 54 : 0)
+        return balls > 0 ? 88 + balls : 176
+    }
     /** Room kept on the left of those cards while the column is there. */
     private var stripPad: CGFloat {
         plainMap && (settings.weatherOn || (settings.fuelOn && model.fuelBest != nil)) ? 58 : 0
@@ -88,7 +95,7 @@ struct ContentView: View {
                 VStack {
                     if columnMode {
                         HStack {
-                            VStack(spacing: 10) {
+                            VStack(spacing: 8) {
                                 if showWeatherBall { WeatherBall { showWeather = true } }
                                 if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
                                 if showFuelChip, let best = model.fuelBest {
@@ -107,7 +114,7 @@ struct ContentView: View {
                                 }
                             }
                             Spacer()
-                            VStack(spacing: 10) {
+                            VStack(spacing: 8) {
                                 if showWeatherBall { WeatherBall { showWeather = true } }
                                 if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
                             }
@@ -278,7 +285,9 @@ struct BrowseOverlay: View {
                 VStack {
                     HStack(alignment: .top) {
                         Spacer()
-                        VStack(spacing: 12) {
+                        // The same 16 pt from the edge as the weather and car balls above, so the
+                        // whole right side reads as one even column.
+                        VStack(spacing: 10) {
                             MapFab(icon: "square.3.layers.3d", size: 56) { model.showLayers = true }
                                 .accessibilityLabel("Map layers")
                             if settings.parkingButton || settings.parking != nil {
@@ -300,7 +309,8 @@ struct BrowseOverlay: View {
                         }
                     }
                     // With a side panel the search box isn't above them: they go to the top right.
-                    .padding(.top, panel > 0 ? 10 : idle ? 176 : 86)
+                    .padding(.top, mapFabTop)
+                    .padding(.trailing, 16)
                     Spacer()
                     if sheetH < full * 0.6 || panel > 0 {
                         HStack(alignment: .bottom) {
