@@ -197,10 +197,13 @@ struct FuelSettingsView: View {
                     Text("10 najtańszych").tag(10)
                 } label: { SettingLabel("Stacje na mapie", icon: "mappin.and.ellipse", color: 0x7C3AED) }
                 Stepper(value: $settings.fuelTank, in: 20...120, step: 5) {
-                    SettingLabel("Tankowanie: \(settings.fuelTank) litrów", icon: "gauge.with.needle.fill", color: 0x16A34A)
+                    SettingLabel("Baku: \(settings.fuelTank) l", icon: "gauge.with.needle.fill", color: 0x16A34A)
+                }
+                Stepper(value: $settings.fuelLeft, in: 0...120, step: 1) {
+                    SettingLabel("Teraz w baku: \(settings.fuelLeft) l", icon: "fuelpump.fill", color: 0xF59E0B)
                 }
             } footer: {
-                Text("Pokazuje najtańsze stacje na mapie, a podczas jazdy najtańszą na Twojej trasie wraz z oszczędnością przy pełnym baku. Tylko Niemcy.")
+                Text("Najtańsze stacje w okolicy, z Twojego klucza Tankerkönig. Oszczędność liczona jest od tego, ile jeszcze wejdzie do baku, nie od wyjazdu za granicę. Tylko Niemcy.")
             }
             Section {
                 SecureField("Klucz API Tankerkönig", text: $settings.fuelKey)

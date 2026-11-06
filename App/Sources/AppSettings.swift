@@ -54,6 +54,8 @@ final class AppSettings: ObservableObject {
     @Published var fuelKey: String { didSet { d.set(fuelKey, forKey: "fuelKey") } }
     @Published var fuelType: String { didSet { d.set(fuelType, forKey: "fuelType") } }
     @Published var fuelTank: Int { didSet { d.set(fuelTank, forKey: "fuelTank") } }
+    /** Litres in the tank right now, so a cheap station is priced on what still fits, not a drive to Poland. */
+    @Published var fuelLeft: Int { didSet { d.set(fuelLeft, forKey: "fuelLeft") } }
     /** How many of the cheapest stations the map shows at a time. */
     @Published var fuelCount: Int { didSet { d.set(fuelCount, forKey: "fuelCount") } }
     /** The small weather badge on the map screen. */
@@ -126,6 +128,7 @@ final class AppSettings: ObservableObject {
         fuelKey = d.string(forKey: "fuelKey") ?? ""
         fuelType = d.string(forKey: "fuelType") ?? "diesel"
         fuelTank = d.object(forKey: "fuelTank") as? Int ?? 40
+        fuelLeft = d.object(forKey: "fuelLeft") as? Int ?? fuelTank
         fuelCount = d.object(forKey: "fuelCount") as? Int ?? 5
         weatherOn = d.object(forKey: "weatherOn") as? Bool ?? true
         radarOn = d.bool(forKey: "radarOn")

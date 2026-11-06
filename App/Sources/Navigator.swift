@@ -286,8 +286,8 @@ final class Navigator: ObservableObject {
                   let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
                                                    secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
             next = GuidanceNote(title: "Zielona fala \(Int(kmh)) km/h", body: "Tyle, żeby wjechać na światła na zielonym.", tone: "good")
-        } else if here.lng > 10.4, here.lng < 12.2, p.alongMeters < 30_000 {
-            next = RouteMind.fuelNote(alongKm: p.alongMeters / 1000, toBorderKm: max(8, (14.59 - here.lng) * 72))
+        } else if let note = nearbyFuelNote(here) {
+            next = note
         } else {
             next = nil
         }
@@ -301,7 +301,8 @@ final class Navigator: ObservableObject {
     func applyVoice(_ text: String) {
         switch VoiceIntent.parse(text) {
         case .fuel:
-            guidance = RouteMind.fuelNote(alongKm: (progress?.alongMeters ?? 0) / 1000, toBorderKm: 180)
+            guidance = nearbyFuelNote(lastFix.map { LatLng($0.coordinate.latitude, $0.coordinate.longitude) } ?? destination.location)
+                ?? GuidanceNote(title: "Paliwo", body: "Brak cen w okolicy. W ustawieniach sprawdź klucz Tankerkönig.", tone: "info")
         case .traffic:
             guidance = GuidanceNote(title: "Ruch", body: "Patrzę na falę na trasie, nie na sam kolor odcinka.", tone: "info")
         case .border:
@@ -635,6 +636,30 @@ final class Navigator: ObservableObject {
         fuelAhead = nil
     }
 
+    /// Cheapest open station within 12 km, from the Tankerkönig key. Never a fixed trip to the border.
+    private func nearbyFuelNote(_ here: LatLng) -> GuidanceNote? {
+        let s = AppSettings.shared
+        guard s.fuelOn, !s.fuelKey.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        var seen = Set<String>()
+        var near: [(FuelStation, Double)] = []
+        for st in FuelPrices.shared.stations + FuelPrices.shared.ahead where st.open && seen.insert(st.id).inserted {
+            let d = here.distance(to: st.location)
+            if d < 12_000 { near.append((st, d)) }
+        }
+        guard let best = near.min(by: { $0.0.price < $1.0.price }) else { return nil }
+        let avg = near.map(\.0.price).reduce(0, +) / Double(near.count)
+        let room = s.fuelTank - min(s.fuelLeft, s.fuelTank)
+        let litres = room > 0 ? room : s.fuelTank
+        let save = (avg - best.0.price) * Double(litres)
+        let km = best.1 < 950 ? "\(Int(best.1.rounded())) m" : String(format: "%.1f km", best.1 / 1000)
+        var body = "\(best.0.title) \(best.0.priceText) €/l, \(km)."
+        if save >= 0.3 {
+            body += " Na \(litres) l około \(String(format: "%.2f", save)) € mniej niż średnia obok."
+        }
+        body += " W baku \(s.fuelLeft) l."
+        return GuidanceNote(title: "Najtaniej w okolicy", body: body, tone: "good")
+    }
+
     /** The cheapest open station within 1.5 km of the route in the next 80 km, and what it saves on a fill-up
      *  compared with the others along the way. Looked at every 20 seconds; the distance counts down in between. */
     private func checkFuel(_ p: RouteTracker.Progress) {
@@ -646,6 +671,9 @@ final class Navigator: ObservableObject {
         let line = route.polyline
         guard line.count >= 2 else { return }
         FuelPrices.shared.refreshAhead(line: line, from: p.alongMeters)
+        if let fix = lastFix {
+            FuelPrices.shared.refreshIfNeeded(center: fix.coordinate)
+        }
         let here = p.alongMeters
         if var f = fuelAhead {
             f.meters = max(fuelAlong - here, 0)
@@ -666,12 +694,14 @@ final class Navigator: ObservableObject {
                 let d = pt.distance(to: st.location)
                 if d < bestD { bestD = d; bestAlong = cum[min(i, cum.count - 1)] }
             }
-            if bestD < 1_500, bestAlong > here + 300, bestAlong < here + 80_000 { found.append((st, bestAlong, bestD)) }
+            if bestD < 2_000, bestAlong > here + 200, bestAlong < here + 12_000 { found.append((st, bestAlong, bestD)) }
         }
         let shown = found.filter { !fuelDismissed.contains($0.station.id) }
         guard let best = shown.min(by: { $0.station.price < $1.station.price }) else { return }
         let average = found.map(\.station.price).reduce(0, +) / Double(found.count)
-        let saving = (average - best.station.price) * Double(s.fuelTank)
+        let room = s.fuelTank - min(s.fuelLeft, s.fuelTank)
+        let litres = room > 0 ? room : s.fuelTank
+        let saving = (average - best.station.price) * Double(litres)
         fuelAlong = best.along
         let fresh = FuelAhead(station: best.station, meters: best.along - here, offRoute: best.off, saving: saving > 0 ? saving : nil)
         if fresh != fuelAhead { fuelAhead = fresh }
