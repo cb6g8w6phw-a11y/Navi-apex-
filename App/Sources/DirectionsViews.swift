@@ -40,15 +40,18 @@ struct DirectionsOverlay: View {
                         })
                 }
                 if let zone {
+                    // Upper left, under the from/to card: the sheet must not cover it.
                     VStack {
-                        Spacer()
                         HStack {
-                            Spacer()
                             UmweltChip(name: zone.name, blocked: !settings.mayEnterUmwelt && model.directions?.mode == .drive)
+                            Spacer(minLength: 0)
                         }
-                        .padding(.trailing, 16)
-                        .padding(.bottom, (model.directions?.transit == true ? 178 : 224) + geo.safeAreaInsets.bottom)
+                        .padding(.leading, 16)
+                        .padding(.trailing, 72)
+                        .padding(.top, cardHeight + 12)
+                        Spacer()
                     }
+                    .allowsHitTesting(false)
                 }
             }
             // Never wider than the screen, whatever a row inside asks for: a long trip's row once
@@ -305,10 +308,6 @@ struct TripBody: View {
             let lead = r.durationSeconds <= best + 30 ? (r.trafficSeconds != nil ? "Najszybsza trasa teraz" : "Najlepsza trasa") : "Wolniejsza trasa"
             Text([lead, r.summary.map { "przez \($0)" }].compactMap { $0 }.joined(separator: " · "))
                 .font(.system(size: 18, weight: .semibold))
-            if let note = d.stickerNote {
-                Text(note).font(.system(size: 15, weight: .semibold)).foregroundColor(Color(hex: 0x16A34A))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             if r.mode == .drive, r.trafficSeconds != nil {
                 Text(r.delayLevel == 0 ? "Ruch lekki" : "\(Fmt.duration(r.durationSeconds - r.typicalSeconds)) wolniej niż zwykle")
                     .font(.system(size: 17, weight: .semibold)).foregroundColor(delayColor(r))
