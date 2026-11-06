@@ -13,13 +13,20 @@ final class MindSettings: ObservableObject {
     @Published var greenWave: Bool { didSet { d.set(greenWave, forKey: "mind.green") } }
     @Published var haptics: Bool { didSet { d.set(haptics, forKey: "mind.haptics") } }
     @Published var borderAssist: Bool { didSet { d.set(borderAssist, forKey: "mind.border") } }
-    @Published var umwelt: Bool { didSet { d.set(umwelt, forKey: "mind.umwelt") } }
+    @Published var umwelt: Bool {
+        didSet {
+            d.set(umwelt, forKey: "mind.umwelt")
+            Self.umweltOn = umwelt
+        }
+    }
     /** GPS worse than this many metres is handed to the sensors. */
     @Published var gpsTrust: Int { didSet { d.set(gpsTrust, forKey: "mind.trust") } }
     /** Degrees added to the arrow, when the compass sits crooked. */
     @Published var headingTrim: Int { didSet { d.set(headingTrim, forKey: "mind.trim") } }
     /// The next GPS fix throws away the sensor estimate and starts again.
     var resetAsked = false
+    /// Read from the map, which is not on the main actor. A bool, written only from here.
+    nonisolated(unsafe) static var umweltOn = true
 
     private init() {
         deadReckoning = d.object(forKey: "mind.dr") as? Bool ?? true
@@ -29,6 +36,7 @@ final class MindSettings: ObservableObject {
         haptics = d.object(forKey: "mind.haptics") as? Bool ?? true
         borderAssist = d.object(forKey: "mind.border") as? Bool ?? true
         umwelt = d.object(forKey: "mind.umwelt") as? Bool ?? true
+        Self.umweltOn = umwelt
         gpsTrust = d.object(forKey: "mind.trust") as? Int ?? 80
         headingTrim = d.object(forKey: "mind.trim") as? Int ?? 0
     }
@@ -195,7 +203,7 @@ enum RouteMind {
     /// The zone to draw: the pin is inside and you are not, or the route is about to cross the line.
     /// Nothing while you are already in it, and nothing for a city the trip never enters.
     static func umweltToShow(me: LatLng?, destination: LatLng?, line: [LatLng], along: Double, driving: Bool) -> Zone? {
-        guard MindSettings.shared.umwelt else { return nil }
+        guard MindSettings.umweltOn else { return nil }
         let here = me.flatMap { umwelt(at: $0) }?.name
         if !driving {
             if let d = destination, let z = umwelt(at: d), z.name != here { return z }
