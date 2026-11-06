@@ -152,7 +152,7 @@ final class Navigator: ObservableObject {
         loadCameras()
         loadWaze()
         loadRoundabouts()
-        speak("Starting route to \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
+        speak("Startuję trasę do \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
         // That was the heads-up for the first step: don't say it again a moment later.
         if let f = first, f.alongMeters < 1500, let i = route.maneuvers.firstIndex(of: f) { spokenStage[i] = f.alongMeters < 100 ? 3 : f.alongMeters < 300 ? 2 : 1 }
     }
@@ -229,7 +229,7 @@ final class Navigator: ObservableObject {
         let parked = stoppedNearEnd.map { loc.timestamp.timeIntervalSince($0) > (offRoad ? 20 : 90) } ?? false
         if p.arrived || parked {
             arrived = true
-            speak("You have arrived at \(destination.name)" + (destinationSide.map { ", on the \($0)." } ?? "."))
+            speak("Jesteś na miejscu: \(destination.name)" + (destinationSide.map { ", po stronie \($0)." } ?? "."))
             // Parked, the phone goes in a pocket: let the screen sleep, and a few minutes on, end
             // the trip so full-power GPS doesn't run all day in the background.
             UIApplication.shared.isIdleTimerDisabled = false
@@ -260,7 +260,7 @@ final class Navigator: ObservableObject {
         checkMind(p, loc)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
-            speak("You're over the speed limit.")
+            speak("Przekraczasz dozwoloną prędkość.")
         }
     }
 
@@ -289,8 +289,11 @@ final class Navigator: ObservableObject {
                   let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
                                                    secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
             next = GuidanceNote(title: "Zielona fala \(Int(kmh)) km/h", body: "Tyle, żeby wjechać na światła na zielonym.", tone: "good")
-        } else if here.lng > 10.4, here.lng < 12.2, p.alongMeters < 30_000 {
-            next = RouteMind.fuelNote(alongKm: p.alongMeters / 1000, toBorderKm: max(8, (14.59 - here.lng) * 72))
+        } else if let note = RouteMind.borderFuelNote(
+            here: here, destination: destination.location, tripMeters: route.distanceMeters,
+            fuelLeft: AppSettings.shared.fuelLeft, fuelTank: AppSettings.shared.fuelTank,
+            electric: AppSettings.shared.carFuel == "electric") {
+            next = note
         } else {
             next = nil
         }
@@ -325,7 +328,7 @@ final class Navigator: ObservableObject {
     /** A stop picked on the way (search along the route): go there first, then on. */
     func addStop(_ p: Place) {
         stops.insert(p, at: 0)
-        speak("Adding a stop at \(p.name).")
+        speak("Dodaję postój: \(p.name).")
         if let fix = lastFix { reroute(from: fix, quiet: true) }
     }
 
@@ -335,7 +338,7 @@ final class Navigator: ObservableObject {
         let at = Geo.project(next.location, on: route.polyline)
         guard at.offset < 150, p.alongMeters >= at.along - 40 else { return }
         stops.removeFirst()
-        speak("You've reached \(next.name). Continuing to \(stops.first?.name ?? destination.name).")
+        speak("Jesteś w \(next.name). Jedź dalej do \(stops.first?.name ?? destination.name).")
     }
 
     /** Cameras and speed limits along the route, from OpenStreetMap, in one query per route. */
@@ -483,7 +486,7 @@ final class Navigator: ObservableObject {
         if AppSettings.shared.cameraWarnings, cam.kind == .speed {
             chime()
             if !repeatRun {
-                speak((cam.average ? "Average speed camera ahead" : "Speed camera ahead") + (limit.map { ", limit \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak((cam.average ? "Odcinkowy pomiar prędkości" : "Fotoradar") + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
             cameraSpokenAt = Date()
             cameraSpokenLimit = limit
@@ -556,7 +559,7 @@ final class Navigator: ObservableObject {
         if s.wazeVoice {
             chime()
             // "Police reported ahead, in 400 yards."
-            speak("\(String(next.alert.spoken.dropLast())), in \(Fmt.spokenDistance(ahead)).")
+            speak("\(String(next.alert.spoken.dropLast())), za \(Fmt.spokenDistance(ahead)).")
         }
     }
 
@@ -579,7 +582,7 @@ final class Navigator: ObservableObject {
         if PoliceRisk.level(score) == .high, was != .high, s.wazeVoice, Date().timeIntervalSince(riskSpokenAt) > 600,
            live == 0 || PoliceRisk.level(PoliceRisk.score(ahead: ahead, past: riskPast ?? [], live: 0)) == .high {
             riskSpokenAt = Date()
-            speak("Police hotspot ahead.")
+            speak("Przed tobą miejsce, gdzie często stoi policja.")
         }
     }
 
@@ -603,7 +606,7 @@ final class Navigator: ObservableObject {
                 self.spokenAircraft.insert(a.id)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 self.chime()
-                self.speak("\(a.title) nearby.")
+                self.speak("\(a.title) w pobliżu.")
             }
         }
     }
@@ -616,7 +619,7 @@ final class Navigator: ObservableObject {
         if let entry = zoneEntry, entry.index != inside {
             zoneEntry = nil
             averageCheck = nil
-            if AppSettings.shared.cameraWarnings { speak("Average speed check ended.") }
+            if AppSettings.shared.cameraWarnings { speak("Koniec odcinkowego pomiaru prędkości.") }
         }
         guard let i = inside else { return }
         let z = zones[i]
@@ -625,7 +628,7 @@ final class Navigator: ObservableObject {
             zoneEntry = (i, Date(), at)
             if AppSettings.shared.cameraWarnings {
                 chime()
-                speak("Average speed check for \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", limit \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak("Odcinkowy pomiar przez \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
         }
         guard let entry = zoneEntry else { return }
@@ -721,7 +724,7 @@ final class Navigator: ObservableObject {
         guard let offer = detourOffer else { return }
         detourOffer = nil
         roadAhead = nil
-        speak("Taking the detour.")
+        speak("Wybieram objazd.")
         adopt(offer.route)
     }
 
@@ -762,9 +765,9 @@ final class Navigator: ObservableObject {
 
     private func roadWords(_ e: RoadEvent) -> String {
         switch e.kind {
-        case .closure: return "Closure"
-        case .roadworks: return e.blocked ? "Roadworks, road blocked" : "Roadworks"
-        case .warning: return "Traffic warning"
+        case .closure: return "zamknięcie drogi"
+        case .roadworks: return e.blocked ? "roboty drogowe, droga zablokowana" : "roboty drogowe"
+        case .warning: return "ostrzeżenie na drodze"
         }
     }
 
@@ -807,9 +810,9 @@ final class Navigator: ObservableObject {
                                       left: here >= next.start ? max(next.end - here, 0) : nil)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 chime()
-                var words = "\(roadWords(next.event)) ahead"
-                if meters > 100 { words += ", in \(Fmt.spokenDistance(meters))" }
-                if length >= 300 { words += ", for \(Fmt.spokenDistance(length))" }
+                var words = "\(roadWords(next.event)) przed tobą"
+                if meters > 100 { words += ", za \(Fmt.spokenDistance(meters))" }
+                if length >= 300 { words += ", przez \(Fmt.spokenDistance(length))" }
                 speak(words + ".")
             }
         }
@@ -840,8 +843,8 @@ final class Navigator: ObservableObject {
             let extra = best.durationSeconds - now.remainingSeconds
             self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: ev.id)
             let minutes = Int((abs(extra) / 60).rounded())
-            let cost = extra >= 60 ? "adding \(minutes) minutes" : extra <= -60 ? "saving \(minutes) minutes" : "taking about the same time"
-            self.speak("There's a detour around the closure, \(cost). Tap to take it.")
+            let cost = extra >= 60 ? "dokłada \(minutes) minut" : extra <= -60 ? "oszczędza \(minutes) minut" : "zajmuje mniej więcej tyle samo"
+            self.speak("Jest objazd zamknięcia, \(cost). Stuknij, żeby go wybrać.")
         }
     }
 
@@ -886,19 +889,15 @@ final class Navigator: ObservableObject {
         } else if d <= near && d > now + 30 && stage < 2 {
             spokenStage[i] = 2
             // Which lane, like the banner shows, so it's known without looking.
-            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { g -> String in
-                g.words.hasPrefix("Lane") ? ". Use " + g.words.lowercased().replacingOccurrences(of: "from left", with: "from the left")
-                    : ". Use the \(g.words.lowercased())"
-            } ?? ""
-            // "In 200 yards, your destination is on the left", the way Google says it.
-            let words = m.type == .arrive ? destinationSide.map { "your destination is on the \($0)" } ?? m.instruction.lowercasedFirst
+            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { ". Użyj: \(Self.lanePolish($0.words))" } ?? ""
+            let words = m.type == .arrive ? destinationSide.map { "cel jest po stronie \($0)" } ?? m.instruction.lowercasedFirst
                 : m.instruction.lowercasedFirst
-            speak("In \(Fmt.spokenDistance(d)), \(words)\(lane)")
+            speak("Za \(Fmt.spokenDistance(d)), \(words)\(lane)")
         } else if d <= far && d > near + 150 && stage < 1 && m.type != .arrive {
             spokenStage[i] = 1
             // On a phone call only what's needed now is said; the early heads-up would talk over it.
             if onCall { return }
-            speak("In \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
+            speak("Za \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
         } else if drive && d > 3000 && stage < 1 && !toldContinue.contains(i) && justPassed(p) {
             // A long way to the next turn, like after joining a motorway: say so once, the way
             // Google does ("Continue on M27 for 7 miles"), so a quiet stretch doesn't feel lost.
@@ -931,7 +930,7 @@ final class Navigator: ObservableObject {
             let sameWay = abs(fresh.distanceMeters - now.remainingMeters) < max(300, now.remainingMeters * 0.03)
             if !sameWay, saving > max(300, current * 0.1) {
                 self.adopt(fresh)
-                self.speak("Found a faster route. It saves \(Int((saving / 60).rounded())) minutes.")
+                self.speak("Znalazłem szybszą trasę. Oszczędza \(Int((saving / 60).rounded())) minut.")
             } else if sameWay {
                 self.trafficScale = min(3, max(0.5, fresh.durationSeconds / planned))
             }
@@ -953,7 +952,7 @@ final class Navigator: ObservableObject {
            route.maneuvers[..<next].contains(where: { $0.alongMeters > p.alongMeters && $0.road != nil && $0.road != road }) {
             road = nil
         }
-        return "Continue " + (road.map { "on \($0) " } ?? "") + "for \(Fmt.spokenDistance(meters))."
+        return "Jedź dalej " + (road.map { "drogą \($0) " } ?? "") + "przez \(Fmt.spokenDistance(meters))."
     }
 
     /** Right after a reroute: the first thing to do on the new route, so "Rerouting" isn't the last word. */
@@ -968,7 +967,7 @@ final class Navigator: ObservableObject {
             speak(continueWords(d))
         } else {
             spokenStage[i] = d <= near ? 2 : 1
-            speak("In \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
+            speak("Za \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
         }
     }
 
@@ -984,11 +983,11 @@ final class Navigator: ObservableObject {
             // Without signal there's no new route to get: say so once, not every few seconds.
             if !quiet && !toldNoSignal {
                 toldNoSignal = true
-                speak("No signal. Keep going, and Apex will find a new route when it's back.")
+                speak("Brak sygnału. Jedź dalej, Apex znajdzie nową trasę, gdy sygnał wróci.")
             }
         } else if !quiet && Date().timeIntervalSince(rerouteSpokenAt) > 45 {
             rerouteSpokenAt = Date()
-            speak("Rerouting.")
+            speak("Przeliczam trasę.")
         }
         let from = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         // Only while driving: on foot or a bike, turning round is fine.
@@ -1048,14 +1047,28 @@ final class Navigator: ObservableObject {
         speech.speak(u)
     }
 
-    /** The phone's English voice for its region, the better-sounding download when there is one. */
+    /** The phone's Polish voice, the better-sounding download when there is one. */
     static let voice: AVSpeechSynthesisVoice? = {
-        let lang = Locale.preferredLanguages.first.flatMap { $0.hasPrefix("en") ? $0 : nil } ?? (Fmt.yards ? "en-GB" : "en-US")
-        let better = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == lang && $0.quality != .default }
-            .max { $0.quality.rawValue < $1.quality.rawValue }
-        return better ?? AVSpeechSynthesisVoice(language: lang)
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("pl") }
+        let better = voices.filter { $0.quality != .default }.max { $0.quality.rawValue < $1.quality.rawValue }
+        return better ?? voices.first ?? AVSpeechSynthesisVoice(language: "pl-PL")
     }()
+
+    /// Lane advice for the Polish voice. The picture on screen can stay as the router wrote it.
+    private static func lanePolish(_ words: String) -> String {
+        let known = [
+            "Left lane": "lewy pas", "Left 2 lanes": "dwa lewe pasy", "Left 3 lanes": "trzy lewe pasy",
+            "Right lane": "prawy pas", "Right 2 lanes": "dwa prawe pasy", "Right 3 lanes": "trzy prawe pasy",
+            "Middle lane": "środkowy pas", "Middle lanes": "środkowe pasy",
+        ]
+        if let hit = known[words] { return hit }
+        if words.hasPrefix("Lane "), let n = words.split(separator: " ").dropFirst().first, n.allSatisfy({ $0.isNumber }) {
+            return "pas \(n) od lewej"
+        }
+        return words
+            .replacingOccurrences(of: "left", with: "lewy", options: .caseInsensitive)
+            .replacingOccurrences(of: "right", with: "prawy", options: .caseInsensitive)
+    }
 }
 
 /** Hands the sound back once Kite stops talking, so music comes back up between instructions. */

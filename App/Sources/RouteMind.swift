@@ -79,21 +79,51 @@ enum RouteMind {
         return (p.deEur - plEur) * p.tankLitres * p.plnPerEur
     }
 
-    static func fuelNote(alongKm: Double, toBorderKm: Double) -> GuidanceNote {
+    static func fuelNote(alongKm: Double, toBorderKm: Double, nearHelmstedt: Bool = false) -> GuidanceNote {
         let save = Int(fuelDelta().rounded())
         if toBorderKm < 30 && save > 0 {
             return GuidanceNote(title: "Tankuj za granicą",
-                                body: "\(helmstedt.plName), \(helmstedt.plPln) zł. Około \(save) zł mniej niż w \(helmstedt.deName).",
+                                body: "\(helmstedt.plName), \(helmstedt.plPln) zł. Około \(save) zł mniej niż po niemieckiej stronie.",
                                 tone: "good")
         }
-        if toBorderKm > 80 && save > 15 {
+        if nearHelmstedt && save > 15 {
             return GuidanceNote(title: "Nie tankuj w Helmstedt",
-                                body: "\(helmstedt.deName) \(helmstedt.deEur) €. Dojedź do \(helmstedt.plName) (\(Int(toBorderKm)) km), około \(save) zł mniej na baku.",
+                                body: "\(helmstedt.deName) \(helmstedt.deEur) €. Do \(helmstedt.plName) około \(Int(toBorderKm)) km, około \(save) zł mniej na baku.",
+                                tone: "good")
+        }
+        if toBorderKm <= 90 && save > 15 {
+            return GuidanceNote(title: "Paliwo przed granicą",
+                                body: "Do \(helmstedt.plName) około \(Int(toBorderKm)) km. Zostaw bak na polską stronę, około \(save) zł mniej.",
                                 tone: "good")
         }
         return GuidanceNote(title: "Paliwo",
                             body: "Ceny po obu stronach granicy są zbliżone. Tankuj tam, gdzie stoisz.",
                             tone: "info")
+    }
+
+    /// Shell at Helmstedt, the last expensive stop people hit on the A2 before Poland.
+    static let helmstedtPoint = LatLng(52.228, 10.974)
+
+    /**
+     * The fuel card only when this drive is actually going to Poland, the tank isn't full,
+     * and you're in the stretch where the choice matters. A 20 km trip for bread stays quiet.
+     */
+    static func borderFuelNote(here: LatLng, destination: LatLng, tripMeters: Double,
+                               fuelLeft: Int, fuelTank: Int, electric: Bool) -> GuidanceNote? {
+        if electric || tripMeters < 25_000 { return nil }
+        if fuelTank > 0, fuelLeft * 10 >= fuelTank * 9 { return nil }
+        let nowD = nearestCrossing(here)
+        let destD = nearestCrossing(destination)
+        let toPoland = destination.lng > 14.2 || destD < 45_000
+        guard toPoland else { return nil }
+        let atHelmstedt = here.distance(to: helmstedtPoint) < 35_000 && destD + 40_000 < nowD
+        let closeToBorder = nowD < 70_000
+        guard atHelmstedt || closeToBorder else { return nil }
+        return fuelNote(alongKm: 0, toBorderKm: nowD / 1000, nearHelmstedt: atHelmstedt && !closeToBorder)
+    }
+
+    private static func nearestCrossing(_ p: LatLng) -> Double {
+        borders.map { p.distance(to: $0.location) }.min() ?? .greatestFiniteMagnitude
     }
 
     /// A side road is offered only when cars would actually keep moving on it.

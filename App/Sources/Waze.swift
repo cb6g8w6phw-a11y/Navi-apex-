@@ -73,12 +73,16 @@ public struct WazeAlert: Hashable, Sendable, Identifiable {
         }
     }
 
-    /** "Police reported ahead." and the like, for the voice. */
+    /** „Policja przed tobą.” i podobne, dla lektora. */
     public var spoken: String {
         switch kind {
-        case .closure: return "Road closed ahead."
-        case .jam: return "Traffic jam ahead."
-        default: return "\(title) reported ahead."
+        case .closure: return "Zamknięta droga przed tobą."
+        case .jam: return "Korek przed tobą."
+        case .police: return "Policja przed tobą."
+        case .accident: return "Wypadek przed tobą."
+        case .hazard: return "Zagrożenie na drodze przed tobą."
+        case .weather: return "Trudna pogoda przed tobą."
+        case .roadworks: return "Roboty drogowe przed tobą."
         }
     }
 }

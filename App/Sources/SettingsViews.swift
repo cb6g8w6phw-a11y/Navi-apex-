@@ -9,30 +9,30 @@ struct LayersSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("Layers").font(.system(size: 26, weight: .heavy))
+                Text("Warstwy").font(.system(size: 26, weight: .heavy))
                 Spacer()
                 CircleIconButton(icon: "xmark") { dismiss() }
             }
-            Text("Map type").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Typ mapy").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             HStack(spacing: 14) {
-                tile("Default", icon: "map", on: !settings.satellite) { settings.satellite = false }
-                tile("Satellite", icon: "globe.americas.fill", on: settings.satellite) { settings.satellite = true }
+                tile("Zwykła", icon: "map", on: !settings.satellite) { settings.satellite = false }
+                tile("Satelita", icon: "globe.americas.fill", on: settings.satellite) { settings.satellite = true }
             }
-            Text("Map details").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Szczegóły").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), alignment: .leading, spacing: 14) {
-                tile("Traffic", icon: "car.2.fill", on: settings.traffic) { settings.traffic.toggle() }
-                tile("Transit", icon: "tram.fill", on: settings.transitLines) { settings.transitLines.toggle() }
-                tile("Terrain", icon: "mountain.2.fill", on: settings.terrain) { settings.terrain.toggle() }
-                tile("Speed cameras", badge: .speed, on: settings.speedCameras) { settings.speedCameras.toggle() }
-                tile("Plate cameras", badge: .plate, on: settings.plateCameras) { settings.plateCameras.toggle() }
-                tile("Fuel", icon: "fuelpump.fill", on: settings.fuelOn) { settings.fuelOn.toggle() }
+                tile("Ruch", icon: "car.2.fill", on: settings.traffic) { settings.traffic.toggle() }
+                tile("Komunikacja", icon: "tram.fill", on: settings.transitLines) { settings.transitLines.toggle() }
+                tile("Teren", icon: "mountain.2.fill", on: settings.terrain) { settings.terrain.toggle() }
+                tile("Fotoradary", badge: .speed, on: settings.speedCameras) { settings.speedCameras.toggle() }
+                tile("Kamery tablic", badge: .plate, on: settings.plateCameras) { settings.plateCameras.toggle() }
+                tile("Paliwo", icon: "fuelpump.fill", on: settings.fuelOn) { settings.fuelOn.toggle() }
                 tile("Radar", icon: "cloud.rain.fill", on: settings.radarOn) { settings.radarOn.toggle() }
-                tile("City outlines", icon: "square.dashed", on: cities.enabled) { cities.enabled.toggle() }
-                tile("Road alerts", waze: Waze.shares.contains(.police) ? .police : .closure, on: settings.wazeOn && settings.wazeOnMap) {
+                tile("Obrysy miast", icon: "square.dashed", on: cities.enabled) { cities.enabled.toggle() }
+                tile("Alerty", waze: Waze.shares.contains(.police) ? .police : .closure, on: settings.wazeOn && settings.wazeOnMap) {
                     if settings.waze && settings.wazeOnMap { settings.wazeOnMap = false } else { settings.waze = true; settings.wazeOnMap = true }
                 }
                 if Waze.shares.contains(.police) {
-                    tile("Police heat map", icon: "flame.fill", on: settings.wazeOn && settings.wazeHeatmap) {
+                    tile("Mapa policji", icon: "flame.fill", on: settings.wazeOn && settings.wazeHeatmap) {
                         if settings.waze && settings.wazeHeatmap { settings.wazeHeatmap = false } else { settings.waze = true; settings.wazeHeatmap = true }
                     }
                 }
@@ -85,34 +85,42 @@ struct SettingsView: View {
 
     private var main: some View {
         NavigationView {
-            // A short menu like Waze's: a few big rows, each opening a page with its switches.
-            Form {
-                Section {
-                    menuRow("Voice & driving", detail: "Voice, travel mode, avoid tolls and \(Fmt.yards ? "motorways" : "highways")",
+            ScrollView {
+                VStack(spacing: 12) {
+                    menuRow("Głos i jazda", detail: "Polski lektor i domyślny tryb podróży",
                             icon: "speaker.wave.2.fill", color: 0x0F766E) { drivingPage }
-                    menuRow("Cameras & speed", detail: "Camera warnings, speeding alert", icon: "camera.fill", color: 0xDC2626) { camerasPage }
-                    menuRow("Road alerts", detail: Waze.shares.contains(.police) ? "Police, crashes, closures" : "Closures, police aircraft",
-                            value: settings.wazeOn ? "On" : "Off", icon: "exclamationmark.triangle.fill", color: 0x7C3AED) {
+                    menuRow("Trasy", detail: "Objazd, tunel, granica i kalibracja",
+                            icon: "point.topleft.down.curvedto.point.bottomright.filled", color: 0x0891B2) { routesPage }
+                    menuRow("Kamery i prędkość", detail: "Ostrzeżenia o fotoradarach, alarm prędkości",
+                            icon: "camera.fill", color: 0xDC2626) { camerasPage }
+                    menuRow("Ostrzeżenia drogowe", detail: Waze.shares.contains(.police) ? "Policja, wypadki, zamknięcia" : "Zamknięcia, samoloty policji",
+                            value: settings.wazeOn ? "Włączone" : "Wyłączone", icon: "exclamationmark.triangle.fill", color: 0x7C3AED) {
                         WazeSettingsView(settings: settings)
                     }
-                    menuRow("Fuel prices", detail: "Cheapest fuel nearby and on your route",
-                            value: settings.fuelOn && !settings.fuelKey.isEmpty ? "On" : nil, icon: "fuelpump.fill", color: 0x2563EB) {
+                    menuRow("Ceny paliw", detail: "Najtańsze paliwo w pobliżu i na trasie",
+                            value: settings.fuelOn && !settings.fuelKey.isEmpty ? "Włączone" : nil, icon: "fuelpump.fill", color: 0x2563EB) {
                         FuelSettingsView(settings: settings)
                     }
-                    menuRow("Map & display", detail: "Theme, units, parking button", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
-                    menuRow("My places", detail: "Home and work", icon: "house.fill", color: 0x16A34A) { placesPage }
-                    menuRow("Privacy", detail: "Use Apex without Google", value: settings.noGoogle ? "On" : nil,
+                    menuRow("Moje auto", detail: "Ubezpieczenie, przegląd, olej i filtry",
+                            value: CarStatus(settings: settings).mostUrgent?.text, icon: "car.fill", color: 0x16A34A) {
+                        CarPage(settings: settings)
+                    }
+                    menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
+                    menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
+                    menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
-                    menuRow("About", detail: "Version " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }
+                    menuRow("O aplikacji", detail: "Wersja " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
-            .kiteList()
-            .navigationTitle("Settings")
+            .background(PageBackdrop())
+            .navigationTitle("Ustawienia")
             .navigationBarTitleDisplayMode(inTab ? .large : .inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     if !inTab {
-                        Button("Done") {
+                        Button("Gotowe") {
                             onChange()
                             dismiss()
                         }
@@ -132,84 +140,90 @@ struct SettingsView: View {
             page()
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color(hex: color)))
+                IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 17, weight: .semibold))
+                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(.primary)
                     Text(detail).font(.subheadline).foregroundColor(.secondary)
                 }
                 Spacer(minLength: 4)
-                if let value { Text(value).foregroundColor(.secondary) }
+                if let value { Text(value).font(.subheadline.weight(.medium)).foregroundColor(.secondary) }
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.7))
             }
-            .padding(.vertical, 6)
+            .padding(14)
+            .glassCard(18)
         }
     }
 
     private var drivingPage: some View {
         Form {
             Section {
-                Toggle(isOn: $settings.voice) { SettingLabel("Voice guidance", icon: "speaker.wave.2.fill", color: 0x0F766E) }
+                Toggle(isOn: $settings.voice) { SettingLabel("Prowadzenie głosem", detail: "Polski lektor: Zosia albo inny głos pl-PL z telefonu.", icon: "speaker.wave.2.fill", color: 0x0F766E) }
                 Picker(selection: $settings.defaultMode) {
                     ForEach(TravelMode.allCases) { Text($0.label).tag($0) }
-                } label: { SettingLabel("Default travel mode", icon: "car.fill", color: 0x2563EB) }
-            }
-            Section("Routes") {
-                Toggle(isOn: $settings.avoidTolls) { SettingLabel("Avoid tolls", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
-                Toggle(isOn: $settings.avoidHighways) {
-                    SettingLabel(Fmt.yards ? "Avoid motorways" : "Avoid highways", icon: "road.lanes", color: 0x1D4ED8)
-                }
-                Toggle(isOn: $mind.avoidHardJunctions) { SettingLabel("Avoid awkward junctions", icon: "arrow.triangle.turn.up.right.circle.fill", color: 0x0F766E) }
-                Toggle(isOn: $mind.trueTime) { SettingLabel("Only offer a detour that really flows", icon: "timer", color: 0xD97706) }
-            }
-            Section("On the road") {
-                Toggle(isOn: $mind.deadReckoning) { SettingLabel("Keep position in tunnels", icon: "location.fill", color: 0x0F766E) }
-                Toggle(isOn: $mind.greenWave) { SettingLabel("Green-wave speed", icon: "lightbulb.fill", color: 0x16A34A) }
-                Toggle(isOn: $mind.haptics) { SettingLabel("Haptics at cameras and turns", icon: "wave.3.right", color: 0x7C3AED) }
-                Toggle(isOn: $mind.borderAssist) { SettingLabel("Border queues", icon: "flag.fill", color: 0x1D4ED8) }
-                Toggle(isOn: $mind.umwelt) { SettingLabel("German low-emission zones", icon: "leaf.fill", color: 0x15803D) }
-            }
-            Section {
-                Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {
-                    SettingLabel("Use sensors past \(mind.gpsTrust) m", icon: "location.fill", color: 0x0891B2)
-                }
-                Stepper(value: $mind.headingTrim, in: -30...30, step: 1) {
-                    SettingLabel("Heading trim \(mind.headingTrim)°", icon: "location.north.line.fill", color: 0x0F766E)
-                }
-                Button { mind.resetAsked = true } label: {
-                    SettingLabel("Reset tunnel sensors", icon: "arrow.counterclockwise", color: 0xDC2626)
-                }
-            } header: {
-                Text("Sensor calibration")
+                } label: { SettingLabel("Domyślny tryb podróży", icon: "car.fill", color: 0x2563EB) }
             } footer: {
-                Text("Sensors take over in a tunnel, or when GPS is worse than the distance above. Heading trim turns the arrow if the compass sits crooked. Reset throws away the current estimate.")
+                Text("Lektor czyta manewry po polsku. Jeśli głos brzmi mechanicznie, w Ustawieniach iPhone’a pobierz rozszerzony głos polski (Ułatwienia dostępu → Zawartość mówiona → Głosy).")
             }
         }
         .kiteList()
-        .navigationTitle("Voice & driving")
+        .navigationTitle("Głos i jazda")
+    }
+
+    private var routesPage: some View {
+        Form {
+            Section {
+                Toggle(isOn: $settings.avoidTolls) { SettingLabel("Unikaj dróg płatnych", detail: "Omija odcinki z opłatą i bramki.", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
+                Toggle(isOn: $settings.avoidHighways) {
+                    SettingLabel("Unikaj autostrad", detail: "Prowadzi bez autostrad, bocznymi drogami.", icon: "road.lanes", color: 0x1D4ED8)
+                }
+                Toggle(isOn: $mind.avoidHardJunctions) { SettingLabel("Unikaj trudnych skrzyżowań", icon: "arrow.triangle.turn.up.right.circle.fill", color: 0x0F766E) }
+                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", detail: "Objazd tylko wtedy, gdy boczna droga naprawdę jedzie.", icon: "clock.fill", color: 0x2563EB) }
+                Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", detail: "Gdy GPS zniknie, pozycja jedzie z czujników po osi drogi.", icon: "location.slash.fill", color: 0x0F766E) }
+                Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", detail: "Podpowiada prędkość, żeby trafić na światła na zielonym.", icon: "lightbulb.fill", color: 0x16A34A) }
+                Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
+                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", detail: "Przy granicy DE–PL pokazuje przejście z krótszą kolejką.", icon: "flag.fill", color: 0xDC2626) }
+                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", detail: "Rysuje prawdziwy obrys zielonej strefy.", icon: "leaf.fill", color: 0x16A34A) }
+            }
+            Section {
+                Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {
+                    SettingLabel("GPS słaby od \(mind.gpsTrust) m", icon: "location.fill", color: 0x0891B2)
+                }
+                Stepper(value: $mind.headingTrim, in: -30...30, step: 1) {
+                    SettingLabel("Korekta kierunku: \(mind.headingTrim)°", icon: "location.north.line.fill", color: 0x0F766E)
+                }
+                Button { mind.resetAsked = true } label: {
+                    SettingLabel("Wyzeruj czujniki", icon: "arrow.counterclockwise", color: 0xDC2626)
+                }
+            } header: {
+                Text("Kalibracja")
+            } footer: {
+                Text("Czujniki wchodzą w tunelu albo gdy GPS myli się bardziej niż wybrany próg. Korekta kierunku obraca strzałkę. Kompas iPhone’a kalibrujesz ósemką w powietrzu, potem wyzeruj czujniki.")
+            }
+        }
+        .kiteList()
+        .navigationTitle("Trasy")
     }
 
     private var camerasPage: some View {
         Form {
-            Section("Warnings") {
-                Toggle(isOn: $settings.cameraWarnings) { SettingLabel("Say when a speed camera is ahead", icon: "speaker.wave.3.fill", color: 0xDC2626) }
-                Toggle(isOn: $settings.speedingAlert) { SettingLabel("Say when I'm over the speed limit", icon: "gauge.with.dots.needle.67percent", color: 0xEA580C) }
+            Section("Ostrzeżenia") {
+                Toggle(isOn: $settings.cameraWarnings) { SettingLabel("Powiadom, gdy zbliża się fotoradar", icon: "speaker.wave.3.fill", color: 0xDC2626) }
+                Toggle(isOn: $settings.speedingAlert) { SettingLabel("Powiadom, gdy przekraczam prędkość", icon: "gauge.with.dots.needle.67percent", color: 0xEA580C) }
             }
             Section {
-                Toggle(isOn: $settings.speedCameras) { SettingLabel("Speed cameras", icon: "camera.fill", color: 0xDC2626) }
+                Toggle(isOn: $settings.speedCameras) { SettingLabel("Fotoradary", icon: "camera.fill", color: 0xDC2626) }
                 Toggle(isOn: $settings.plateCameras) {
-                    SettingLabel(Fmt.yards ? "Number plate cameras" : "License plate cameras", icon: "number", color: 0x6B7280)
+                    SettingLabel("Kamery tablic rejestracyjnych", icon: "number", color: 0x6B7280)
                 }
             } header: {
-                Text("Show on the map and route")
+                Text("Pokazuj na mapie i trasie")
             } footer: {
-                Text("Speed cameras and \(Fmt.yards ? "number" : "license") plate cameras from OpenStreetMap's open map, shown on the map and on your route. Some countries, like France and Germany, don't allow warnings of speed cameras, so check before you turn the voice on there.")
+                Text("Fotoradary i kamery tablic z OpenStreetMap, na mapie i na trasie. W części krajów, jak Francja i Niemcy, ostrzeganie o fotoradarach może być zabronione. Sprawdź, zanim włączysz tam głos.")
             }
         }
         .kiteList()
-        .navigationTitle("Cameras & speed")
+        .navigationTitle("Kamery i prędkość")
     }
 
     private var mapPage: some View {
@@ -217,21 +231,21 @@ struct SettingsView: View {
             Section {
                 Picker(selection: $settings.theme) {
                     ForEach(ThemeMode.allCases) { Text($0.label).tag($0) }
-                } label: { SettingLabel("Theme", icon: "circle.lefthalf.filled", color: 0x334155) }
+                } label: { SettingLabel("Motyw", icon: "circle.lefthalf.filled", color: 0x334155) }
                 Picker(selection: $settings.glassStyle) {
                     ForEach(GlassStyle.allCases) { Text($0.label).tag($0) }
-                } label: { SettingLabel("Glass", icon: "rectangle.on.rectangle", color: 0x6366F1) }
+                } label: { SettingLabel("Szkło", icon: "rectangle.on.rectangle", color: 0x6366F1) }
                 Picker(selection: $settings.units) {
                     ForEach(UnitsMode.allCases) { Text($0.label).tag($0) }
-                } label: { SettingLabel("Distance units", icon: "ruler.fill", color: 0x0891B2) }
-                Toggle(isOn: $settings.parkingButton) { SettingLabel("Parking button on the map", icon: "parkingsign", color: 0x2563EB) }
-                Toggle(isOn: $settings.weatherOn) { SettingLabel("Weather on the map", icon: "cloud.sun.fill", color: 0x0EA5E9) }
+                } label: { SettingLabel("Jednostki odległości", icon: "ruler.fill", color: 0x0891B2) }
+                Toggle(isOn: $settings.parkingButton) { SettingLabel("Przycisk parkowania na mapie", icon: "parkingsign", color: 0x2563EB) }
+                Toggle(isOn: $settings.weatherOn) { SettingLabel("Pogoda na mapie", icon: "cloud.sun.fill", color: 0x0EA5E9) }
             } footer: {
-                Text("Black uses pure black pages and always matte glass. Changing to or from Black takes you back to the first page of Settings. The weather badge asks Open-Meteo, with your position rounded to about 10 km.")
+                Text("Czarny motyw używa czystej czerni i zawsze matowego szkła. Przejście do lub z motywu Czarny wraca do pierwszej strony ustawień. Odznaka pogody pyta Open-Meteo, z pozycją zaokrągloną do ok. 10 km.")
             }
         }
         .kiteList()
-        .navigationTitle("Map & display")
+        .navigationTitle("Mapa i wyświetlanie")
     }
 
     private var placesPage: some View {
@@ -239,57 +253,57 @@ struct SettingsView: View {
             Section {
                 if let pick {
                     Button { pick(.home) } label: {
-                        LabeledContent { Text(settings.home?.name ?? "Set") } label: { SettingLabel("Home", icon: "house.fill", color: 0x16A34A) }
+                        LabeledContent { Text(settings.home?.name ?? "Ustaw") } label: { SettingLabel("Dom", icon: "house.fill", color: 0x16A34A) }
                     }
                     .foregroundColor(.primary)
                     Button { pick(.work) } label: {
-                        LabeledContent { Text(settings.work?.name ?? "Set") } label: { SettingLabel("Work", icon: "briefcase.fill", color: 0x9333EA) }
+                        LabeledContent { Text(settings.work?.name ?? "Ustaw") } label: { SettingLabel("Praca", icon: "briefcase.fill", color: 0x9333EA) }
                     }
                     .foregroundColor(.primary)
                 } else {
                     if let h = settings.home {
-                        LabeledContent { Text(h.name) } label: { SettingLabel("Home", icon: "house.fill", color: 0x16A34A) }
-                        Button("Remove home", role: .destructive) { settings.home = nil }
+                        LabeledContent { Text(h.name) } label: { SettingLabel("Dom", icon: "house.fill", color: 0x16A34A) }
+                        Button("Usuń dom", role: .destructive) { settings.home = nil }
                     }
                     if let w = settings.work {
-                        LabeledContent { Text(w.name) } label: { SettingLabel("Work", icon: "briefcase.fill", color: 0x9333EA) }
-                        Button("Remove work", role: .destructive) { settings.work = nil }
+                        LabeledContent { Text(w.name) } label: { SettingLabel("Praca", icon: "briefcase.fill", color: 0x9333EA) }
+                        Button("Usuń pracę", role: .destructive) { settings.work = nil }
                     }
                     if settings.home == nil && settings.work == nil {
-                        Text("Set home and work from the Saved page.").foregroundColor(.secondary)
+                        Text("Dom i pracę ustawisz na stronie Zapisane.").foregroundColor(.secondary)
                     }
                 }
             }
         }
         .kiteList()
-        .navigationTitle("My places")
+        .navigationTitle("Moje miejsca")
     }
 
     private var privacyPage: some View {
         Form {
             Section {
-                Toggle(isOn: $settings.noGoogle) { SettingLabel("Use Apex without Google", icon: "lock.fill", color: 0x475569) }
+                Toggle(isOn: $settings.noGoogle) { SettingLabel("Używaj Apexa bez Google", icon: "lock.fill", color: 0x475569) }
             } footer: {
-                Text("Off (the usual): search, place details, routes and live traffic come from Google, asked anonymously with no account. On: everything comes from free open-data services instead and nothing goes to Google, but search and routes are less complete.")
+                Text("Wyłączone (zwykle): wyszukiwanie, szczegóły miejsc, trasy i ruch pochodzą z Google, pytane anonimowo, bez konta. Włączone: wszystko pochodzi z otwartych usług i nic nie trafia do Google, ale wyszukiwanie i trasy są mniej kompletne.")
             }
         }
         .kiteList()
-        .navigationTitle("Privacy")
+        .navigationTitle("Prywatność")
     }
 
     private var aboutPage: some View {
         Form {
             Section {
-                LabeledContent("Version", value: version)
-                Link("Apex on GitHub", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
-                Link("Based on Vela Maps for Android", destination: URL(string: "https://github.com/PimpinPumpkin/Vela")!)
-                Link("Live Waze reports the way SABRE Plus gets them (MIT)", destination: URL(string: "https://github.com/nicglazkov/highway-radar-sabre-plus")!)
-                Text("Free software under the GPL-3.0. Maps © Apple. Routing © FOSSGIS OSRM, OpenStreetMap contributors. Hillshade © Esri. Fuel prices: Tankerkönig / MTS-K (CC BY 4.0). Roadworks and closures: Autobahn GmbH. Weather: Open-Meteo.com (CC BY 4.0). Rain radar: Deutscher Wetterdienst (DWD).")
+                LabeledContent("Wersja", value: version)
+                Link("Apex na GitHubie", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
+                Link("Na bazie Vela Maps dla Androida", destination: URL(string: "https://github.com/PimpinPumpkin/Vela")!)
+                Link("Raporty Waze na żywo jak w SABRE Plus (MIT)", destination: URL(string: "https://github.com/nicglazkov/highway-radar-sabre-plus")!)
+                Text("Wolne oprogramowanie na licencji GPL-3.0. Mapy © Apple. Trasy © FOSSGIS OSRM, współtwórcy OpenStreetMap. Cieniowanie © Esri. Ceny paliw: Tankerkönig / MTS-K (CC BY 4.0). Roboty i zamknięcia: Autobahn GmbH. Pogoda: Open-Meteo.com (CC BY 4.0). Radar opadów: Deutscher Wetterdienst (DWD). Obrysy stref: Tyremap (CC BY 4.0) i OpenStreetMap (ODbL).")
                     .font(.caption).foregroundColor(.secondary)
             }
         }
         .kiteList()
-        .navigationTitle("About")
+        .navigationTitle("O aplikacji")
     }
 }
 
@@ -309,18 +323,12 @@ struct SettingLabel: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 29, height: 29)
-                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(hex: color)))
-            if let detail, !detail.isEmpty {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
+            IconBadge(icon: icon, color: Color(hex: color), size: 30, radius: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail, !detail.isEmpty {
                     Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
-            } else {
-                Text(title)
             }
         }
     }
@@ -333,16 +341,16 @@ struct WazeSettingsView: View {
     @State private var confirmClear = false
 
     private let kinds: [(WazeAlert.Kind, String)] = [
-        (.police, "Police and mobile speed traps"),
-        (.accident, "Crashes"),
-        (.hazard, "Hazards (stopped cars, objects, potholes)"),
-        (.weather, "Weather (fog, ice, flooding)"),
-        (.roadworks, "Roadworks"),
-        (.closure, "Road closures"),
-        (.jam, "Traffic jams reported by drivers"),
+        (.police, "Policja i mobilne pomiary"),
+        (.accident, "Wypadki"),
+        (.hazard, "Zagrożenia (zatrzymane auta, przeszkody, dziury)"),
+        (.weather, "Pogoda (mgła, lód, zalania)"),
+        (.roadworks, "Roboty drogowe"),
+        (.closure, "Zamknięcia dróg"),
+        (.jam, "Korki zgłoszone przez kierowców"),
     ]
 
-    private let ages: [(Int, String)] = [(30, "30 minutes"), (60, "1 hour"), (120, "2 hours"), (240, "4 hours"), (0, "Keep them all")]
+    private let ages: [(Int, String)] = [(30, "30 minut"), (60, "1 godzina"), (120, "2 godziny"), (240, "4 godziny"), (0, "Zostaw wszystkie")]
 
     /** Whether Waze answered last time, so it's easy to tell when it has stopped working. */
     private var connection: (text: String, color: Color) {
@@ -376,7 +384,7 @@ struct WazeSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Use Waze reports", isOn: $settings.waze).disabled(settings.noGoogle)
+                Toggle("Używaj raportów Waze", isOn: $settings.waze).disabled(settings.noGoogle)
             } footer: {
                 Text(settings.noGoogle
                      ? "Off while \"Use Apex without Google\" is on, since Waze belongs to Google."
@@ -397,14 +405,14 @@ struct WazeSettingsView: View {
                         LabeledContent("Closures, last answer", value: s.summary).font(.subheadline)
                     }
                 } header: {
-                    Text("Connection")
+                    Text("Połączenie")
                 } footer: {
                     if let s = Waze.lastStatus, s.code != 200 {
                         // What the hidden live map page saw, to send to whoever looks into it.
                         Text("Details: " + WazeWeb.shared.note).font(.caption2.monospaced())
                     }
                 }
-                Section("Show and warn about") {
+                Section("Pokazuj i ostrzegaj") {
                     // Only what Waze still shares (see Waze.shares): no switches that can't do anything.
                     ForEach(kinds.filter { Waze.shares.contains($0.0) }, id: \.0) { item in
                         let k = item.0
@@ -420,23 +428,23 @@ struct WazeSettingsView: View {
                     }
                 }
                 Section {
-                    Toggle("Show reports on the map", isOn: $settings.wazeOnMap)
-                    Toggle("Chime and say them while navigating", isOn: $settings.wazeVoice)
-                    Picker("Ignore reports older than", selection: $settings.wazeMaxAge) {
+                    Toggle("Pokazuj raporty na mapie", isOn: $settings.wazeOnMap)
+                    Toggle("Dźwięk i głos w trakcie jazdy", isOn: $settings.wazeVoice)
+                    Picker("Ignoruj starsze niż", selection: $settings.wazeMaxAge) {
                         ForEach(ages, id: \.0) { Text($0.1).tag($0.0) }
                     }
                 } header: {
-                    Text("Alerts")
+                    Text("Alerty")
                 } footer: {
-                    Text("While navigating, a card pops up for reports on your route, only ones made by drivers going your way.")
+                    Text("W trakcie jazdy karta pokazuje zgłoszenia na trasie, tylko od kierowców jadących w tę samą stronę.")
                 }
                 if Waze.shares.contains(.police) {
                     Section {
-                        Toggle("Police heat map", isOn: $settings.wazeHeatmap)
-                        Toggle("Police risk score while driving", isOn: $settings.policeRisk)
-                        LabeledContent("Police reports remembered", value: "\(remembered)")
+                        Toggle("Mapa policji", isOn: $settings.wazeHeatmap)
+                        Toggle("Ryzyko policyjne w trakcie jazdy", isOn: $settings.policeRisk)
+                        LabeledContent("Zapamiętane zgłoszenia policji", value: "\(remembered)")
                         if remembered > 0 {
-                            Button("Forget them all", role: .destructive) { confirmClear = true }
+                            Button("Zapomnij wszystkie", role: .destructive) { confirmClear = true }
                         }
                     } footer: {
                         Text("A glow where police get reported most, and a low, medium or high risk for the road ahead (counting reports made at this time of day most). Waze only shares what's live now, so Apex remembers the reports it sees on this phone, for 90 days and never anywhere else, and both fill in the more you use it.")
@@ -444,19 +452,19 @@ struct WazeSettingsView: View {
                 }
             }
             Section {
-                Toggle("Police planes and helicopters", isOn: $settings.policeAircraft)
+                Toggle("Samoloty i śmigłowce policji", isOn: $settings.policeAircraft)
             } header: {
-                Text("Aircraft")
+                Text("Lotnictwo")
             } footer: {
-                Text("While navigating, warns when a police aircraft is within about 10 km, from open flight tracking (adsb.lol), not Waze. It spots them by their police callsign (like NPAS in the UK), and some don't broadcast at all, so no warning doesn't mean the sky is clear.")
+                Text("W trakcie jazdy ostrzega, gdy samolot lub śmigłowiec policji jest w promieniu około 10 km. Dane z otwartego śledzenia lotów (adsb.lol), nie z Waze. Część maszyn w ogóle nie nadaje, więc brak ostrzeżenia nie znaczy, że niebo jest puste.")
             }
         }
         .kiteList()
-        .navigationTitle("Road alerts")
+        .navigationTitle("Ostrzeżenia drogowe")
         .onAppear { remembered = WazeHistory.shared.sightings.count }
         .confirmationDialog("Forget the \(remembered) police reports Apex remembered? The heat map and risk score start again from nothing.",
                             isPresented: $confirmClear, titleVisibility: .visible) {
-            Button("Forget them", role: .destructive) {
+            Button("Zapomnij", role: .destructive) {
                 WazeHistory.shared.clear()
                 remembered = 0
             }
