@@ -3,9 +3,18 @@ import SwiftUI
 /** Route preview: the from/to card on top, routes on the map, the trip sheet below. */
 struct DirectionsOverlay: View {
     @ObservedObject var model: AppModel
-    @Environment(\.colorScheme) private var scheme
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var mind = MindSettings.shared
     /** How tall the from/to card is, so the sheet at full height stops below it. */
     @State private var cardHeight: CGFloat = 110
+
+    /// The zone this pin or this line still has to enter. Hidden once you're already inside.
+    private var zone: RouteMind.Zone? {
+        guard mind.umwelt, let d = model.directions else { return nil }
+        let me = d.reversed ? d.destination.location : model.userLatLng
+        let dest = d.reversed ? model.userLatLng : d.destination.location
+        return RouteMind.umweltToShow(me: me, destination: dest, line: d.route?.polyline ?? [], along: 0, driving: false)
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -30,6 +39,17 @@ struct DirectionsOverlay: View {
                                 .onChange(of: g.size.height) { cardHeight = $0 }
                         })
                 }
+                if let zone {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            UmweltChip(name: zone.name, blocked: !settings.mayEnterUmwelt && model.directions?.mode == .drive)
+                        }
+                        .padding(.trailing, 16)
+                        .padding(.bottom, (model.directions?.transit == true ? 178 : 224) + geo.safeAreaInsets.bottom)
+                    }
+                }
             }
             // Never wider than the screen, whatever a row inside asks for: a long trip's row once
             // pushed the whole screen, from/to box included, off the right edge.
@@ -50,9 +70,9 @@ struct EndpointsCard: View {
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Back")
+            .accessibilityLabel("Wróć")
             VStack(spacing: 0) {
-                endpoint(icon: "circle", color: Vela.tealLight, text: state.reversed ? state.destination.name : "Your location")
+                endpoint(icon: "circle", color: Vela.tealLight, text: state.reversed ? state.destination.name : "Twoja lokalizacja")
                 ForEach(Array(state.stops.enumerated()), id: \.offset) { i, stop in
                     Divider().padding(.leading, 30)
                     HStack(spacing: 12) {
@@ -62,12 +82,12 @@ struct EndpointsCard: View {
                         Spacer()
                         Button { model.removeStop(i) } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)) }
                             .buttonStyle(.plain).foregroundColor(.secondary)
-                            .accessibilityLabel("Remove stop")
+                            .accessibilityLabel("Usuń postój")
                     }
                     .frame(height: 38)
                 }
                 Divider().padding(.leading, 30)
-                endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? "Your location" : state.destination.name)
+                endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? "Twoja lokalizacja" : state.destination.name)
                 if !state.transit && state.stops.count < 8 {
                     Divider().padding(.leading, 30)
                     Button { model.addingStop = true } label: {
@@ -89,7 +109,7 @@ struct EndpointsCard: View {
                     .background(Circle().fill(Vela.chip(scheme)))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Swap start and end")
+            .accessibilityLabel("Zamień start i cel")
         }
         .foregroundColor(.primary)
         .padding(.leading, 4)
@@ -131,7 +151,7 @@ struct TripHeader: View {
                                 .font(.system(size: 32, weight: .heavy))
                                 .foregroundColor(TripBody.delayColor(r, scheme))
                                 .lineLimit(1).minimumScaleFactor(0.7)
-                            Text("\(Fmt.distance(r.distanceMeters)) · arrive \(Fmt.arrival(r.durationSeconds))")
+                            Text("\(Fmt.distance(r.distanceMeters)) · przyjazd \(Fmt.arrival(r.durationSeconds))")
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Vela.muted(scheme))
                                 .lineLimit(1).minimumScaleFactor(0.8)
                         }
@@ -140,13 +160,13 @@ struct TripHeader: View {
                             .frame(height: 52)
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(d.errors[d.mode] ?? "No route found.").font(.system(size: 18, weight: .semibold))
+                            Text(d.errors[d.mode] ?? "Nie znaleziono trasy.").font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(Vela.muted(scheme))
                                 .fixedSize(horizontal: false, vertical: true)
                             if model.location.denied {
-                                PillButton(title: "Open Settings", icon: "location.fill", filled: true) { LocationService.openSettings() }
+                                PillButton(title: "Otwórz ustawienia", icon: "location.fill", filled: true) { LocationService.openSettings() }
                             } else if d.errors[d.mode] != nil {
-                                PillButton(title: "Try again", icon: "arrow.clockwise") { model.reloadRoutes() }
+                                PillButton(title: "Spróbuj ponownie", icon: "arrow.clockwise") { model.reloadRoutes() }
                             }
                         }
                         .frame(minHeight: 52)
@@ -154,8 +174,8 @@ struct TripHeader: View {
                     Spacer(minLength: 8)
                     if !d.transit {
                         Menu {
-                            Toggle("Avoid tolls", isOn: $settings.avoidTolls)
-                            Toggle(Fmt.yards ? "Avoid motorways" : "Avoid highways", isOn: $settings.avoidHighways)
+                            Toggle("Unikaj opłat", isOn: $settings.avoidTolls)
+                            Toggle("Unikaj autostrad", isOn: $settings.avoidHighways)
                         } label: {
                             Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 16, weight: .bold))
@@ -163,7 +183,7 @@ struct TripHeader: View {
                                 .frame(width: 38, height: 38)
                                 .background(Circle().fill(Vela.chip(scheme)))
                         }
-                        .accessibilityLabel("Route options")
+                        .accessibilityLabel("Opcje trasy")
                         .onChange(of: settings.avoidTolls) { _ in model.reloadRoutes() }
                         .onChange(of: settings.avoidHighways) { _ in model.reloadRoutes() }
                     }
@@ -181,7 +201,7 @@ struct TripHeader: View {
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Start driving")
+                    .accessibilityLabel("Jedź")
                 }
             }
             .padding(.horizontal, 18)
@@ -214,7 +234,7 @@ struct ModeTabs: View {
             }
             tile(icon: "tram.fill", on: state.transit, loading: state.trips == nil,
                  time: state.trips?.map(\.durationSeconds).min().map(Fmt.shortDuration)) { model.showTransit() }
-                .accessibilityLabel("Transit")
+                .accessibilityLabel("Komunikacja")
         }
     }
 
@@ -259,7 +279,7 @@ struct TripBody: View {
                         HStack { ProgressView(); Text("Szukam tras…").foregroundColor(.secondary) }
                             .padding(.vertical, 20)
                     } else {
-                        Text(d.errors[d.mode] ?? "No route found.").foregroundColor(.secondary).padding(.vertical, 20)
+                        Text(d.errors[d.mode] ?? "Nie znaleziono trasy.").foregroundColor(.secondary).padding(.vertical, 20)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -282,11 +302,15 @@ struct TripBody: View {
     private func summary(_ r: Route, _ d: DirectionsState) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             let best = d.current.map(\.durationSeconds).min() ?? r.durationSeconds
-            let lead = r.durationSeconds <= best + 30 ? (r.trafficSeconds != nil ? "Fastest route now" : "Best route") : "Slower route"
-            Text([lead, r.summary.map { "via \($0)" }].compactMap { $0 }.joined(separator: " · "))
+            let lead = r.durationSeconds <= best + 30 ? (r.trafficSeconds != nil ? "Najszybsza trasa teraz" : "Najlepsza trasa") : "Wolniejsza trasa"
+            Text([lead, r.summary.map { "przez \($0)" }].compactMap { $0 }.joined(separator: " · "))
                 .font(.system(size: 18, weight: .semibold))
+            if let note = d.stickerNote {
+                Text(note).font(.system(size: 15, weight: .semibold)).foregroundColor(Color(hex: 0x16A34A))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if r.mode == .drive, r.trafficSeconds != nil {
-                Text(r.delayLevel == 0 ? "Traffic is light" : "\(Fmt.duration(r.durationSeconds - r.typicalSeconds)) slower than usual")
+                Text(r.delayLevel == 0 ? "Ruch lekki" : "\(Fmt.duration(r.durationSeconds - r.typicalSeconds)) wolniej niż zwykle")
                     .font(.system(size: 17, weight: .semibold)).foregroundColor(delayColor(r))
             }
             if r.mode == .drive { RouteWazeSummary(route: r).padding(.top, 4) }
@@ -336,7 +360,7 @@ struct TripBody: View {
                             Image(systemName: "arrow.triangle.branch").foregroundColor(.secondary).frame(width: 22)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(Fmt.duration(r.durationSeconds)) · \(Fmt.distance(r.distanceMeters))").font(.subheadline.weight(.medium))
-                                if let s = r.summary { Text("via \(s)").font(.caption).foregroundColor(.secondary) }
+                                if let s = r.summary { Text("przez \(s)").font(.caption).foregroundColor(.secondary) }
                                 if Self.overlap(r, picked) < 0.4 {
                                     Text("Inne drogi: omija najbardziej zatłoczoną")
                                         .font(.caption2.weight(.bold)).foregroundColor(Vela.accentText(scheme))
@@ -345,7 +369,7 @@ struct TripBody: View {
                             Spacer()
                             let diff = r.durationSeconds - picked.durationSeconds
                             // Under half a minute apart would round to "+1 min": call it the same.
-                            Text(abs(diff) < 30 ? "Same time" : diff > 0 ? "+\(Fmt.duration(diff))" : "−\(Fmt.duration(-diff))")
+                            Text(abs(diff) < 30 ? "Tyle samo" : diff > 0 ? "+\(Fmt.duration(diff))" : "−\(Fmt.duration(-diff))")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                         .padding(.vertical, 8)

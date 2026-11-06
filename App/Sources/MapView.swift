@@ -2,8 +2,8 @@ import MapKit
 import SwiftUI
 import UIKit
 
-/// The green Umweltzone fill. Only one is on the map, and only while the trip still has to enter it.
-final class UmweltPolygon: MKPolygon {}
+/// The green Umweltzone fill. Only one city is on the map, and only while the trip still has to enter it.
+final class UmweltPolygon: MKMultiPolygon {}
 
 // MARK: - Things drawn on the map
 
@@ -574,8 +574,22 @@ struct VelaMapView: UIViewRepresentable {
             guard show?.name != zoneName else { return }
             zoneName = show?.name
             if let show {
-                var coords = show.ring.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
-                zoneOverlay = UmweltPolygon(coordinates: &coords, count: coords.count)
+                var polys: [MKPolygon] = []
+                for ring in show.rings {
+                    var coords = ring.outer.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+                    guard coords.count >= 3 else { continue }
+                    let holes: [MKPolygon] = ring.holes.compactMap { hole in
+                        var hc = hole.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+                        guard hc.count >= 3 else { return nil }
+                        return MKPolygon(coordinates: &hc, count: hc.count)
+                    }
+                    if holes.isEmpty {
+                        polys.append(MKPolygon(coordinates: &coords, count: coords.count))
+                    } else {
+                        polys.append(MKPolygon(coordinates: &coords, count: coords.count, interiorPolygons: holes))
+                    }
+                }
+                zoneOverlay = polys.isEmpty ? nil : UmweltPolygon(polys)
             } else {
                 zoneOverlay = nil
             }
@@ -1319,10 +1333,10 @@ struct VelaMapView: UIViewRepresentable {
                 return r
             }
             if let zone = overlay as? UmweltPolygon {
-                let r = MKPolygonRenderer(polygon: zone)
-                r.fillColor = UIColor(hex: 0x22C55E).withAlphaComponent(0.18)
+                let r = MKMultiPolygonRenderer(multiPolygon: zone)
+                r.fillColor = UIColor(hex: 0x22C55E).withAlphaComponent(0.16)
                 r.strokeColor = UIColor(hex: 0x16A34A)
-                r.lineWidth = 2
+                r.lineWidth = 2.5
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)

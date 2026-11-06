@@ -119,86 +119,149 @@ enum RouteMind {
         return (need / 5).rounded() * 5
     }
 
-    struct Zone: Equatable {
+    struct Ring: Equatable, Sendable {
+        var outer: [LatLng]
+        var holes: [[LatLng]]
+    }
+
+    /// One city's Umweltzone: the official outline, including every separate piece and any holes.
+    struct Zone: Equatable, Sendable {
         var name: String
-        var note: String
-        var ring: [LatLng]
+        var rings: [Ring]
         var south: Double
         var north: Double
         var west: Double
         var east: Double
     }
 
-    /// Inner-city rings of the Umweltzonen still in force in 2026. A green sticker is the only one that counts.
-    static let umweltZones: [Zone] = {
-        func oval(_ name: String, _ lat: Double, _ lng: Double, _ rxKm: Double, _ ryKm: Double, _ note: String = "Wjazd tylko z zieloną plakietką.") -> Zone {
-            let cosLat = cos(lat * .pi / 180)
-            let ring = (0..<32).map { i -> LatLng in
-                let a = Double(i) / 32 * 2 * .pi
-                return LatLng(lat + ryKm * cos(a) / 110.54, lng + rxKm * sin(a) / (111.32 * max(0.2, cosLat)))
+    private struct ZonePack: Decodable {
+        var n: String
+        var rings: [ZoneRing]
+    }
+
+    private struct ZoneRing: Decodable {
+        var o: [[Double]]
+        var h: [[[Double]]]?
+    }
+
+    /// Official Umweltbundesamt outlines (schematic; the signs on the road still win). Not ellipses.
+    static let umweltZones: [Zone] = loadZones()
+
+    private static func loadZones() -> [Zone] {
+        guard let url = Bundle.main.url(forResource: "umwelt", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let packs = try? JSONDecoder().decode([ZonePack].self, from: data) else { return [] }
+        return packs.compactMap { pack in
+            let rings: [Ring] = pack.rings.compactMap { raw in
+                let outer = coords(raw.o)
+                guard outer.count >= 3 else { return nil }
+                let holes = (raw.h ?? []).compactMap { h -> [LatLng]? in
+                    let pts = coords(h)
+                    return pts.count >= 3 ? pts : nil
+                }
+                return Ring(outer: outer, holes: holes)
             }
-            return Zone(name: name, note: note,
-                        ring: ring,
-                        south: ring.map(\.lat).min() ?? lat, north: ring.map(\.lat).max() ?? lat,
-                        west: ring.map(\.lng).min() ?? lng, east: ring.map(\.lng).max() ?? lng)
+            let pts = rings.flatMap(\.outer)
+            guard !pts.isEmpty else { return nil }
+            return Zone(name: pack.n, rings: rings,
+                        south: pts.map(\.lat).min() ?? 0, north: pts.map(\.lat).max() ?? 0,
+                        west: pts.map(\.lng).min() ?? 0, east: pts.map(\.lng).max() ?? 0)
         }
-        let ruhr = "Zielona plakietka. Autostrady są poza strefą."
-        let diesel = "Zielona plakietka. Starsze diesle mają dodatkowy zakaz."
-        return [
-            oval("Magdeburg", 52.127, 11.639, 1.9, 2.5),
-            oval("Halle", 51.482, 11.970, 2.0, 2.2),
-            oval("Leipzig", 51.339, 12.373, 3.4, 3.1),
-            oval("Berlin", 52.510, 13.405, 6.2, 5.4),
-            oval("Bremen", 53.076, 8.808, 2.3, 2.0),
-            oval("Osnabrück", 52.278, 8.047, 2.0, 1.8),
-            oval("München", 48.137, 11.575, 4.3, 4.0, diesel),
-            oval("Augsburg", 48.366, 10.894, 2.2, 2.0),
-            oval("Regensburg", 49.013, 12.102, 1.7, 1.5),
-            oval("Stuttgart", 48.778, 9.178, 6.2, 5.2, diesel),
-            oval("Pforzheim", 48.893, 8.705, 2.0, 1.6),
-            oval("Ludwigsburg", 48.897, 9.192, 6.5, 4.2),
-            oval("Frankfurt", 50.110, 8.682, 3.6, 3.2),
-            oval("Offenbach", 50.099, 8.766, 1.8, 1.6),
-            oval("Wiesbaden", 50.083, 8.241, 2.4, 2.0),
-            oval("Darmstadt", 49.872, 8.651, 2.2, 2.0, diesel),
-            oval("Marburg", 50.809, 8.771, 1.4, 1.3),
-            oval("Limburg", 50.388, 8.065, 1.2, 1.1),
-            oval("Köln", 50.938, 6.960, 4.6, 4.2),
-            oval("Düsseldorf", 51.227, 6.773, 3.4, 3.1),
-            oval("Bonn", 50.735, 7.098, 2.6, 2.2),
-            oval("Aachen", 50.776, 6.084, 2.3, 2.0),
-            oval("Münster", 51.961, 7.626, 2.4, 2.2),
-            oval("Wuppertal", 51.256, 7.151, 3.2, 1.6),
-            oval("Krefeld", 51.333, 6.562, 2.2, 2.0),
-            oval("Mönchengladbach", 51.194, 6.442, 2.4, 2.0),
-            oval("Neuss", 51.198, 6.688, 1.8, 1.6),
-            oval("Hagen", 51.359, 7.475, 2.0, 1.8),
-            oval("Remscheid", 51.179, 7.192, 1.8, 1.5),
-            oval("Siegen", 50.875, 8.024, 1.6, 1.4),
-            oval("Dinslaken", 51.562, 6.734, 1.6, 1.4, ruhr),
-            oval("Eschweiler", 50.817, 6.272, 1.5, 1.3),
-            oval("Langenfeld", 51.108, 6.949, 1.5, 1.3),
-            oval("Overath", 50.932, 7.284, 1.2, 1.1),
-            oval("Bochum", 51.481, 7.216, 3.0, 2.5, ruhr),
-            oval("Bottrop", 51.523, 6.925, 2.3, 2.0, ruhr),
-            oval("Castrop-Rauxel", 51.550, 7.311, 2.1, 1.7, ruhr),
-            oval("Dortmund", 51.514, 7.465, 4.0, 3.4, ruhr),
-            oval("Duisburg", 51.435, 6.762, 3.4, 2.9, ruhr),
-            oval("Essen", 51.456, 7.012, 3.5, 3.0, ruhr),
-            oval("Gelsenkirchen", 51.508, 7.096, 2.7, 2.3, ruhr),
-            oval("Gladbeck", 51.571, 6.983, 1.7, 1.5, ruhr),
-            oval("Herne", 51.538, 7.221, 2.0, 1.6, ruhr),
-            oval("Herten", 51.592, 7.140, 1.6, 1.4, ruhr),
-            oval("Mülheim", 51.428, 6.883, 2.2, 1.9, ruhr),
-            oval("Oberhausen", 51.470, 6.852, 2.3, 2.0, ruhr),
-            oval("Recklinghausen", 51.614, 7.198, 2.2, 1.9, ruhr),
-        ]
-    }()
+    }
+
+    private static func coords(_ pairs: [[Double]]) -> [LatLng] {
+        pairs.compactMap { pair in pair.count >= 2 ? LatLng(pair[0], pair[1]) : nil }
+    }
+
+    /// Electric cars and cars with a green sticker may enter. Everyone else is kept out.
+    static func mayEnterUmwelt() -> Bool {
+        AppSettings.fuelKind == "electric" || AppSettings.stickerOn
+    }
 
     static func umwelt(at p: LatLng) -> Zone? {
         umweltZones.first { z in
-            p.lat >= z.south && p.lat <= z.north && p.lng >= z.west && p.lng <= z.east && contains(p, z.ring)
+            p.lat >= z.south && p.lat <= z.north && p.lng >= z.west && p.lng <= z.east && covers(z, p)
         }
+    }
+
+    /// A point about 40 m outside the nearest boundary, so a car without a sticker stops before the zone.
+    static func edgePoint(of zone: Zone, near p: LatLng) -> LatLng {
+        let ring = zone.rings.min { dist2($0.outer, p) < dist2($1.outer, p) } ?? zone.rings[0]
+        var best = ring.outer[0]
+        var bestD = Double.greatestFiniteMagnitude
+        let pts = ring.outer
+        for i in pts.indices {
+            let q = closest(pts[i], pts[(i + 1) % pts.count], p)
+            let d = p.distance(to: q)
+            if d < bestD { bestD = d; best = q }
+        }
+        let c = centroid(pts)
+        let away = Geo.bearing(c, best)
+        for meters in [40.0, 90.0, 160.0] {
+            let out = shift(best, bearing: away, meters: meters)
+            if !covers(zone, out) { return out }
+        }
+        return shift(best, bearing: away, meters: 160)
+    }
+
+    /// Routes that stay outside every Umweltzone. When none of [routes] do, Valhalla is asked to bend around the zones they hit.
+    static func keepOut(_ routes: [Route], from: LatLng, to: LatLng, via: [LatLng]) async -> (routes: [Route], note: String?) {
+        let clean = routes.filter { !enters($0.polyline) }
+        if !clean.isEmpty { return (clean, nil) }
+        let hit = zones(on: routes.flatMap(\.polyline))
+        guard !hit.isEmpty else { return (routes, nil) }
+        let rings = hit.flatMap(\.rings).map(\.outer)
+        let budget = max(12, min(40, 700 / max(rings.count, 1)))
+        let simple = rings.map { simplify($0, maxPoints: budget) }.filter { $0.count >= 3 }
+        guard let trip = await Valhalla.routeAround(from: from, to: to, via: via, rings: simple),
+              !enters(trip.line) else {
+            return (routes, "Bez zielonej plakietki ta trasa i tak wjeżdża w strefę. Nie znalazłem objazdu.")
+        }
+        if let matched = try? await OSRM.match(trip.line, mode: .drive), !enters(matched.polyline) {
+            var m = matched
+            m.summary = "omija strefę"
+            return ([m], "Trasa omija zieloną strefę, bo auto nie ma plakietki.")
+        }
+        let meters = trip.km > 0 ? trip.km * 1000 : Geo.length(trip.line)
+        let seconds = trip.seconds > 0 ? trip.seconds : meters / 12
+        let line = trip.line
+        let bare = Route(mode: .drive, polyline: line, distanceMeters: meters,
+                         typicalSeconds: seconds, trafficSeconds: nil, summary: "omija strefę",
+                         maneuvers: [
+                            Maneuver(type: .depart, instruction: "Jedź, omijając zieloną strefę",
+                                     location: line[0], alongMeters: 0, distanceMeters: meters, road: nil),
+                            Maneuver(type: .arrive, instruction: "Jesteś u celu",
+                                     location: line[line.count - 1], alongMeters: meters, distanceMeters: 0, road: nil),
+                         ], source: "valhalla")
+        return ([bare], "Trasa omija zieloną strefę, bo auto nie ma plakietki.")
+    }
+
+    private static func enters(_ line: [LatLng]) -> Bool {
+        guard line.count >= 2 else { return false }
+        let cum = Geo.cumulative(line)
+        let total = cum.last ?? 0
+        var m = 0.0
+        while m <= total {
+            if umwelt(at: Geo.point(along: line, meters: m, cumulative: cum)) != nil { return true }
+            m += 50
+        }
+        return false
+    }
+
+    private static func zones(on line: [LatLng]) -> [Zone] {
+        guard line.count >= 2 else { return [] }
+        let cum = Geo.cumulative(line)
+        let total = cum.last ?? 0
+        var seen = Set<String>()
+        var out: [Zone] = []
+        var m = 0.0
+        while m <= total {
+            if let z = umwelt(at: Geo.point(along: line, meters: m, cumulative: cum)), seen.insert(z.name).inserted {
+                out.append(z)
+            }
+            m += 80
+        }
+        return out
     }
 
     /// The zone to draw: the pin is inside and you are not, or the route is about to cross the line.
@@ -223,9 +286,15 @@ enum RouteMind {
         while m <= end {
             let p = Geo.point(along: line, meters: m, cumulative: cum)
             if let z = umwelt(at: p), z.name != skip { return z }
-            m += 400
+            m += 250
         }
         return nil
+    }
+
+    private static func covers(_ z: Zone, _ p: LatLng) -> Bool {
+        z.rings.contains { ring in
+            contains(p, ring.outer) && !ring.holes.contains { contains(p, $0) }
+        }
     }
 
     private static func contains(_ p: LatLng, _ ring: [LatLng]) -> Bool {
@@ -240,6 +309,72 @@ enum RouteMind {
             j = i
         }
         return inside
+    }
+
+    private static func centroid(_ pts: [LatLng]) -> LatLng {
+        guard !pts.isEmpty else { return LatLng(0, 0) }
+        return LatLng(pts.reduce(0) { $0 + $1.lat } / Double(pts.count), pts.reduce(0) { $0 + $1.lng } / Double(pts.count))
+    }
+
+    private static func dist2(_ ring: [LatLng], _ p: LatLng) -> Double {
+        ring.reduce(Double.greatestFiniteMagnitude) { min($0, p.distance(to: $1)) }
+    }
+
+    /// Closest point of segment a–b to p, in a flat metre grid.
+    private static func closest(_ a: LatLng, _ b: LatLng, _ p: LatLng) -> LatLng {
+        let k = cos(p.lat * .pi / 180) * 111_320.0
+        let ax = a.lng * k, ay = a.lat * 110_540
+        let bx = b.lng * k, by = b.lat * 110_540
+        let px = p.lng * k, py = p.lat * 110_540
+        let dx = bx - ax, dy = by - ay
+        let len2 = dx * dx + dy * dy
+        let t = len2 < 1 ? 0 : max(0, min(1, ((px - ax) * dx + (py - ay) * dy) / len2))
+        return LatLng((ay + dy * t) / 110_540, (ax + dx * t) / k)
+    }
+
+    private static func shift(_ p: LatLng, bearing deg: Double, meters: Double) -> LatLng {
+        let r = 6_371_000.0
+        let br = deg * .pi / 180
+        let lat1 = p.lat * .pi / 180, lng1 = p.lng * .pi / 180
+        let d = meters / r
+        let lat2 = asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(br))
+        let lng2 = lng1 + atan2(sin(br) * sin(d) * cos(lat1), cos(d) - sin(lat1) * sin(lat2))
+        return LatLng(lat2 * 180 / .pi, lng2 * 180 / .pi)
+    }
+
+    /// Douglas–Peucker until the ring is small enough for a routing request. The map keeps the full line.
+    private static func simplify(_ ring: [LatLng], maxPoints: Int) -> [LatLng] {
+        var pts = ring
+        if pts.count > 1, pts.first == pts.last { pts.removeLast() }
+        // A long outline would recurse too deep. Thin it first; the map still uses every point.
+        if pts.count > maxPoints * 4 {
+            let n = maxPoints * 4
+            let step = Double(pts.count - 1) / Double(n - 1)
+            pts = (0..<n).map { pts[min(pts.count - 1, Int((Double($0) * step).rounded()))] }
+        }
+        var tol = 12.0
+        while pts.count > maxPoints, tol < 600 {
+            pts = douglas(pts, tol)
+            tol *= 1.7
+        }
+        guard pts.count > maxPoints, pts.count > 2 else { return pts }
+        let step = Double(pts.count - 1) / Double(maxPoints - 1)
+        return (0..<maxPoints).map { pts[min(pts.count - 1, Int((Double($0) * step).rounded()))] }
+    }
+
+    private static func douglas(_ pts: [LatLng], _ tol: Double) -> [LatLng] {
+        guard pts.count > 2 else { return pts }
+        var maxD = 0.0, idx = 0
+        for i in 1..<(pts.count - 1) {
+            let d = distToSeg(pts[i], pts[0], pts[pts.count - 1])
+            if d > maxD { maxD = d; idx = i }
+        }
+        if maxD <= tol { return [pts[0], pts[pts.count - 1]] }
+        return Array(douglas(Array(pts[0...idx]), tol).dropLast()) + douglas(Array(pts[idx...]), tol)
+    }
+
+    private static func distToSeg(_ p: LatLng, _ a: LatLng, _ b: LatLng) -> Double {
+        p.distance(to: closest(a, b, p))
     }
 
     struct Crossing {

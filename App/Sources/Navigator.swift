@@ -331,7 +331,11 @@ final class Navigator: ObservableObject {
         if z?.name != umweltZone?.name { umweltZone = z }
         if let z, spokenUmwelt != z.name {
             spokenUmwelt = z.name
-            if !muted, AppSettings.shared.voice { speak("Wjazd do strefy \(z.name). Potrzebna zielona plakietka.") }
+            if !muted, AppSettings.shared.voice {
+                speak(AppSettings.shared.mayEnterUmwelt
+                      ? "Wjazd do strefy \(z.name). Potrzebna zielona plakietka."
+                      : "Strefa \(z.name). Bez zielonej plakietki nie wjeżdżaj.")
+            }
         }
     }
 

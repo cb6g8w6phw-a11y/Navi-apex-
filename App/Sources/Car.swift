@@ -304,12 +304,18 @@ struct CarPage: View {
             }
 
             Section(header: Text("Auto"),
-                    footer: Text("Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją.")) {
+                    footer: Text(settings.carFuel == "electric"
+                                 ? "Elektryk wjeżdża do zielonej strefy bez plakietki. Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją."
+                                 : "Bez zielonej plakietki trasa omija Umweltzone, a pinezka w strefie kończy się przy jej granicy. Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją.")) {
                 Toggle(isOn: $settings.carBallOn) { SettingLabel("Ikona auta na mapie", icon: "map", color: 0x7C3AED) }
                 TextField("Model (np. VW Golf 7)", text: $settings.carName)
                 Picker(selection: $settings.carFuel) {
                     ForEach(fuels, id: \.0) { Text($0.1).tag($0.0) }
                 } label: { SettingLabel("Paliwo", icon: "drop.fill", color: 0x0891B2) }
+                Toggle(isOn: $settings.greenSticker) {
+                    SettingLabel("Zielona plakietka", detail: "Naklejka na szybie. Wyłącz, jeśli auto nie może wjechać do strefy.", icon: "leaf.fill", color: 0x16A34A)
+                }
+                .disabled(settings.carFuel == "electric")
                 Stepper(value: $settings.carOdometer, in: 0...1_000_000, step: 500) {
                     SettingLabel("Przebieg: \(Fmt.thousand(settings.carOdometer)) km", icon: "gauge.with.needle.fill", color: 0x16A34A)
                 }

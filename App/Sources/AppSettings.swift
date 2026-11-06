@@ -110,13 +110,23 @@ final class AppSettings: ObservableObject {
     @Published var recentPlaces: [Place] { didSet { save(recentPlaces, "recentPlaces") } }
     // The car: what it is, and everything about it that runs out.
     @Published var carName: String { didSet { d.set(carName, forKey: "carName") } }
-    @Published var carFuel: String { didSet { d.set(carFuel, forKey: "carFuel") } }
+    @Published var carFuel: String { didSet { d.set(carFuel, forKey: "carFuel"); Self.fuelKind = carFuel } }
     @Published var carOdometer: Int { didSet { d.set(carOdometer, forKey: "carOdometer") } }
     @Published var insuranceEnd: Date? { didSet { d.set(insuranceEnd, forKey: "insuranceEnd") } }
     @Published var inspectionEnd: Date? { didSet { d.set(inspectionEnd, forKey: "inspectionEnd") } }
     @Published var carParts: [CarPart] { didSet { save(carParts, "carParts") } }
     /** The car ball under the weather on the map. */
     @Published var carBallOn: Bool { didSet { d.set(carBallOn, forKey: "carBallOn") } }
+    /// Green Umwelt sticker on the windscreen. Off: driving routes stay outside the zones.
+    @Published var greenSticker: Bool {
+        didSet { d.set(greenSticker, forKey: "greenSticker"); Self.stickerOn = greenSticker }
+    }
+    /// Read off the main actor by the map and the router. Written only from here.
+    nonisolated(unsafe) static var stickerOn = true
+    nonisolated(unsafe) static var fuelKind = "diesel"
+
+    /// Electric cars may enter an Umweltzone without a sticker.
+    var mayEnterUmwelt: Bool { carFuel == "electric" || greenSticker }
 
     private init() {
         theme = ThemeMode(rawValue: d.string(forKey: "theme") ?? "") ?? .system
@@ -179,6 +189,10 @@ final class AppSettings: ObservableObject {
             d.set(true, forKey: "carPartsInit")
         }
         carBallOn = d.object(forKey: "carBallOn") as? Bool ?? true
+        let sticker = d.object(forKey: "greenSticker") as? Bool ?? true
+        greenSticker = sticker
+        Self.stickerOn = sticker
+        Self.fuelKind = carFuel
         hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         // The OpenWeb Ninja key and counter from 0.7.3, no longer used: don't leave the key on the phone.
         for k in ["ninjaKey", "ninjaMonth", "ninjaUsed"] { d.removeObject(forKey: k) }

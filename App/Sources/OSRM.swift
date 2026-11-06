@@ -559,7 +559,7 @@ public enum Directions {
         } catch {
             err = error.localizedDescription
         }
-        return Result(routes: [], error: err ?? "No route found.")
+        return Result(routes: [], error: err ?? "Nie znaleziono trasy.")
     }
 }
 

@@ -191,13 +191,13 @@ struct SettingsView: View {
                 Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", detail: "Podpowiada prędkość, żeby trafić na następne światła na zielonym.", icon: "lightbulb.fill", color: 0x16A34A) }
                 Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", detail: "Krótka wibracja tuż przed manewrem.", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
                 Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", detail: "Przy granicy DE–PL pokazuje przejście z krótszą kolejką.", icon: "flag.fill", color: 0xDC2626) }
-                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", detail: "Rysuje zieloną strefę w niemieckim mieście tylko gdy pinezka albo trasa wymaga wjazdu.", icon: "leaf.fill", color: 0x16A34A) }
+                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", detail: "Rysuje urzędowy obrys zielonej strefy, gdy pinezka albo trasa wymaga wjazdu.", icon: "leaf.fill", color: 0x16A34A) }
                 Toggle(isOn: $settings.avoidTolls) { SettingLabel("Unikaj dróg płatnych", detail: "Omija odcinki z opłatą i bramki.", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
                 Toggle(isOn: $settings.avoidHighways) {
                     SettingLabel("Unikaj autostrad", detail: "Prowadzi bez autostrad, bocznymi drogami.", icon: "road.lanes", color: 0x1D4ED8)
                 }
             } footer: {
-                Text("Zielona strefa nie wisi na mapie cały czas. Pojawia się przy pinezce w strefie albo tuż przed wjazdem i znika, gdy już jesteś w środku.")
+                Text("Obrys pochodzi z Umweltbundesamt i leży na mapie w miejscu podanym przez urząd. Znaki przy drodze są ważniejsze. Strefa znika, gdy już jesteś w środku.")
             }
             Section {
                 Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {

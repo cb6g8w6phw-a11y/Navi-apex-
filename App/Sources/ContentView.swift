@@ -7,7 +7,6 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
     @ObservedObject private var launch = LaunchAction.shared
     @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var mind = MindSettings.shared
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.horizontalSizeClass) private var hClass
     @Environment(\.verticalSizeClass) private var vClass
@@ -29,14 +28,6 @@ struct ContentView: View {
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
     private var plainMap: Bool {
         model.tab == .map && model.nav == nil && model.directions == nil && model.selected == nil && model.results.isEmpty
-    }
-
-    /// The green zone for a pin that still has to be entered. Hidden once the drive starts (the nav chip takes over).
-    private var planningZone: RouteMind.Zone? {
-        guard mind.umwelt, model.tab == .map, model.nav == nil, let d = model.directions else { return nil }
-        let me = d.reversed ? d.destination.location : model.userLatLng
-        let dest = d.reversed ? model.userLatLng : d.destination.location
-        return RouteMind.umweltToShow(me: me, destination: dest, line: d.route?.polyline ?? [], along: 0, driving: false)
     }
     private var showFuelChip: Bool {
         plainMap && settings.fuelOn && model.fuelBest != nil && model.fuelInfo == nil && model.roadInfo == nil
@@ -147,15 +138,6 @@ struct ContentView: View {
                 }
                 .inSidePanel(panel)
             }
-            if model.nav == nil, model.tab == .map, let zone = planningZone {
-                VStack {
-                    UmweltChip(name: zone.name)
-                        .padding(.top, model.topBannerShowing ? 118 : 58)
-                    Spacer()
-                }
-                .inSidePanel(panel)
-                .padding(.leading, stripPad)
-            }
             if model.showActivityChip, model.tab == .map, model.nav == nil {
                 VStack {
                     if let m = model.activity {
@@ -211,6 +193,8 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.2), value: model.tab)
         .kiteType()
         .preferredColorScheme(settings.colorScheme)
+        .onChange(of: settings.greenSticker) { _ in model.reloadRoutes() }
+        .onChange(of: settings.carFuel) { _ in model.reloadRoutes() }
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
                 .presentationDetents([.medium, .large])

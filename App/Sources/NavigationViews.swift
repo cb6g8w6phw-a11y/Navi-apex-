@@ -49,8 +49,8 @@ struct NavigationOverlay: View {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
                     if let z = nav.umweltZone {
-                        UmweltChip(name: z.name)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        UmweltChip(name: z.name, blocked: !AppSettings.shared.mayEnterUmwelt)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     if let note = nav.guidance {
                         MindNoteCard(note: note)

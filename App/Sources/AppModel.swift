@@ -79,6 +79,8 @@ struct DirectionsState {
     var transitTime: Date?
     var arriveBy = false
     var trip = 0
+    /// Why a drive without a green sticker was shortened or bent around a zone.
+    var stickerNote: String?
 
     var current: [Route] { transit ? [] : routes[mode] ?? [] }
     var route: Route? { current.indices.contains(selected) ? current[selected] : current.first }
@@ -391,7 +393,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    static let locationOffText = "Location is off for Apex. Turn it on in Settings to get directions from where you are."
+    static let locationOffText = "Lokalizacja jest wyłączona dla Apex. Włącz ją w Ustawieniach, żeby dostać trasę z miejsca, w którym jesteś."
 
     // MARK: My places
 
@@ -434,7 +436,7 @@ final class AppModel: ObservableObject {
     /** Remember where the car is: here, now, with the street name when one is found. */
     func saveParking() {
         guard let me = userLatLng else {
-            notice = location.denied ? "Location is off for Apex. Turn it on in Settings to save where you parked." : "Still finding your location. Try again in a moment."
+            notice = location.denied ? "Lokalizacja jest wyłączona dla Apex. Włącz ją w Ustawieniach, żeby zapisać, gdzie stoi auto." : "Jeszcze szukam lokalizacji. Spróbuj za chwilę."
             return
         }
         var p = Place(id: "parking:\(Int(Date().timeIntervalSince1970))", name: "Parked car", location: me, source: "osm")
@@ -457,7 +459,7 @@ final class AppModel: ObservableObject {
     }
 
     /** Long press: a dropped pin with the address there. */
-    func dropPin(at point: LatLng, name: String = "Dropped pin") {
+    func dropPin(at point: LatLng, name: String = "Pinezka") {
         var pin = Place(id: "pin:\(point.lat),\(point.lng)", name: name, location: point, source: "osm")
         pin.category = String(format: "%.5f, %.5f", point.lat, point.lng)
         select(pin)
@@ -548,7 +550,7 @@ final class AppModel: ObservableObject {
         guard let d = directions else { return }
         guard let me = userLatLng else {
             // Say so on the trip card itself, not just in passing.
-            let why = location.denied ? Self.locationOffText : "Waiting for your location…"
+            let why = location.denied ? Self.locationOffText : "Czekam na lokalizację…"
             for m in TravelMode.allCases { directions?.errors[m] = why }
             directions?.tripsError = why
             directions?.trips = []
@@ -567,23 +569,39 @@ final class AppModel: ObservableObject {
         routesRequest += 1
         let req = routesRequest
         let hw = settings.avoidHighways, tolls = settings.avoidTolls, google = !settings.noGoogle
+        let keepOut = !settings.mayEnterUmwelt
+        directions?.stickerNote = nil
         // Already driving (asked at a red light, say): no route that starts with a U-turn.
         let moving = location.last.flatMap { l in l.speed >= 4 && l.course >= 0 && l.courseAccuracy >= 0 && l.courseAccuracy < 45 ? l.course : nil }
         let heading = d.reversed ? nil : moving
         for m in TravelMode.allCases {
             directions?.loading.insert(m)
             Task {
-                let r = await Directions.routes(from: from, to: to, mode: m, avoidHighways: hw, avoidTolls: tolls, useGoogle: google, via: via,
+                var target = to
+                var snap: String?
+                if m == .drive, keepOut, let z = RouteMind.umwelt(at: to) {
+                    target = RouteMind.edgePoint(of: z, near: to)
+                    snap = "Bez zielonej plakietki nie wjadę do \(z.name). Trasa kończy się przy granicy strefy."
+                }
+                let r = await Directions.routes(from: from, to: target, mode: m, avoidHighways: hw, avoidTolls: tolls, useGoogle: google, via: via,
                                                 heading: m == .drive ? heading : nil, alternatives: true)
+                var routes = r.routes
+                var note = snap
+                if m == .drive, keepOut, !routes.isEmpty {
+                    let kept = await RouteMind.keepOut(routes, from: from, to: target, via: via)
+                    routes = kept.routes
+                    if note == nil { note = kept.note }
+                }
                 guard directions?.destination.id == d.destination.id, routesRequest == req else { return }
                 directions?.loading.remove(m)
-                directions?.routes[m] = r.routes
-                if r.routes.isEmpty {
-                    directions?.errors[m] = Connectivity.explain(r.error == "No route found." ? "No route found." : "Couldn't get a route just now. Try again in a moment.")
+                directions?.routes[m] = routes
+                if m == .drive { directions?.stickerNote = note }
+                if routes.isEmpty {
+                    directions?.errors[m] = Connectivity.explain(r.error == "Nie znaleziono trasy." ? "Nie znaleziono trasy." : "Nie udało się teraz ułożyć trasy. Spróbuj za chwilę.")
                 }
                 if m == directions?.mode {
                     frameRoute()
-                    if autoStart, !r.routes.isEmpty {
+                    if autoStart, !routes.isEmpty {
                         autoStart = false
                         startNavigation()
                     }

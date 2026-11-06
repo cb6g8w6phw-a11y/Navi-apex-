@@ -108,4 +108,46 @@ public enum Valhalla {
         }
         return (limits, ways, along)
     }
+
+    /// A drive that stays outside [rings]. Each ring is lon/lat, simplified by the caller. Nil when the server has no such road.
+    static func routeAround(from: LatLng, to: LatLng, via: [LatLng], rings: [[LatLng]]) async -> (line: [LatLng], seconds: Double, km: Double)? {
+        let polys: [[[Double]]] = rings.compactMap { ring in
+            guard ring.count >= 3 else { return nil }
+            var coords = ring.map { [$0.lng, $0.lat] }
+            if coords.first != coords.last, let first = coords.first { coords.append(first) }
+            return coords
+        }
+        guard !polys.isEmpty else { return nil }
+        func loc(_ p: LatLng, _ type: String) -> [String: Any] { ["lat": p.lat, "lon": p.lng, "type": type] }
+        var locs: [[String: Any]] = [loc(from, "break")]
+        for v in via { locs.append(loc(v, "through")) }
+        locs.append(loc(to, "break"))
+        let body: [String: Any] = [
+            "locations": locs,
+            "costing": "auto",
+            "units": "kilometers",
+            "exclude_polygons": polys,
+        ]
+        var r = URLRequest(url: URL(string: "https://valhalla1.openstreetmap.de/route")!)
+        r.httpMethod = "POST"
+        r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        r.timeoutInterval = 12
+        r.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (data, resp) = try? await session.data(for: r),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let trip = root["trip"] as? [String: Any],
+              let legs = trip["legs"] as? [[String: Any]] else { return nil }
+        var line: [LatLng] = []
+        for leg in legs {
+            guard let shape = leg["shape"] as? String else { continue }
+            let pts = Geo.decodePolyline(shape, precision: 1e6)
+            if line.isEmpty { line = pts } else { line.append(contentsOf: pts.dropFirst()) }
+        }
+        guard line.count >= 2 else { return nil }
+        let summary = trip["summary"] as? [String: Any]
+        let seconds = (summary?["time"] as? NSNumber)?.doubleValue ?? 0
+        let km = (summary?["length"] as? NSNumber)?.doubleValue ?? 0
+        return (line, seconds, km)
+    }
 }
