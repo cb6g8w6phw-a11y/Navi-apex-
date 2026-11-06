@@ -37,9 +37,9 @@ struct UmweltChip: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Circle().fill(Color(hex: 0x22C55E)).frame(width: 8, height: 8)
-            Text(name).font(.system(size: 13, weight: .semibold))
-            Text(blocked ? "bez wjazdu" : "zielona plakietka").font(.system(size: 13)).foregroundColor(.secondary)
+            Circle().fill(blocked ? Color(hex: 0xDC2626) : Color(hex: 0x22C55E)).frame(width: 8, height: 8)
+            Text(blocked ? "Bez plakietki" : "Wymagana").font(.system(size: 13, weight: .bold))
+            Text(name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
