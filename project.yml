@@ -10,8 +10,8 @@ targets:
     platform: iOS
     sources:
       - App/Sources
-      - App/Assets.xcassets
       - App/Resources
+      - App/Assets.xcassets
     dependencies:
       - target: ApexWidgets
     scheme: {}
@@ -19,19 +19,17 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Apex
-        CFBundleDevelopmentRegion: pl
-        CFBundleLocalizations:
-          - pl
-        CFBundleShortVersionString: "0.7.5"
+        CFBundleShortVersionString: "0.7.7"
         CFBundleVersion: "1"
         UILaunchScreen: {}
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: Apex pokazuje na mapie, gdzie jesteś, znajduje miejsca w pobliżu i prowadzi krok po kroku.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Apex prowadzi dalej z wyłączonym ekranem podczas nawigacji.
-        NSMicrophoneUsageDescription: Apex słucha, gdy dotkniesz mikrofonu, aby szukać głosem.
-        NSMotionUsageDescription: Apex używa czujników ruchu, żeby prowadzić przez tunel, gdy GPS ginie.
-        NSSpeechRecognitionUsageDescription: Apex zamienia to, co mówisz, na wyszukiwanie.
+        NSMotionUsageDescription: Apex uses the motion sensors to keep your position on the road when GPS drops out in a tunnel.
+        NSLocationWhenInUseUsageDescription: Apex shows where you are on the map, finds places near you and guides you turn by turn.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Apex keeps guiding you with the screen off during navigation.
+        NSMicrophoneUsageDescription: Apex listens when you tap the microphone to search by voice.
+        NSSpeechRecognitionUsageDescription: Apex turns what you say into a search.
+        NSAppleMusicUsageDescription: Apex shows the track playing in Music and lets you pause, skip and scrub it during navigation.
         UIBackgroundModes:
           - location
           - audio
@@ -51,7 +49,7 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "0.7.12"
+        MARKETING_VERSION: "0.7.7"
         CURRENT_PROJECT_VERSION: "1"
   ApexWidgets:
     type: app-extension
@@ -63,7 +61,7 @@ targets:
       path: Widget/Info.plist
       properties:
         CFBundleDisplayName: Apex
-        CFBundleShortVersionString: "0.7.5"
+        CFBundleShortVersionString: "0.7.7"
         CFBundleVersion: "1"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
@@ -73,5 +71,5 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: "YES"
-        MARKETING_VERSION: "0.7.12"
+        MARKETING_VERSION: "0.7.7"
         CURRENT_PROJECT_VERSION: "1"

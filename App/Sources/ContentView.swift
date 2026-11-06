@@ -21,9 +21,6 @@ struct ContentView: View {
     }
 
     @State private var showWeather = false
-    @State private var showCar = false
-    /** The 3D launch film, dropped again after a couple of seconds. */
-    @State private var splash = true
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
     private var plainMap: Bool {
@@ -33,12 +30,6 @@ struct ContentView: View {
         plainMap && settings.fuelOn && model.fuelBest != nil && model.fuelInfo == nil && model.roadInfo == nil
     }
     private var showWeatherBall: Bool { plainMap && settings.weatherOn }
-    /** The car ball under the weather, once anything about the car has been filled in. */
-    private var showCarBall: Bool {
-        plainMap && settings.carBallOn
-            && (!settings.carName.isEmpty || settings.insuranceEnd != nil
-                || settings.inspectionEnd != nil || settings.carOdometer > 0)
-    }
     /** Weather and fuel stand in a column on the left while the search is open or a notice or card is showing. */
     private var columnMode: Bool { model.searchActive || model.topBannerShowing }
     /** Room kept on the left of those cards while the column is there. */
@@ -84,13 +75,12 @@ struct ContentView: View {
                 }
             }
             // Fuel and weather share one row under the search bar; while searching they stand in a column on the left.
-            if showFuelChip || showWeatherBall || showCarBall {
+            if showFuelChip || showWeatherBall {
                 VStack {
                     if columnMode {
                         HStack {
-                            VStack(spacing: 8) {
+                            VStack(spacing: 10) {
                                 if showWeatherBall { WeatherBall { showWeather = true } }
-                                if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
                                 if showFuelChip, let best = model.fuelBest {
                                     FuelMini(station: best) { withAnimation { model.fuelInfo = best } }
                                 }
@@ -107,10 +97,7 @@ struct ContentView: View {
                                 }
                             }
                             Spacer()
-                            VStack(spacing: 8) {
-                                if showWeatherBall { WeatherBall { showWeather = true } }
-                                if showCarBall { CarBall(status: CarStatus(settings: settings)) { showCar = true } }
-                            }
+                            if showWeatherBall { WeatherBall { showWeather = true } }
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 78)
@@ -138,20 +125,6 @@ struct ContentView: View {
                 }
                 .inSidePanel(panel)
             }
-            if model.showActivityChip, model.tab == .map, model.nav == nil {
-                VStack {
-                    if let m = model.activity {
-                        ActivityCard(mode: m,
-                                     apply: { withAnimation { model.applyActivity(m) } },
-                                     close: { withAnimation { model.dismissActivity() } })
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                    Spacer()
-                }
-                .inSidePanel(panel)
-                .padding(.leading, stripPad)
-                .padding(.top, model.topBannerShowing ? 130 : 64)
-            }
             if let event = model.roadInfo, model.tab == .map, model.nav == nil {
                 VStack {
                     RoadEventCard(event: event) { withAnimation { model.roadInfo = nil } }
@@ -178,8 +151,6 @@ struct ContentView: View {
                 }
             }
         }
-        // The launch film sits over everything until it's played out (or tapped away).
-        .overlay { if splash { SplashView(isShown: $splash) } }
         .background(GeometryReader { g in
             Color.clear
                 .onAppear { screen = g.size }
@@ -193,15 +164,9 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.2), value: model.tab)
         .kiteType()
         .preferredColorScheme(settings.colorScheme)
-        .onChange(of: settings.greenSticker) { _ in model.reloadRoutes() }
-        .onChange(of: settings.carFuel) { _ in model.reloadRoutes() }
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
                 .presentationDetents([.medium, .large])
-        }
-        .sheet(isPresented: $showCar) {
-            CarSheet(settings: settings)
-                .presentationDetents([.large])
         }
         .task { await DemoScript.run(model) }
         .onReceive(launch.$pending) { kind in
@@ -222,6 +187,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showLayers) {
             LayersSheet(settings: settings).kiteType()
+        }
+        .fullScreenCover(isPresented: $model.showCalibrate) {
+            CalibrateSheet(location: model.location).kiteType()
         }
         .fullScreenCover(isPresented: .constant(DemoScript.step?.hasPrefix("svtest") == true)) {
             // Screenshot run only: the viewer on a test pattern, turned right by the step's number.
@@ -256,6 +224,7 @@ struct BrowseOverlay: View {
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var voice = VoiceSearch()
     @FocusState private var searchFocused: Bool
+    @State private var locateChoice = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
 
@@ -268,22 +237,6 @@ struct BrowseOverlay: View {
     }
     /** Only the map and the dock when nothing is open. */
     private var idle: Bool { !hasSheet && !searchFocused && !voice.listening }
-    /** The weather and car balls' column height, when they stand on the right of the plain map. */
-    private var ballsHeight: CGFloat {
-        guard model.tab == .map, model.nav == nil, model.directions == nil,
-              model.selected == nil, model.results.isEmpty else { return 0 }
-        var h: CGFloat = 0
-        if settings.weatherOn { h += 54 }
-        if settings.carBallOn, !settings.carName.isEmpty || settings.insuranceEnd != nil
-            || settings.inspectionEnd != nil || settings.carOdometer > 0 { h += 54 }
-        return h
-    }
-    /** Where the layers button starts: right under those balls, joining their column. */
-    private var mapFabTop: CGFloat {
-        if panel > 0 { return 10 }
-        if !idle { return 86 }
-        return ballsHeight > 0 ? 88 + ballsHeight : 176
-    }
 
     var body: some View {
         GeometryReader { geo in
@@ -296,9 +249,7 @@ struct BrowseOverlay: View {
                 VStack {
                     HStack(alignment: .top) {
                         Spacer()
-                        // The same 16 pt from the edge as the weather and car balls above, so the
-                        // whole right side reads as one even column.
-                        VStack(spacing: 10) {
+                        VStack(spacing: 12) {
                             MapFab(icon: "square.3.layers.3d", size: 56) { model.showLayers = true }
                                 .accessibilityLabel("Map layers")
                             if settings.parkingButton || settings.parking != nil {
@@ -320,16 +271,37 @@ struct BrowseOverlay: View {
                         }
                     }
                     // With a side panel the search box isn't above them: they go to the top right.
-                    .padding(.top, mapFabTop)
-                    .padding(.trailing, 16)
+                    .padding(.top, panel > 0 ? 10 : idle ? 176 : 86)
                     Spacer()
                     if sheetH < full * 0.6 || panel > 0 {
                         HStack(alignment: .bottom) {
                             if idle { WazeMapChips(model: model) }
                             Spacer()
-                            MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 64) { model.centerOnUser() }
+                            VStack(alignment: .trailing, spacing: 10) {
+                                if locateChoice {
+                                    Button {
+                                        locateChoice = false
+                                        model.showCalibrate = true
+                                    } label: {
+                                        Label("Skalibruj lokalizację", systemImage: "compass")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .padding(.horizontal, 14)
+                                            .frame(height: 48)
+                                            .foregroundColor(.white)
+                                            .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.94)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                                }
+                                MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 64) {
+                                    model.centerOnUser()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { locateChoice = true }
+                                }
                                 .accessibilityLabel("Centre on me")
                                 .contextMenu {
+                                    Button { model.showCalibrate = true } label: {
+                                        Label("Calibrate location", systemImage: "compass")
+                                    }
                                     if let u = model.userLatLng {
                                         ShareLink(item: URL(string: "https://maps.google.com/?q=\(u.lat),\(u.lng)")!) {
                                             Label("Share my location", systemImage: "square.and.arrow.up")
@@ -340,6 +312,14 @@ struct BrowseOverlay: View {
                                     }
                                     Button { model.saveParking() } label: { Label("I parked here", systemImage: "parkingsign") }
                                 }
+                            }
+                            .onChange(of: locateChoice) { on in
+                                guard on else { return }
+                                Task {
+                                    try? await Task.sleep(nanoseconds: 6_000_000_000)
+                                    if locateChoice { withAnimation { locateChoice = false } }
+                                }
+                            }
                         }
                         .padding(.bottom, panel > 0 ? 16
                                  : hasSheet ? max(sheetH - geo.safeAreaInsets.bottom, 0) + 14
@@ -457,9 +437,9 @@ struct SearchBar: View {
                     model.clearSearch()
                     focused.wrappedValue = false
                 } label: {
-                    Image(systemName: "xmark").font(.system(size: 18, weight: .bold))
+                    Image(systemName: "xmark").font(.system(size: 19, weight: .bold))
                         .frame(width: 48, height: 48)
-                        .background(GlassCircle())
+                        .background(Circle().fill(Vela.chip(scheme)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -471,9 +451,9 @@ struct SearchBar: View {
                         model.search(text)
                     }, onError: { model.notice = $0 })
                 } label: {
-                    Image(systemName: "mic.fill").font(.system(size: 20, weight: .semibold))
+                    Image(systemName: "mic.fill").font(.system(size: 21, weight: .semibold))
                         .frame(width: 48, height: 48)
-                        .background(GlassCircle())
+                        .background(Circle().fill(Vela.chip(scheme)))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Search by voice")
@@ -524,7 +504,7 @@ struct SuggestionsPanel: View {
                         // The system Paste button reads the clipboard without iOS asking first.
                         HStack(spacing: 16) {
                             Image(systemName: "link").frame(width: 22).foregroundColor(.secondary)
-                            Text("Otwórz skopiowany link do mapy").foregroundColor(.primary)
+                            Text("Open a copied map link").foregroundColor(.primary)
                             Spacer()
                             PasteButton(payloadType: String.self) { strings in
                                 guard let text = strings.first else { return }
@@ -543,7 +523,7 @@ struct SuggestionsPanel: View {
                     Shortcuts(model: model, done: done)
                     if !settings.recentPlaces.isEmpty || !settings.recents.isEmpty {
                         HStack {
-                            Text("Ostatnie").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+                            Text("Recent").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
                             Spacer()
                             Button("Clear") { settings.recents = []; settings.recentPlaces = [] }
                                 .font(.subheadline).foregroundColor(Vela.routeBlue)
@@ -583,7 +563,7 @@ struct SuggestionsPanel: View {
                         }
                     }
                     // Recents first, like every maps app: most searches are for somewhere you've been.
-                    Text("W pobliżu").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+                    Text("Nearby").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 4)
                     ForEach(Category.all) { c in
                         row(icon: c.icon, text: c.label) { done(); model.search(c.query, title: c.label) }
@@ -593,8 +573,11 @@ struct SuggestionsPanel: View {
             .padding(.vertical, 6)
             .font(.system(size: 15))
         }
-        // See-through, so the map stays readable behind it.
-        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        // Smaller and see-through: the map stays readable behind it.
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial).opacity(0.72)
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 0.75))
+        )
         .padding(.trailing, 12)
         .padding(.leading, (settings.weatherOn || settings.fuelOn) ? 70 : 12)
         .frame(maxHeight: 300)
@@ -634,8 +617,8 @@ struct NoticeBanner: View {
             Text(text).font(.footnote).frame(maxWidth: .infinity, alignment: .leading)
             Button(action: dismiss) { Image(systemName: "xmark").font(.footnote) }.buttonStyle(.plain)
         }
-        .padding(14)
-        .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(12)
+        .glass(RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, 12)
     }
 }
@@ -677,7 +660,10 @@ struct PlaceTile: View {
             if let p = place { go(); model.openDirections(to: p) } else { unset() }
         } label: {
             HStack(spacing: 12) {
-                IconBadge(icon: icon, color: place == nil ? Color(hex: 0x94A3B8) : color, size: 36)
+                Image(systemName: icon).font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(place == nil ? Color.gray : color))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .bold)).lineLimit(1)
                     Text(place.flatMap { p in model.userLatLng.map { $0.distance(to: p.location) } }.map(Fmt.distance) ?? (place == nil ? "Tap to set" : "Tap to go"))
@@ -756,55 +742,6 @@ struct StatusCards: View {
             }
         }
         .padding(14)
-        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .padding(.horizontal, 16)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/**
- * The one-tap offer to switch to walking or cycling: shown once Apex has seen sustained
- * walking or cycling pace, it turns on the matching mode (routes and the paths layer).
- */
-struct ActivityCard: View {
-    let mode: TravelMode
-    let apply: () -> Void
-    let close: () -> Void
-
-    private var walk: Bool { mode == .walk }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: walk ? "figure.walk" : "figure.outdoor.cycle")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(hex: walk ? 0xB08D57 : 0x22A55B)))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(walk ? "Idziesz pieszo?" : "Jedziesz rowerem?")
-                    .font(.system(size: 16, weight: .semibold))
-                Text(walk ? "Tryb pieszy prowadzi chodnikami i ścieżkami." : "Tryb rowerowy prowadzi ścieżkami rowerowymi.")
-                    .font(.system(size: 13)).foregroundColor(.secondary).lineLimit(2)
-            }
-            Spacer(minLength: 4)
-            Button(action: apply) {
-                Text("Włącz")
-                    .font(.system(size: 14, weight: .semibold))
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(Color(hex: walk ? 0xB08D57 : 0x22A55B)))
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(12)
         .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 16)
         .accessibilityElement(children: .combine)

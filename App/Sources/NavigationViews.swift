@@ -7,6 +7,9 @@ struct NavigationOverlay: View {
     @State private var showSteps = false
     @State private var showAlong = false
     @State private var confirmEnd = false
+    @State private var showPlayer = false
+    @State private var locateChoice = false
+    @ObservedObject private var music = NowPlay.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
 
@@ -44,18 +47,14 @@ struct NavigationOverlay: View {
             VStack(spacing: 10) {
                 if nav.arrived {
                     ArrivedCard(name: nav.destination.name, onPark: nav.route.mode == .drive ? { model.saveParking() } : nil,
-                                note: nav.wazeWarned > 0 ? String(format: "waze_warned".localized, nav.wazeWarned) : nil) { model.endNavigation() }
+                                note: nav.wazeWarned > 0 ? "Waze drivers warned you about \(nav.wazeWarned) report\(nav.wazeWarned == 1 ? "" : "s") on the way" : nil) { model.endNavigation() }
                 } else {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let z = nav.umweltZone {
-                        UmweltChip(name: z.name, blocked: !AppSettings.shared.mayEnterUmwelt)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                    if let note = nav.guidance {
-                        MindNoteCard(note: note)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                }
+                if let note = nav.guidance, !nav.arrived {
+                    MindNoteCard(note: note)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if let cam = nav.cameraAhead, !nav.arrived {
                     CameraCard(alert: cam, speedKmh: nav.speedMps * 3.6)
@@ -66,7 +65,7 @@ struct NavigationOverlay: View {
                     WazeCard(ahead: w)
                         .fixedSize(horizontal: false, vertical: true)
                         .onTapGesture { withAnimation { nav.dismissWaze() } }
-                        .accessibilityHint("tap_to_hide".localized)
+                        .accessibilityHint("Tap to hide")
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 if let r = nav.roadAhead, !nav.arrived {
@@ -85,7 +84,7 @@ struct NavigationOverlay: View {
                     AverageCheckCard(check: check)
                 }
                 if nav.rerouting {
-                    Label("rerouting".localized, systemImage: "arrow.triangle.2.circlepath")
+                    Label("Rerouting…", systemImage: "arrow.triangle.2.circlepath")
                         .font(.system(size: 18, weight: .bold))
                         .padding(.horizontal, 18).frame(height: 44)
                         .glass(Capsule())
@@ -113,13 +112,34 @@ struct NavigationOverlay: View {
                     SpeedBadge(mps: nav.speedMps, limitKmh: nav.speedLimitKmh)
                 }
                 Spacer()
-                MapFab(icon: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 64) { nav.muted.toggle() }
-                    .accessibilityLabel(nav.muted ? "turn_voice_on".localized : "mute_voice".localized)
+                VStack(alignment: .trailing, spacing: 10) {
+                    if locateChoice {
+                        Button {
+                            locateChoice = false
+                            model.showCalibrate = true
+                        } label: {
+                            Label("Skalibruj lokalizację", systemImage: "compass")
+                                .font(.system(size: 16, weight: .bold))
+                                .padding(.horizontal, 14)
+                                .frame(height: 48)
+                                .foregroundColor(.white)
+                                .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.94)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 56) {
+                        model.recenterNav()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { locateChoice = true }
+                    }
+                    .accessibilityLabel("Centre on me")
+                    MapFab(icon: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 64) { nav.muted.toggle() }
+                        .accessibilityLabel(nav.muted ? "Turn voice on" : "Mute voice")
+                }
             }
             .padding(.horizontal, 16)
             if !nav.following {
                 Button { model.recenterNav() } label: {
-                    Label("re_centre".localized, systemImage: "location.north.line.fill")
+                    Label("Re-centre", systemImage: "location.north.line.fill")
                         .font(.system(size: 20, weight: .bold))
                         .padding(.horizontal, 26).frame(height: 60)
                         .foregroundColor(Vela.onAccent(scheme))
@@ -131,7 +151,10 @@ struct NavigationOverlay: View {
                 .frame(maxWidth: .infinity)
                 .padding(.leading, panel)
             }
-                      // Arriving answers the question: the trip bar's Done takes over.
+            NowPlayingBar(music: music) { showPlayer = true }
+                .padding(.horizontal, 12)
+                .inSidePanel(panel)
+            // Arriving answers the question: the trip bar's Done takes over.
             if confirmEnd, !nav.arrived {
                 EndTripCard(destination: nav.destination.name,
                             onKeep: { withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = false } },
@@ -167,11 +190,15 @@ struct NavigationOverlay: View {
             .ignoresSafeArea()
         )
         .task {
+            NowPlay.shared.attach()
             // Screenshot run: the end trip question.
             if DemoScript.step == "endtrip" {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 withAnimation { confirmEnd = true }
             }
+        }
+        .sheet(isPresented: $showPlayer) {
+            NowPlayingSheet(music: music).kiteType()
         }
         .sheet(isPresented: $showAlong) {
             AlongRouteSheet(nav: nav).kiteType()
@@ -182,13 +209,13 @@ struct NavigationOverlay: View {
                     VStack(alignment: .leading, spacing: 16) {
                         // The things that used to be buttons on the map, out of the way until wanted.
                         HStack(spacing: 10) {
-                            tripAction("magnifyingglass", "find_on_route".localized) {
+                            tripAction("magnifyingglass", "Find on route") {
                                 showSteps = false
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { showAlong = true }
                             }
-                            ShareLink(item: etaText) { tripActionLabel("square.and.arrow.up", "share_eta".localized) }
+                            ShareLink(item: etaText) { tripActionLabel("square.and.arrow.up", "Share ETA") }
                                 .buttonStyle(.plain)
-                            tripAction("arrow.up.left.and.arrow.down.right", "overview".localized) {
+                            tripAction("arrow.up.left.and.arrow.down.right", "Overview") {
                                 showSteps = false
                                 model.overviewNav()
                             }
@@ -197,9 +224,9 @@ struct NavigationOverlay: View {
                     }
                     .padding(.horizontal, 16)
                 }
-                .navigationTitle("your_trip".localized)
+                .navigationTitle("Your trip")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("done".localized) { showSteps = false } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showSteps = false } } }
             }
             .kiteType()
         }
@@ -232,47 +259,47 @@ struct InstructionBanner: View {
         let leftTraffic = Geo.drivesOnLeft(m?.location ?? LatLng(0, 0))
         let refs = RoadRefs.find(m?.instruction ?? "")
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .center, spacing: 16) {
                 if m?.type == .roundabout {
                     RoundaboutDiagram(shape: m?.roundabout, exit: m?.exit ?? 1, clockwise: leftTraffic)
-                        .frame(width: 68, height: 68)
+                        .frame(width: 100, height: 100)
                 } else {
                     Image(systemName: maneuverSymbol(m?.type ?? .straight))
-                        .font(.system(size: 42, weight: .heavy))
-                        .frame(width: 68, height: 68)
+                        .font(.system(size: 62, weight: .heavy))
+                        .frame(width: 100, height: 100)
                 }
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     if let p = nav.progress {
                         Text(Fmt.distance(p.distanceToNext))
-                            .font(.system(size: 30, weight: .heavy))
+                            .font(.system(size: 46, weight: .heavy))
                             .monospacedDigit()
                             .lineLimit(1).minimumScaleFactor(0.6)
                     }
                     if let parts = Self.split(Self.headline(m)) {
                         // "At the end of the road, turn left" small, the road you turn onto big, like Waze.
                         Text(parts.0)
-                            .font(.system(size: 13, weight: .semibold)).opacity(0.9)
+                            .font(.system(size: 17, weight: .semibold)).opacity(0.9)
                             .lineLimit(1).minimumScaleFactor(0.75)
                         Text(parts.1)
-                            .font(.system(size: 19, weight: .heavy))
+                            .font(.system(size: 25, weight: .heavy))
                             .lineLimit(2).minimumScaleFactor(0.7)
                     } else {
                         Text(Self.headline(m))
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 23, weight: .bold))
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
                     }
                     if !refs.isEmpty {
                         HStack(spacing: 6) { ForEach(refs, id: \.self) { RoadShield(ref: $0) } }
-                            .padding(.top, 1)
+                            .padding(.top, 2)
                     } else if m?.type == .roundabout, let road = m?.road {
-                        Text(String(format: "onto_road".localized, road)).font(.system(size: 14, weight: .semibold)).opacity(0.9).lineLimit(1)
+                        Text("onto \(road)").font(.system(size: 18, weight: .semibold)).opacity(0.9).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             if let m, let p = nav.progress, p.distanceToNext < 1_500, let lanes = LaneGuide.lanes(for: m, leftTraffic: leftTraffic) {
                 HStack(spacing: 14) {
                     LaneStrip(lanes: lanes.lanes, turn: m.type, exitAngle: m.roundabout.map { $0.exits[$0.taken] })
@@ -301,7 +328,7 @@ struct InstructionBanner: View {
     private var thenView: some View {
         if let then = nav.thenManeuver {
             HStack(spacing: 6) {
-                Text("then".localized).font(.system(size: 16, weight: .bold)).opacity(0.85)
+                Text("Then").font(.system(size: 16, weight: .bold)).opacity(0.85)
                 Image(systemName: maneuverSymbol(then.type)).font(.system(size: 20, weight: .heavy))
                 if then.type == .roundabout, let n = then.exit {
                     // Which exit, so the next roundabout is known before the banner changes.
@@ -331,8 +358,8 @@ struct InstructionBanner: View {
 
     /** "6th exit" for a roundabout (the picture says the rest), else the instruction. */
     static func headline(_ m: Maneuver?) -> String {
-        guard let m else { return "follow_route".localized }
-        if m.type == .roundabout, let n = m.exit { return String(format: "exit_number".localized, n) }
+        guard let m else { return "Follow the route" }
+        if m.type == .roundabout, let n = m.exit { return "\(ordinal(n)) exit" }
         return m.instruction
     }
 
@@ -356,10 +383,7 @@ enum LaneGuide {
         if m.lanes.count > 1 { return named(m.lanes) }
         // Google's own advice ("Use the right lane") where the open map has no lanes: words only.
         if let hint = m.laneHint, !hint.localizedCaseInsensitiveContains("any lane"), m.type != .roundabout {
-            var words = hint.replacingOccurrences(of: "use the ", with: "", options: .caseInsensitive)
-            for (en, pl) in [("left lanes", "lewe pasy"), ("right lanes", "prawe pasy"),
-                             ("left lane", "lewy pas"), ("right lane", "prawy pas"), ("center lane", "środkowy pas")]
-                where words.lowercased().contains(en) { words = pl }
+            let words = hint.replacingOccurrences(of: "use the ", with: "", options: .caseInsensitive)
             return ([], words.prefix(1).uppercased() + words.dropFirst())
         }
         // The road's painted arrows, Google's advice, or the Highway Code's lanes, as many as the road in has.
@@ -371,12 +395,12 @@ enum LaneGuide {
     static func named(_ lanes: [Lane]) -> (lanes: [Lane], words: String)? {
         let valid = lanes.enumerated().filter(\.element.valid).map(\.offset)
         guard let first = valid.first, let last = valid.last, valid.count < lanes.count else { return nil }
-        let n = lanes.count, count = valid.count, many = count > 1 ? "\(count) pasy" : "pas"
+        let n = lanes.count, count = valid.count, many = count > 1 ? "\(count) lanes" : "lane"
         let words: String
-        if first == 0 { words = String(format: "left_lanes".localized, many) }
-        else if last == n - 1 { words = String(format: "right_lanes".localized, many) }
-        else if count == 1 && n > 3 { words = String(format: "lane_from_left".localized, first + 1) }
-        else { words = count > 1 ? "middle_lanes".localized : "middle_lane".localized }
+        if first == 0 { words = "Left \(many)" }
+        else if last == n - 1 { words = "Right \(many)" }
+        else if count == 1 && n > 3 { words = "Lane \(first + 1) from left" }
+        else { words = count > 1 ? "Middle lanes" : "Middle lane" }
         return (lanes, words)
     }
 }
@@ -462,31 +486,29 @@ struct EndTripCard: View {
     var body: some View {
         VStack(spacing: 14) {
             VStack(spacing: 2) {
-                Text("end_this_trip".localized).font(.system(size: 24, weight: .heavy))
-                Text(String(format: "to_destination".localized, destination)).font(.system(size: 16, weight: .medium))
+                Text("End this trip?").font(.system(size: 24, weight: .heavy))
+                Text("to \(destination)").font(.system(size: 16, weight: .medium))
                     .foregroundColor(Vela.muted(scheme)).lineLimit(1)
             }
             HStack(spacing: 12) {
                 Button(action: onKeep) {
-                    Text("keep_going".localized).font(.system(size: 20, weight: .bold))
+                    Text("Keep going").font(.system(size: 20, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 60)
                         .foregroundColor(Vela.onAccent(scheme))
                         .background(Capsule().fill(Vela.accent(scheme)))
                 }
-                .buttonStyle(PressableButtonStyle())
-
                 Button(action: onEnd) {
-                    Text("end_trip".localized).font(.system(size: 20, weight: .bold))
+                    Text("End trip").font(.system(size: 20, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 60)
                         .foregroundColor(.white)
                         .background(Capsule().fill(Vela.closed))
                 }
-                .buttonStyle(PressableButtonStyle())
             }
+            .buttonStyle(.plain)
         }
         .foregroundColor(.primary)
-        .padding(14)
-        .glassButton(Capsule()) // Zmienione z .glass(RoundedRectangle...)
+        .padding(18)
+        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
@@ -510,7 +532,7 @@ struct TripBar: View {
                     .background(Circle().fill(scheme == .dark ? Color(hex: 0x3B1820) : Color(hex: 0xFEE2E2)))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("end_trip".localized)
+            .accessibilityLabel("End trip")
             VStack(spacing: 1) {
                 Text(Fmt.duration(remaining)).font(.system(size: 36, weight: .heavy))
                     .foregroundColor(Vela.accentText(scheme))
@@ -527,12 +549,12 @@ struct TripBar: View {
                     .background(Circle().fill(Vela.chip(scheme)))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("trip_and_steps".localized)
+            .accessibilityLabel("Trip and steps")
         }
         .foregroundColor(.primary)
         .padding(.horizontal, 16)
         .frame(height: 100)
-        .glassButton(Capsule())
+        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
@@ -549,7 +571,7 @@ struct ArrivedCard: View {
         HStack(spacing: 14) {
             Image(systemName: "flag.checkered").font(.system(size: 38, weight: .bold))
             VStack(alignment: .leading, spacing: 2) {
-                Text("arrived".localized).font(.system(size: 26, weight: .heavy))
+                Text("You've arrived").font(.system(size: 26, weight: .heavy))
                 Text(name).font(.system(size: 18, weight: .semibold)).lineLimit(1)
                 if let note { Text(note).font(.subheadline).opacity(0.85).lineLimit(2) }
             }
@@ -560,10 +582,10 @@ struct ArrivedCard: View {
                         .frame(width: 56, height: 56)
                         .background(Circle().fill(Color.white.opacity(0.22)))
                 }
-                .accessibilityLabel("save_parking".localized)
+                .accessibilityLabel("Save parking")
             }
             Button(action: done) {
-                Text("done".localized).font(.system(size: 20, weight: .bold))
+                Text("Done").font(.system(size: 20, weight: .bold))
                     .padding(.horizontal, 20).frame(height: 56)
                     .background(Capsule().fill(Color.white.opacity(0.22)))
             }
@@ -596,7 +618,7 @@ struct CameraCard: View {
                 VStack(alignment: .leading, spacing: -2) {
                     Text(Fmt.distance(alert.meters)).font(.system(size: 30, weight: .heavy)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(over ? "slow_down".localized : alert.kind == .speed ? "speed_camera".localized : "plate_camera".localized)
+                    Text(over ? "Slow down" : alert.kind == .speed ? "Speed camera" : "Plate camera")
                         .font(.system(size: 15, weight: .bold))
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
@@ -651,7 +673,7 @@ struct WazeCard: View {
                     Text(detail).font(.system(size: 15, weight: .medium)).opacity(0.9).lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Text("via_waze".localized).font(.system(size: 13, weight: .heavy)).opacity(0.8)
+                Text("Waze").font(.system(size: 13, weight: .heavy)).opacity(0.8)
             }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -673,8 +695,8 @@ extension WazeAlert {
     /** "Reported 12 min ago". */
     var reportedText: String {
         let mins = max(Int(Date().timeIntervalSince(reportedAt) / 60), 0)
-        let when = mins < 1 ? "just_now".localized : mins < 60 ? String(format: "mins_ago".localized, mins) : mins < 1440 ? String(format: "hours_ago".localized, mins / 60) : String(format: "days_ago".localized, mins / 1440)
-        return String(format: "reported_at".localized, when)
+        let when = mins < 1 ? "just now" : mins < 60 ? "\(mins) min ago" : mins < 1440 ? "\(mins / 60) h ago" : "\(mins / 1440) d ago"
+        return "Reported \(when)"
     }
 }
 
@@ -693,7 +715,7 @@ struct WazeInfoCard: View {
                     .font(.subheadline).foregroundColor(.secondary)
                 HStack(spacing: 10) {
                     if alert.thumbsUp > 0 {
-                        Label(String(format: "confirmed".localized, alert.thumbsUp), systemImage: "hand.thumbsup.fill")
+                        Label("\(alert.thumbsUp) confirmed", systemImage: "hand.thumbsup.fill")
                     }
                     // Waze's 0-10 trust in the report, as five dots.
                     HStack(spacing: 3) {
@@ -702,8 +724,8 @@ struct WazeInfoCard: View {
                                 .frame(width: 6, height: 6)
                         }
                     }
-                    .accessibilityLabel(String(format: "reliability".localized, alert.reliability))
-                    Text("via_waze".localized)
+                    .accessibilityLabel("Reliability \(alert.reliability) out of 10")
+                    Text("via Waze")
                 }
                 .font(.caption).foregroundColor(.secondary)
             }
@@ -713,7 +735,7 @@ struct WazeInfoCard: View {
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("close".localized)
+            .accessibilityLabel("Close")
         }
         .padding(14)
         .glass(RoundedRectangle(cornerRadius: 18))
@@ -737,7 +759,7 @@ struct RouteWazeSummary: View {
         VStack(alignment: .leading, spacing: 0) {
             if let counts {
                 if counts.isEmpty {
-                    Label("no_closures".localized, systemImage: "checkmark.shield.fill")
+                    Label("No road closures on this route", systemImage: "checkmark.shield.fill")
                         .font(.system(size: 16, weight: .semibold)).foregroundColor(Vela.open)
                 } else {
                     WrapLayout(spacing: 8, lineSpacing: 8) {
@@ -769,13 +791,13 @@ struct RouteWazeSummary: View {
 
     static func label(_ k: WazeAlert.Kind, _ n: Int) -> String {
         switch k {
-        case .police: return "police".localized
-        case .accident: return n == 1 ? "crash".localized : "crashes".localized
-        case .hazard: return n == 1 ? "hazard".localized : "hazards".localized
-        case .weather: return "bad_weather".localized
-        case .roadworks: return "roadworks".localized
-        case .closure: return n == 1 ? "closure".localized : "closures".localized
-        case .jam: return n == 1 ? "traffic_jam".localized : "traffic_jams".localized
+        case .police: return "police"
+        case .accident: return n == 1 ? "crash" : "crashes"
+        case .hazard: return n == 1 ? "hazard" : "hazards"
+        case .weather: return "weather"
+        case .roadworks: return "roadworks"
+        case .closure: return n == 1 ? "closure" : "closures"
+        case .jam: return n == 1 ? "jam" : "jams"
         }
     }
 }
@@ -785,16 +807,16 @@ struct HeatLegend: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "flame.fill").font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: 0xE91E63))
-            Text("police".localized).font(.caption2.weight(.semibold))
+            Text("Police").font(.caption2.weight(.semibold))
             LinearGradient(colors: [Color(hex: 0x4285F4), Color(hex: 0x7C4DFF), Color(hex: 0xE91E63), Color(hex: 0xD50000)],
                            startPoint: .leading, endPoint: .trailing)
                 .frame(width: 54, height: 6).clipShape(Capsule())
-            Text("often".localized).font(.caption2).foregroundColor(.secondary)
+            Text("often").font(.caption2).foregroundColor(.secondary)
         }
         .padding(.horizontal, 10).frame(height: 28)
         .glass(Capsule())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("heat_map_on".localized)
+        .accessibilityLabel("Police heat map on: red where police are reported most often")
     }
 }
 
@@ -815,13 +837,13 @@ struct PoliceRiskChip: View {
         let color = Self.color(level)
         HStack(spacing: 8) {
             Image(systemName: "shield.lefthalf.filled").font(.system(size: 17, weight: .bold))
-            Text(String(format: "police_risk".localized, level.rawValue.capitalized)).font(.system(size: 17, weight: .bold))
+            Text("Police risk: \(level.rawValue.capitalized)").font(.system(size: 17, weight: .bold))
         }
         .foregroundColor(level == .medium ? Color(hex: 0x1F1300) : .white)
         .padding(.horizontal, 14).frame(height: 42)
         .background(Capsule().fill(color))
         .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-        .accessibilityLabel(String(format: "police_risk_score".localized, level.rawValue, score))
+        .accessibilityLabel("Police risk \(level.rawValue), \(score) out of 100")
     }
 }
 
@@ -894,14 +916,14 @@ struct AverageCheckCard: View {
                 .font(.system(size: 26, weight: .semibold))
                 .foregroundColor(over ? .white : Color(hex: 0xF9AB00))
             VStack(alignment: .leading, spacing: 1) {
-                Text("average_speed_check".localized).font(.subheadline.weight(.semibold))
-                Text(String(format: "left_distance".localized, Fmt.distance(max(check.metersLeft, 0)))).font(.caption)
+                Text("Average speed check").font(.subheadline.weight(.semibold))
+                Text("\(Fmt.distance(max(check.metersLeft, 0))) left").font(.caption)
                     .foregroundColor(over ? .white.opacity(0.9) : .secondary)
             }
             Spacer(minLength: 4)
             VStack(spacing: -2) {
                 Text("\(Fmt.speed(check.averageKmh))").font(.system(size: 24, weight: .bold)).monospacedDigit()
-                Text(String(format: "avg_unit".localized, Fmt.speedUnit)).font(.system(size: 10, weight: .medium))
+                Text("avg \(Fmt.speedUnit)").font(.system(size: 10, weight: .medium))
                     .foregroundColor(over ? .white.opacity(0.9) : .secondary)
             }
             if let limit = check.limitKmh { SpeedLimitSign(kmh: limit) }
@@ -935,11 +957,11 @@ struct AlongRouteSheet: View {
     @State private var picked: String?
 
     private let kinds: [(String, String, String)] = [
-        (Fmt.yards ? "Petrol".localized : "Gas".localized, "fuelpump.fill", Fmt.yards ? "petrol station" : "gas station"), ("EV charging".localized, "bolt.car.fill", "ev charging station"),
-        ("Coffee".localized, "cup.and.saucer.fill", "coffee"), ("Food".localized, "fork.knife", "restaurants"),
-        (Fmt.yards ? "Supermarket".localized : "Groceries".localized, "cart.fill", Fmt.yards ? "supermarket" : "grocery store"),
-        (Fmt.yards ? "Toilets".localized : "Restrooms".localized, "toilet.fill", Fmt.yards ? "public toilets" : "public restroom"),
-        ("Parking".localized, "parkingsign", "parking"), ("Pharmacy".localized, "cross.case.fill", "pharmacy"),
+        (Fmt.yards ? "Petrol" : "Gas", "fuelpump.fill", Fmt.yards ? "petrol station" : "gas station"), ("EV charging", "bolt.car.fill", "ev charging station"),
+        ("Coffee", "cup.and.saucer.fill", "coffee"), ("Food", "fork.knife", "restaurants"),
+        (Fmt.yards ? "Supermarket" : "Groceries", "cart.fill", Fmt.yards ? "supermarket" : "grocery store"),
+        (Fmt.yards ? "Toilets" : "Restrooms", "toilet.fill", Fmt.yards ? "public toilets" : "public restroom"),
+        ("Parking", "parkingsign", "parking"), ("Pharmacy", "cross.case.fill", "pharmacy"),
     ]
 
     var body: some View {
@@ -961,12 +983,12 @@ struct AlongRouteSheet: View {
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 }
                 if searching {
-                    HStack { ProgressView(); Text("looking_along_route".localized).foregroundColor(.secondary) }
+                    HStack { ProgressView(); Text("Looking along your route…").foregroundColor(.secondary) }
                 } else if picked != nil && found.isEmpty {
-                    Text("nothing_close_ahead".localized).foregroundColor(.secondary)
+                    Text("Nothing found close to the road ahead.").foregroundColor(.secondary)
                 }
                 if !found.isEmpty {
-                    Section("ahead_on_route".localized) {
+                    Section("Ahead on your route") {
                         ForEach(found, id: \.place.id) { f in
                             Button {
                                 nav.addStop(f.place)
@@ -983,8 +1005,8 @@ struct AlongRouteSheet: View {
                                     }
                                     Spacer()
                                     VStack(alignment: .trailing, spacing: 2) {
-                                        Text(String(format: "in_distance".localized, Fmt.distance(f.ahead))).font(.subheadline.weight(.medium)).foregroundColor(.primary)
-                                        Text("add_stop".localized).font(.caption.weight(.semibold)).foregroundColor(Vela.routeBlue)
+                                        Text("in \(Fmt.distance(f.ahead))").font(.subheadline.weight(.medium)).foregroundColor(.primary)
+                                        Text("Add stop").font(.caption.weight(.semibold)).foregroundColor(Vela.routeBlue)
                                     }
                                 }
                             }
@@ -992,9 +1014,9 @@ struct AlongRouteSheet: View {
                     }
                 }
             }
-            .navigationTitle("search_along_route".localized)
+            .navigationTitle("Search along route")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("close".localized) { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
     }
 
@@ -1137,7 +1159,7 @@ struct LaneStrip: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("use_highlighted_lanes".localized)
+        .accessibilityLabel("Use the highlighted lanes")
     }
 
     /** A lane that goes several ways shows the way this turn goes when it's a good lane. */
@@ -1180,7 +1202,7 @@ struct LaneStrip: View {
 struct RoundaboutDiagram: View {
     let shape: RoundaboutShape?
     let exit: Int
-    /// Traffic goes round clockwise (keep-left countries).
+    /** Traffic goes round clockwise (keep-left countries). */
     let clockwise: Bool
 
     private var layout: RoundaboutShape {

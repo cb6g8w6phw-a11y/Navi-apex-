@@ -79,8 +79,6 @@ struct DirectionsState {
     var transitTime: Date?
     var arriveBy = false
     var trip = 0
-    /// Why a drive without a green sticker was shortened or bent around a zone.
-    var stickerNote: String?
 
     var current: [Route] { transit ? [] : routes[mode] ?? [] }
     var route: Route? { current.indices.contains(selected) ? current[selected] : current.first }
@@ -103,15 +101,6 @@ final class AppModel: ObservableObject {
     @Published var searching = false
     /** The search box is open (so weather and fuel step aside to the left edge). */
     @Published var searchActive = false
-    /**
-     * What the phone's movement looks like when not navigating: sustained walking or cycling
-     * pace. Apex then offers the matching mode (and draws the paths layer) — on foot the
-     * router already follows footpaths, on a bike the cycle lanes.
-     */
-    @Published var activity: TravelMode?
-    private var speedSamples: [Double] = []
-    private var activityAt = Date.distantPast
-    private var activityDismissedAt = Date.distantPast
     /** Something is showing in the strip under the search bar (a notice, a report, roadworks, a station). */
     var topBannerShowing: Bool { notice != nil || wazeInfo != nil || roadInfo != nil || fuelInfo != nil }
     @Published var notice: String?
@@ -148,6 +137,8 @@ final class AppModel: ObservableObject {
     @Published var mapTick = 0
     /** Which way the map faces, for the compass button. */
     @Published var mapHeading: Double = 0
+    /** Compass calibration, opened from the location button. */
+    @Published var showCalibrate = false
 
     weak var map: MKMapView? { didSet { glide.map = map } }
     /** How wide the side panel is on a big screen (the open iPhone Duo), so the map centres
@@ -161,31 +152,10 @@ final class AppModel: ObservableObject {
     private var transitRequest = 0
     private var searchTask: Task<Void, Never>?
     private var navSub: AnyCancellable?
-    private var tripObs: [NSObjectProtocol] = []
 
     init() {
         location = LocationService()
         location.onUpdate = { [weak self] loc in self?.locationChanged(loc) }
-        let end = NotificationCenter.default.addObserver(forName: .kiteEndTrip, object: nil, queue: .main) { [weak self] _ in
-            self?.consumeTripCommands()
-        }
-        let mute = NotificationCenter.default.addObserver(forName: .kiteMuteTrip, object: nil, queue: .main) { [weak self] _ in
-            self?.consumeTripCommands()
-        }
-        tripObs = [end, mute]
-        consumeTripCommands()
-    }
-
-    /// The Dynamic Island asked to stop or mute. Safe to call often.
-    func consumeTripCommands() {
-        if TripCommand.end {
-            TripCommand.end = false
-            if nav != nil { endNavigation() }
-        }
-        if TripCommand.toggleMute {
-            TripCommand.toggleMute = false
-            nav?.muted.toggle()
-        }
     }
 
     var userLatLng: LatLng? {
@@ -393,7 +363,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    static let locationOffText = "Lokalizacja jest wyłączona dla Apex. Włącz ją w Ustawieniach, żeby dostać trasę z miejsca, w którym jesteś."
+    static let locationOffText = "Location is off for Apex. Turn it on in Settings to get directions from where you are."
 
     // MARK: My places
 
@@ -409,7 +379,7 @@ final class AppModel: ObservableObject {
         case .car: target = settings.parking
         }
         guard let target else {
-            if kind == .car { notice = "Nie ma jeszcze zapisanego parkingu. Stuknij P na mapie, gdy zaparkujesz." }
+            if kind == .car { notice = "No parking spot saved yet. Tap P on the map when you park." }
             else { picking = kind == .home ? .home : .work }
             return
         }
@@ -436,7 +406,7 @@ final class AppModel: ObservableObject {
     /** Remember where the car is: here, now, with the street name when one is found. */
     func saveParking() {
         guard let me = userLatLng else {
-            notice = location.denied ? "Lokalizacja jest wyłączona dla Apex. Włącz ją w Ustawieniach, żeby zapisać, gdzie stoi auto." : "Jeszcze szukam lokalizacji. Spróbuj za chwilę."
+            notice = location.denied ? "Location is off for Apex. Turn it on in Settings to save where you parked." : "Still finding your location. Try again in a moment."
             return
         }
         var p = Place(id: "parking:\(Int(Date().timeIntervalSince1970))", name: "Parked car", location: me, source: "osm")
@@ -459,7 +429,7 @@ final class AppModel: ObservableObject {
     }
 
     /** Long press: a dropped pin with the address there. */
-    func dropPin(at point: LatLng, name: String = "Pinezka") {
+    func dropPin(at point: LatLng, name: String = "Dropped pin") {
         var pin = Place(id: "pin:\(point.lat),\(point.lng)", name: name, location: point, source: "osm")
         pin.category = String(format: "%.5f, %.5f", point.lat, point.lng)
         select(pin)
@@ -550,7 +520,7 @@ final class AppModel: ObservableObject {
         guard let d = directions else { return }
         guard let me = userLatLng else {
             // Say so on the trip card itself, not just in passing.
-            let why = location.denied ? Self.locationOffText : "Czekam na lokalizację…"
+            let why = location.denied ? Self.locationOffText : "Waiting for your location…"
             for m in TravelMode.allCases { directions?.errors[m] = why }
             directions?.tripsError = why
             directions?.trips = []
@@ -569,39 +539,23 @@ final class AppModel: ObservableObject {
         routesRequest += 1
         let req = routesRequest
         let hw = settings.avoidHighways, tolls = settings.avoidTolls, google = !settings.noGoogle
-        let keepOut = !settings.mayEnterUmwelt
-        directions?.stickerNote = nil
         // Already driving (asked at a red light, say): no route that starts with a U-turn.
         let moving = location.last.flatMap { l in l.speed >= 4 && l.course >= 0 && l.courseAccuracy >= 0 && l.courseAccuracy < 45 ? l.course : nil }
         let heading = d.reversed ? nil : moving
         for m in TravelMode.allCases {
             directions?.loading.insert(m)
             Task {
-                var target = to
-                var snap: String?
-                if m == .drive, keepOut, let z = RouteMind.umwelt(at: to) {
-                    target = RouteMind.edgePoint(of: z, near: to)
-                    snap = "Bez zielonej plakietki nie wjadę do \(z.name). Trasa kończy się przy granicy strefy."
-                }
-                let r = await Directions.routes(from: from, to: target, mode: m, avoidHighways: hw, avoidTolls: tolls, useGoogle: google, via: via,
+                let r = await Directions.routes(from: from, to: to, mode: m, avoidHighways: hw, avoidTolls: tolls, useGoogle: google, via: via,
                                                 heading: m == .drive ? heading : nil, alternatives: true)
-                var routes = r.routes
-                var note = snap
-                if m == .drive, keepOut, !routes.isEmpty {
-                    let kept = await RouteMind.keepOut(routes, from: from, to: target, via: via)
-                    routes = kept.routes
-                    if note == nil { note = kept.note }
-                }
                 guard directions?.destination.id == d.destination.id, routesRequest == req else { return }
                 directions?.loading.remove(m)
-                directions?.routes[m] = routes
-                if m == .drive { directions?.stickerNote = note }
-                if routes.isEmpty {
-                    directions?.errors[m] = Connectivity.explain(r.error == "Nie znaleziono trasy." ? "Nie znaleziono trasy." : "Nie udało się teraz ułożyć trasy. Spróbuj za chwilę.")
+                directions?.routes[m] = r.routes
+                if r.routes.isEmpty {
+                    directions?.errors[m] = Connectivity.explain(r.error == "No route found." ? "No route found." : "Couldn't get a route just now. Try again in a moment.")
                 }
                 if m == directions?.mode {
                     frameRoute()
-                    if autoStart, !routes.isEmpty {
+                    if autoStart, !r.routes.isEmpty {
                         autoStart = false
                         startNavigation()
                     }
@@ -669,15 +623,12 @@ final class AppModel: ObservableObject {
             self.endNavigation()
         }
         location.setNavigating(true, mode: route.mode.rawValue)
+        NowPlay.shared.attach()
         map?.showsUserLocation = false
         if let loc = location.last { n.handle(loc); followCamera(n, loc, animated: false) }
     }
 
     func endNavigation() {
-        // The car's odometer ticks up by itself: every kilometre driven with Apex navigating counts.
-        if let driven = nav?.progress?.alongMeters, driven > 500 {
-            settings.carOdometer += Int(driven)
-        }
         nav?.stop()
         glide.stop()
         nav = nil
@@ -704,60 +655,10 @@ final class AppModel: ObservableObject {
     }
 
     private func locationChanged(_ loc: CLLocation) {
-        consumeTripCommands()
-        detectActivity(loc)
         guard let n = nav else { return }
         n.handle(loc)
         followCamera(n, loc, animated: true)
         mapTick += 1
-    }
-
-    // MARK: Foot and bike
-
-    /** The mode Apex is working in right now: the one being navigated, planned, or detected. */
-    var softMode: TravelMode? {
-        nav?.route.mode ?? directions?.mode ?? activity
-            ?? (settings.defaultMode == .drive ? nil : settings.defaultMode)
-    }
-
-    /** Walking or cycling pace, kept up for a while: not one bad GPS point. */
-    private func detectActivity(_ loc: CLLocation) {
-        guard nav == nil, loc.horizontalAccuracy < 50 else { return }
-        speedSamples.append(max(0, loc.speed))
-        if speedSamples.count > 24 { speedSamples.removeFirst(speedSamples.count - 24) }
-        guard speedSamples.count >= 8, Date().timeIntervalSince(activityAt) > 10 else { return }
-        activityAt = Date()
-        let sorted = speedSamples.sorted()
-        let med = sorted[sorted.count / 2], fast = sorted.last ?? 0
-        if med >= 9 {
-            // Clearly a car: forget the samples, the chip should not come back while driving.
-            speedSamples = []
-            if activity != nil { withAnimation { activity = nil } }
-        } else if med >= 0.5, fast < 9 {
-            let found: TravelMode = med < 2.4 ? .walk : .bike
-            if activity != found { withAnimation { activity = found } }
-        }
-    }
-
-    /** The chip's "turn it on": the default mode and any open trip plan move to walking or cycling. */
-    func applyActivity(_ m: TravelMode) {
-        settings.defaultMode = m
-        if directions != nil { setMode(m) }
-        speedSamples = []
-        withAnimation { activity = nil }
-    }
-
-    /** Not now: the detection keeps running, but the chip stays away for a while. */
-    func dismissActivity() {
-        activityDismissedAt = Date()
-        speedSamples = []
-        withAnimation { activity = nil }
-    }
-
-    /** The one-tap offer to switch modes, once walking or cycling has been going on for a bit. */
-    var showActivityChip: Bool {
-        activity != nil && settings.defaultMode != activity
-            && Date().timeIntervalSince(activityDismissedAt) > 600
     }
 
     private func followCamera(_ n: Navigator, _ loc: CLLocation, animated: Bool) {
