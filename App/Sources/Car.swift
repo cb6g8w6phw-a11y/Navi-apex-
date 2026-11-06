@@ -308,23 +308,19 @@ struct CarPage: View {
                                  ? "Elektryk wjeżdża do zielonej strefy bez plakietki. Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją."
                                  : "Baku, spalanie i rodzaj paliwa liczą podpowiedź o tankowaniu przed granicą. Pełny bak albo krótka trasa pod dom zostają ciche. Bez zielonej plakietki sprawdź, czy cel nie leży w strefie. Przebieg sam rośnie o każdy kilometr z włączoną nawigacją.")) {
                 Toggle(isOn: $settings.carBallOn) { SettingLabel("Ikona auta na mapie", icon: "map", color: 0x7C3AED) }
-                TextField("Model (np. VW Golf 7)", text: $settings.carName)
+                HStack(spacing: 12) {
+                    SettingLabel("Model", icon: "car.fill", color: 0x334155)
+                    TextField("Audi A4", text: $settings.carName)
+                        .multilineTextAlignment(.trailing)
+                        .submitLabel(.done)
+                }
                 Picker(selection: $settings.carFuel) {
                     ForEach(fuels, id: \.0) { Text($0.1).tag($0.0) }
                 } label: { SettingLabel("Rodzaj paliwa", icon: "drop.fill", color: 0x0891B2) }
                 if settings.carFuel != "electric" {
-                    Stepper(value: $settings.fuelTank, in: 20...120, step: 1) {
-                        SettingLabel("Pojemność baku: \(settings.fuelTank) l", icon: "fuelpump.fill", color: 0x2563EB)
-                    }
-                    .onChange(of: settings.fuelTank) { tank in
-                        if settings.fuelLeft > tank { settings.fuelLeft = tank }
-                    }
-                    Stepper(value: $settings.fuelLeft, in: 0...max(settings.fuelTank, 1), step: 1) {
-                        SettingLabel("Teraz w baku: \(settings.fuelLeft) l", icon: "drop.halffull", color: 0xF59E0B)
-                    }
-                    Stepper(value: $settings.carConsumption, in: 3...20, step: 0.1) {
-                        SettingLabel(String(format: "Spalanie: %.1f l/100 km", settings.carConsumption), icon: "gauge.with.needle.fill", color: 0xEA580C)
-                    }
+                    fuelRow("Pojemność baku", icon: "fuelpump.fill", color: 0x2563EB, text: tankText, suffix: "l")
+                    fuelRow("Teraz w baku", icon: "drop.halffull", color: 0xF59E0B, text: leftText, suffix: "l")
+                    fuelRow("Spalanie", icon: "gauge.with.needle.fill", color: 0xEA580C, text: useText, suffix: "l/100")
                 }
                 Toggle(isOn: $settings.greenSticker) {
                     SettingLabel("Zielona plakietka", detail: "Naklejka na szybie. Wyłącz, jeśli auto nie może wjechać do strefy.", icon: "leaf.fill", color: 0x16A34A)
@@ -375,7 +371,92 @@ struct CarPage: View {
             }
         }
         .environment(\.locale, Locale(identifier: "pl_PL"))
+        .navigationTitle("Moje auto")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { commitDrafts() }
         .kiteList()
+    }
+
+    @State private var tankDraft: String?
+    @State private var leftDraft: String?
+    @State private var useDraft: String?
+
+    private func fuelRow(_ title: String, icon: String, color: UInt32, text: Binding<String>, suffix: String) -> some View {
+        HStack(spacing: 8) {
+            SettingLabel(title, icon: icon, color: color)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .semibold).monospacedDigit())
+                .frame(width: 72)
+            Text(suffix)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .frame(width: suffix.count > 2 ? 42 : 16, alignment: .leading)
+        }
+    }
+
+    private var tankText: Binding<String> {
+        Binding(
+            get: { tankDraft ?? "\(settings.fuelTank)" },
+            set: { raw in
+                let digits = String(raw.filter(\.isNumber).prefix(3))
+                tankDraft = digits
+                if let n = Int(digits), (20...120).contains(n) {
+                    settings.fuelTank = n
+                    if settings.fuelLeft > n { settings.fuelLeft = n }
+                }
+            }
+        )
+    }
+
+    private var leftText: Binding<String> {
+        Binding(
+            get: { leftDraft ?? "\(settings.fuelLeft)" },
+            set: { raw in
+                let digits = String(raw.filter(\.isNumber).prefix(3))
+                leftDraft = digits
+                let cap = max(settings.fuelTank, 1)
+                if let n = Int(digits), (0...cap).contains(n) { settings.fuelLeft = n }
+            }
+        )
+    }
+
+    private var useText: Binding<String> {
+        Binding(
+            get: {
+                if let useDraft { return useDraft }
+                return String(format: "%.1f", settings.carConsumption).replacingOccurrences(of: ".", with: ",")
+            },
+            set: { raw in
+                let cleaned = raw.replacingOccurrences(of: ",", with: ".")
+                var out = ""
+                var dot = false
+                for ch in cleaned {
+                    if ch.isNumber { out.append(ch) }
+                    else if ch == ".", !dot { out.append("."); dot = true }
+                    if out.count == 4 { break }
+                }
+                useDraft = out.replacingOccurrences(of: ".", with: ",")
+                if let n = Double(out), (2...30).contains(n) {
+                    settings.carConsumption = (n * 10).rounded() / 10
+                }
+            }
+        )
+    }
+
+    private func commitDrafts() {
+        if let n = Int(tankDraft ?? ""), (20...120).contains(n) { settings.fuelTank = n }
+        else { tankDraft = nil }
+        let cap = max(settings.fuelTank, 1)
+        if let n = Int(leftDraft ?? ""), (0...cap).contains(n) { settings.fuelLeft = n }
+        else { leftDraft = nil }
+        if let raw = useDraft?.replacingOccurrences(of: ",", with: "."), let n = Double(raw), (2...30).contains(n) {
+            settings.carConsumption = (n * 10).rounded() / 10
+        }
+        useDraft = nil
+        tankDraft = nil
+        leftDraft = nil
     }
 
     /** The typed odometer: digits only, capped, empty when the car is brand new. */

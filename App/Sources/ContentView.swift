@@ -60,6 +60,19 @@ struct ContentView: View {
                 }
             }
             .id(settings.theme == .black)
+            if let ask = model.pump {
+                VStack {
+                    FuelPumpCard(settings: settings, ask: ask,
+                                 no: { withAnimation { model.pumpNo() } },
+                                 yes: { withAnimation { model.pumpYes() } },
+                                 add: { litres in withAnimation { model.pumpAdd(litres: litres) } })
+                        .padding(.horizontal, 12)
+                        .padding(.top, model.nav?.isCouch == true ? 118 : 62)
+                    Spacer()
+                }
+                .inSidePanel(panel)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
             if let info = model.wazeInfo, model.nav == nil, model.tab == .map {
                 VStack {
                     WazeInfoCard(alert: info) { withAnimation { model.wazeInfo = nil } }

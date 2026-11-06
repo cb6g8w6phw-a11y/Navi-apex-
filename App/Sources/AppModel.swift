@@ -127,6 +127,9 @@ final class AppModel: ObservableObject {
     /** A petrol station tapped on the map, and the cheapest one near you (for the chip). */
     @Published var fuelInfo: FuelStation?
     @Published var fuelBest: FuelStation?
+    /** Forecourt prompt: are you filling up, and for how much. */
+    @Published var pump: PumpAsk?
+    private var pumpInside: String?
     /** The "Add stop" search sheet. */
     @Published var addingStop = false
     @Published var showSaved = false
@@ -693,6 +696,7 @@ final class AppModel: ObservableObject {
         map?.showsUserLocation = true
         directions = nil
         showSteps = false
+        if pump?.simulated == true { pump = nil }
         resetCamera()
     }
 
@@ -711,10 +715,49 @@ final class AppModel: ObservableObject {
     }
 
     private func locationChanged(_ loc: CLLocation) {
+        watchPump(loc)
         guard let n = nav, !n.isCouch else { return }
         n.handle(loc)
         followCamera(n, loc, animated: true)
         mapTick += 1
+    }
+
+    /// On a forecourt: ask once. Leaving the station closes the card, whichever answer was showing.
+    private func watchPump(_ loc: CLLocation) {
+        if nav?.isCouch == true || settings.carFuel == "electric" { return }
+        let here = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
+        FuelPrices.shared.lookForVisit(here)
+        let slow = loc.speed < 0 || loc.speed < 9
+        if let st = FuelPrices.shared.nearestVisit(here, within: 75), slow || pumpInside == st.id {
+            if pumpInside != st.id {
+                pumpInside = st.id
+                pump = PumpAsk(stationID: st.id, name: st.title, price: st.price, typing: false, simulated: false)
+            }
+            return
+        }
+        guard pumpInside != nil else { return }
+        if FuelPrices.shared.nearestVisit(here, within: 140)?.id != pumpInside {
+            pumpInside = nil
+            pump = nil
+        }
+    }
+
+    func pumpNo() { pump = nil }
+
+    func pumpYes() {
+        guard var ask = pump else { return }
+        ask.typing = true
+        pump = ask
+    }
+
+    /// Adds the filled litres to the tank, never past the tank size.
+    func pumpAdd(litres: Double) {
+        let room = max(0, settings.fuelTank - settings.fuelLeft)
+        let put = min(room, max(0, Int(litres.rounded())))
+        guard put > 0 else { pump = nil; return }
+        settings.fuelLeft += put
+        notice = "Dolano \(put) l · w baku \(settings.fuelLeft) l"
+        pump = nil
     }
 
     private func followCamera(_ n: Navigator, _ loc: CLLocation, animated: Bool) {
@@ -775,7 +818,8 @@ final class AppModel: ObservableObject {
         let leg = Self.couchLeg(scene)
         let google = !settings.noGoogle
         Task { @MainActor in
-            let r = await Directions.routes(from: leg.from, to: leg.to, mode: .drive, avoidHighways: false, avoidTolls: false,
+            let r = await Directions.routes(from: leg.from, to: leg.to, mode: .drive,
+                                            avoidHighways: scene == .highways, avoidTolls: false,
                                             useGoogle: google, via: [], heading: nil, alternatives: false)
             guard let route = r.routes.first, route.polyline.count >= 2 else {
                 done("Nie udało się pobrać trasy. Sprawdź sieć i stuknij jeszcze raz.")
@@ -802,6 +846,15 @@ final class AppModel: ObservableObject {
             self.glide.fix(n, fix, across: 1400, jump: true)
             self.frame(route.polyline, bottomFraction: 0.28, top: 200)
             self.mapTick += 1
+            if scene == .haptic {
+                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                }
+            }
+            if scene == .pump {
+                self.pump = PumpAsk(stationID: "sim-aral", name: "Aral", price: 1.759, typing: false, simulated: true)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard self?.nav?.isCouch == true else { return }
                 self?.frame(route.polyline, bottomFraction: 0.28, top: 200)
@@ -825,6 +878,18 @@ final class AppModel: ObservableObject {
             return CouchLeg(from: LatLng(52.228, 10.974), to: LatLng(52.406, 16.925), title: "Granica DE–PL", place: "Poznań")
         case .umwelt:
             return CouchLeg(from: LatLng(52.172, 11.642), to: LatLng(52.120, 11.630), title: "Umwelt · Magdeburg", place: "Magdeburg")
+        case .highways:
+            return CouchLeg(from: LatLng(52.256, 11.508), to: LatLng(52.271, 11.856), title: "Bez autostrad", place: "Burg")
+        case .junctions:
+            return CouchLeg(from: LatLng(52.148, 11.618), to: LatLng(52.112, 11.639), title: "Trudne skrzyżowanie", place: "Centrum")
+        case .detour:
+            return CouchLeg(from: LatLng(52.230, 11.620), to: LatLng(52.263, 11.980), title: "Prawdziwy czas", place: "Objazd")
+        case .wave:
+            return CouchLeg(from: LatLng(52.142, 11.612), to: LatLng(52.128, 11.668), title: "Zielona fala", place: "Światła")
+        case .haptic:
+            return CouchLeg(from: LatLng(52.168, 11.628), to: LatLng(52.151, 11.671), title: "Wibracja", place: "Skręt")
+        case .pump:
+            return CouchLeg(from: LatLng(52.155, 11.632), to: LatLng(52.140, 11.655), title: "Stacja", place: "Aral")
         }
     }
 
@@ -834,6 +899,7 @@ final class AppModel: ObservableObject {
         case .tunnel: return total * 0.42
         case .umwelt: return max(80, total - 1_200)
         case .border: return nearestAlong(line, LatLng(52.33, 14.45))
+        case .highways, .junctions, .detour, .wave, .haptic, .pump: return total * 0.4
         }
     }
 
@@ -879,6 +945,30 @@ final class AppModel: ObservableObject {
             let blocked = !settings.mayEnterUmwelt
             let note = GuidanceNote(title: "Umweltzone \(name)", body: hit?.body ?? "Do wjazdu potrzebna zielona plakietka.", tone: "info")
             return ([note], CouchChip(name: name, blocked: blocked))
+        case .highways:
+            return ([GuidanceNote(title: "Unikaj autostrad",
+                                  body: "Ta trasa idzie bocznymi drogami. Autostrady i bramki są poza nią.",
+                                  tone: "info")], nil)
+        case .junctions:
+            return ([GuidanceNote(title: "Unikaj trudnych skrzyżowań",
+                                  body: "Omijam wjazd bez świateł i skrzyżowanie, na którym trzeba przeciąć dwa pasy naraz.",
+                                  tone: "info")], nil)
+        case .detour:
+            return ([GuidanceNote(title: "Prawdziwy czas objazdu",
+                                  body: "Korek dodaje 6 min. Boczna droga jest szybsza o 4 min, więc ją biorę. Gdyby stała razem z resztą, zostałbym na trasie.",
+                                  tone: "good")], nil)
+        case .wave:
+            return ([GuidanceNote(title: "Zielona fala · 45 km/h",
+                                  body: "Tyle, żeby wjechać na następne światła na zielonym. Szybciej i tak złapiesz czerwone.",
+                                  tone: "good")], nil)
+        case .haptic:
+            return ([GuidanceNote(title: "Wibracja przed skrętem",
+                                  body: "Za około 80 m skręt. Telefon wibruje raz, bez głosu, żebyś nie musiał patrzeć.",
+                                  tone: "info")], nil)
+        case .pump:
+            return ([GuidanceNote(title: "Stacja benzynowa",
+                                  body: "Wjazd na stację. Pytanie jest na karcie: za ile i ile litrów. Cena przelicza euro na litry i dopisuje je do baku.",
+                                  tone: "info")], nil)
         }
     }
 }

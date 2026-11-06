@@ -34,6 +34,10 @@ final class FuelPrices {
     private(set) var updatedAt = Date.distantPast
     private(set) var ahead: [FuelStation] = []
     private(set) var aheadAt = Date.distantPast
+    /// Stations found just to notice a forecourt, not drawn as map pins.
+    private(set) var visit: [FuelStation] = []
+    private var visitTask: Task<Void, Never>?
+    private var visitAt = Date.distantPast
     /** Called on the main thread when a look brought new data. */
     var onChange: (() -> Void)?
 
@@ -113,6 +117,58 @@ final class FuelPrices {
         aheadAt = .distantPast
     }
 
+    /// The closest priced (or, failing that, mapped) station within `within` metres.
+    func nearestVisit(_ here: LatLng, within: Double) -> FuelStation? {
+        (stations + ahead + visit)
+            .filter { $0.location.distance(to: here) <= within }
+            .min { $0.location.distance(to: here) < $1.location.distance(to: here) }
+    }
+
+    /// Asks Tankerkönig for a live price around the car, then OpenStreetMap if that has nothing.
+    func lookForVisit(_ here: LatLng) {
+        guard Date().timeIntervalSince(visitAt) > 40, visitTask == nil else { return }
+        visitAt = Date()
+        let settings = AppSettings.shared
+        let key = settings.fuelKey.trimmingCharacters(in: .whitespaces)
+        let type = Self.visitType(settings)
+        visitTask = Task { [weak self] in
+            var found: [FuelStation] = []
+            if !key.isEmpty, let priced = await Self.fetch(here, radius: 1.5, key: key, type: type) {
+                found = priced
+            }
+            if found.isEmpty, let osm = await Self.osmFuel(here) { found = osm }
+            guard let self else { return }
+            self.visitTask = nil
+            if !found.isEmpty { self.visit = found }
+        }
+    }
+
+    private static func visitType(_ s: AppSettings) -> String {
+        switch s.carFuel {
+        case "e5": return "e5"
+        case "e10": return "e10"
+        default:
+            return (s.fuelType == "e5" || s.fuelType == "e10") ? s.fuelType : "diesel"
+        }
+    }
+
+    /// A fuel node from OpenStreetMap, with no price, so the prompt can still appear.
+    private nonisolated static func osmFuel(_ p: LatLng) async -> [FuelStation]? {
+        let q = "[out:json][timeout:12];node[\"amenity\"=\"fuel\"](around:180,\(String(format: "%.5f", p.lat)),\(String(format: "%.5f", p.lng)));out tags 12;"
+        guard let data = await Overpass.query(q),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let elements = root["elements"] as? [[String: Any]] else { return nil }
+        return elements.compactMap { e in
+            guard let lat = e["lat"] as? Double, let lon = e["lon"] as? Double else { return nil }
+            let tags = e["tags"] as? [String: String] ?? [:]
+            let idn = (e["id"] as? NSNumber)?.int64Value ?? 0
+            let brand = tags["brand"] ?? tags["operator"] ?? tags["name"] ?? "Stacja"
+            return FuelStation(id: "osm-\(idn)", brand: brand, name: tags["name"] ?? brand,
+                               street: tags["addr:street"] ?? "", place: tags["addr:city"] ?? "",
+                               location: LatLng(lat, lon), price: 0, open: true)
+        }
+    }
+
     // MARK: Talking to the API
 
     private nonisolated static func fetch(_ p: LatLng, radius: Double, key: String, type: String) async -> [FuelStation]? {
@@ -155,24 +211,24 @@ final class FuelPrices {
     /** For the Settings button: does this key work? Asks about 5 km around the middle of Berlin. */
     nonisolated static func check(key: String) async -> String {
         let k = key.trimmingCharacters(in: .whitespaces)
-        guard !k.isEmpty else { return "Najpierw wpisz klucz." }
-        guard var comps = URLComponents(string: base) else { return "Nie udało się zbudować zapytania." }
+        guard !k.isEmpty else { return "Enter your key first." }
+        guard var comps = URLComponents(string: base) else { return "Couldn't build the request." }
         comps.queryItems = [
             URLQueryItem(name: "lat", value: "52.5200"), URLQueryItem(name: "lng", value: "13.4050"),
             URLQueryItem(name: "rad", value: "5"), URLQueryItem(name: "sort", value: "price"),
             URLQueryItem(name: "type", value: "diesel"), URLQueryItem(name: "apikey", value: k),
         ]
         guard let url = comps.url, let (data, resp) = try? await URLSession.shared.data(from: url) else {
-            return "Tankerkönig nie odpowiada. Sprawdź połączenie."
+            return "No answer from Tankerkönig. Check your connection."
         }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            return "Nieoczekiwana odpowiedź (kod \((resp as? HTTPURLResponse)?.statusCode ?? 0))."
+            return "Unexpected answer (code \((resp as? HTTPURLResponse)?.statusCode ?? 0))."
         }
         if (json["ok"] as? Bool) == true {
             let n = (json["stations"] as? [[String: Any]])?.count ?? 0
-            return "Klucz działa: \(n) stacji w okolicy testowej."
+            return "The key works: \(n) stations found in the test area."
         }
-        return (json["message"] as? String) ?? "Klucz został odrzucony."
+        return (json["message"] as? String) ?? "The key was refused."
     }
 }
 
@@ -297,7 +353,7 @@ struct FuelCard: View {
                 Text([station.address, meters.map { Fmt.distance($0) }].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline).foregroundColor(.secondary).lineLimit(2)
                 Button(action: go) {
-                    Label("Trasa", systemImage: "arrow.triangle.turn.up.right.circle.fill")
+                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.system(size: 15, weight: .bold))
                 }
                 .padding(.top, 4)
@@ -345,5 +401,116 @@ struct FuelAheadChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint("Tap to hide")
+    }
+}
+
+/// Asked when the car rolls onto a forecourt. `typing` is the amount step.
+struct PumpAsk: Equatable {
+    var stationID: String
+    var name: String
+    var price: Double
+    var typing: Bool
+    var simulated: Bool
+}
+
+/** A small card: "are you filling up?", then euros and litres at the live price. */
+struct FuelPumpCard: View {
+    @ObservedObject var settings: AppSettings
+    let ask: PumpAsk
+    var no: () -> Void
+    var yes: () -> Void
+    var add: (Double) -> Void
+
+    @State private var euros = ""
+    @State private var litres = ""
+    @FocusState private var focus: Field?
+    private enum Field { case euro, litre }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "fuelpump.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(hex: 0x2563EB))
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(Color(hex: 0x2563EB).opacity(0.16)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ask.name).font(.system(size: 15, weight: .bold)).lineLimit(1)
+                    Text(ask.price > 0
+                         ? String(format: "%.3f €/l · cena na żywo", ask.price)
+                         : "Brak ceny na żywo · wpisz litry")
+                        .font(.system(size: 12)).foregroundColor(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Button(action: no) {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .bold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Zamknij")
+            }
+            if !ask.typing {
+                Text("Jesteś na stacji. Tankujesz?")
+                    .font(.system(size: 14, weight: .semibold))
+                HStack(spacing: 8) {
+                    Button("Nie", action: no).buttonStyle(.bordered).controlSize(.small)
+                    Button("Tak, tankuję", action: yes).buttonStyle(.borderedProminent).controlSize(.small)
+                }
+            } else {
+                if ask.price > 0 { amount("Za ile", text: $euros, suffix: "€", field: .euro) }
+                amount("Litry", text: $litres, suffix: "l", field: .litre)
+                Text(preview).font(.system(size: 12)).foregroundColor(.secondary)
+                Button("Dodaj do baku", action: commit)
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .disabled(parsedLitres < 0.4)
+            }
+        }
+        .padding(12)
+        .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onChange(of: euros) { _ in sync(fromEuro: true) }
+        .onChange(of: litres) { _ in sync(fromEuro: false) }
+    }
+
+    private func amount(_ title: String, text: Binding<String>, suffix: String, field: Field) -> some View {
+        HStack(spacing: 8) {
+            Text(title).font(.system(size: 14, weight: .semibold)).frame(width: 58, alignment: .leading)
+            TextField("0", text: text)
+                .keyboardType(.decimalPad)
+                .focused($focus, equals: field)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 16, weight: .semibold).monospacedDigit())
+            Text(suffix).font(.system(size: 14)).foregroundColor(.secondary).frame(width: 18, alignment: .leading)
+        }
+    }
+
+    private var parsedLitres: Double { Self.number(litres) ?? 0 }
+
+    private var preview: String {
+        let room = max(0, settings.fuelTank - settings.fuelLeft)
+        let put = min(Int(parsedLitres.rounded()), room)
+        return "W baku będzie \(settings.fuelLeft + put) l z \(settings.fuelTank) l"
+    }
+
+    private func commit() { add(parsedLitres) }
+
+    private func sync(fromEuro: Bool) {
+        guard ask.price > 0 else { return }
+        if fromEuro {
+            guard focus == .euro, let e = Self.number(euros) else { return }
+            litres = Self.text(e / ask.price)
+        } else {
+            guard focus == .litre, let l = Self.number(litres) else { return }
+            euros = Self.text(l * ask.price)
+        }
+    }
+
+    private static func text(_ n: Double) -> String {
+        String(format: "%.1f", n).replacingOccurrences(of: ".", with: ",")
+    }
+
+    private static func number(_ s: String) -> Double? {
+        let t = s.replacingOccurrences(of: ",", with: ".").filter { $0.isNumber || $0 == "." }
+        guard !t.isEmpty, t != "." else { return nil }
+        return Double(t)
     }
 }

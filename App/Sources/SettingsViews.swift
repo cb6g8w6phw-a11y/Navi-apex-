@@ -420,11 +420,17 @@ struct SettingsView: View {
     private var simPage: some View {
         Form {
             Section {
+                simButton(.highways, "Symuluj unikanie autostrad", "Trasa bocznymi drogami, bez autostrady.", "road.lanes", 0x1D4ED8)
+                simButton(.junctions, "Symuluj trudne skrzyżowanie", "Karta omijania skrzyżowania bez świateł.", "arrow.triangle.turn.up.right.circle.fill", 0x0F766E)
+                simButton(.detour, "Symuluj prawdziwy czas objazdu", "Korek i boczna droga, która naprawdę jedzie.", "clock.fill", 0x2563EB)
                 simButton(.tunnel, "Symuluj wjazd do tunelu", "Trasa przez Elbtunnel i karta czujników.", "location.slash.fill", 0x0F766E)
+                simButton(.wave, "Symuluj zieloną falę", "Prędkość, żeby trafić światła na zielono.", "lightbulb.fill", 0x16A34A)
+                simButton(.haptic, "Symuluj wibrację przed skrętem", "Telefon wibruje, karta mówi za ile skręt.", "iphone.radiowaves.left.and.right", 0x7C3AED)
                 simButton(.border, "Symuluj dojazd do granicy DE–PL", "Trasa Helmstedt–Poznań, kolejka i paliwo.", "flag.fill", 0xDC2626)
                 simButton(.umwelt, "Symuluj strefę Umwelt", "Trasa do centrum Magdeburga i plakietka.", "leaf.fill", 0x16A34A)
+                simButton(.pump, "Symuluj stację benzynową", "Pytanie o tankowanie, cena i litry do baku.", "fuelpump.fill", 0x2563EB)
             } footer: {
-                Text(simError ?? "Otwiera mapę z prawdziwą linią trasy. Na górze jest czerwony przycisk Zamknij. GPS zostaje w spokoju.")
+                Text(simError ?? "Każdy przycisk otwiera mapę z linią trasy i kartą tej funkcji. Na górze jest czerwony Zamknij. GPS zostaje w spokoju.")
             }
         }
         .kiteList()
@@ -630,6 +636,6 @@ struct WazeSettingsView: View {
 
 
 enum CouchScene: String, Identifiable {
-    case tunnel, border, umwelt
+    case tunnel, border, umwelt, highways, junctions, detour, wave, haptic, pump
     var id: String { rawValue }
 }
