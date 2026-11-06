@@ -44,6 +44,26 @@ struct NavigationOverlay: View {
     var body: some View {
         // One column, so however many warnings are up, they push the map buttons down rather than cover them.
         VStack(spacing: 10) {
+            if nav.isCouch {
+                HStack(spacing: 10) {
+                    Text("Symulacja · \(nav.couchTitle)")
+                        .font(.system(size: 15, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 8)
+                    Button { model.endNavigation() } label: {
+                        Label("Zamknij", systemImage: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .padding(.horizontal, 14)
+                            .frame(height: 40)
+                            .foregroundColor(.white)
+                            .background(Capsule().fill(Color(hex: 0xDC2626)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Zamknij symulację")
+                }
+                .padding(.horizontal, 4)
+            }
             VStack(spacing: 10) {
                 if nav.arrived {
                     ArrivedCard(name: nav.destination.name, onPark: nav.route.mode == .drive ? { model.saveParking() } : nil,
@@ -52,7 +72,18 @@ struct NavigationOverlay: View {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if let note = nav.guidance, !nav.arrived {
+                if nav.isCouch, !nav.arrived {
+                    ForEach(Array(nav.couchNotes.enumerated()), id: \.offset) { _, note in
+                        MindNoteCard(note: note)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let chip = nav.couchChip {
+                        HStack {
+                            UmweltChip(name: chip.name, blocked: chip.blocked)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                } else if let note = nav.guidance, !nav.arrived {
                     MindNoteCard(note: note)
                         .fixedSize(horizontal: false, vertical: true)
                 }
