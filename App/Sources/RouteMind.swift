@@ -152,6 +152,7 @@ enum RouteMind {
         return max(0, Int((Double(capacity) * (1 - used)).rounded()))
     }
 
+    @MainActor
     static func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         guard MindSettings.shared.haptics else { return }
         UIImpactFeedbackGenerator(style: style).impactOccurred()
