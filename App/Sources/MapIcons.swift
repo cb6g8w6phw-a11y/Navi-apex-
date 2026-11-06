@@ -46,6 +46,7 @@ enum MapIcons {
             case "puck": img = puck(dark: dark)
             case "cam-speed": img = speedCamera()
             case "cam-plate": img = plateCamera()
+            case "cam-watch": img = watchCamera()
             case "traffic-light": img = trafficLight()
             case "turn-head": img = turnHead()
             case "fuel": img = dot("fuelpump.fill", UIColor(hex: 0x2563EB))
@@ -131,6 +132,17 @@ enum MapIcons {
             arm.lineWidth = 2.4
             UIColor.white.setStroke()
             arm.stroke()
+        }
+    }
+
+    /** A plain town camera: slate badge, small so a street of them stays readable. */
+    static func watchCamera() -> UIImage {
+        badge(UIColor(hex: 0x475569)) { slate in
+            UIColor.white.setFill()
+            UIBezierPath(roundedRect: CGRect(x: 11, y: 16, width: 16, height: 12), cornerRadius: 3).fill()
+            UIBezierPath(ovalIn: CGRect(x: 28, y: 18, width: 8, height: 8)).fill()
+            slate.setFill()
+            UIBezierPath(ovalIn: CGRect(x: 30, y: 20, width: 4, height: 4)).fill()
         }
     }
 
