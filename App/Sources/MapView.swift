@@ -2,6 +2,9 @@ import MapKit
 import SwiftUI
 import UIKit
 
+/// The green Umweltzone fill. Only one is on the map, and only while the trip still has to enter it.
+final class UmweltPolygon: MKPolygon {}
+
 // MARK: - Things drawn on the map
 
 /** One pin, badge or the car: everything Kite puts on the map besides lines. */
@@ -399,6 +402,8 @@ struct VelaMapView: UIViewRepresentable {
         private var heatOverlay: HeatOverlay?
         private var terrainOverlay: MKTileOverlay?
         private var radarOverlay: DWDRadarOverlay?
+        private var zoneOverlay: UmweltPolygon?
+        private var zoneName: String?
         private var railLines: [StyledLine] = []
         private var routeLines: [StyledLine] = []
         private var routeBase: [StyledLine] = []
@@ -501,6 +506,7 @@ struct VelaMapView: UIViewRepresentable {
                 radarOverlay = s.radarOn ? DWDRadarOverlay() : nil
                 overlaysDirty = true
             }
+            syncZone()
 
             let z = map.zoomLevel
             gates = [z >= 11, z >= 14, z >= 11, z >= 9]
@@ -562,6 +568,32 @@ struct VelaMapView: UIViewRepresentable {
             if changed, let v = map.view(for: ex) as? KiteAnnotationView { v.configure(ex, dark: dark) }
         }
 
+        /** The green zone, only for the city this pin or this drive still has to enter. */
+        private func syncZone() {
+            let show = Self.zoneToDraw(model)
+            guard show?.name != zoneName else { return }
+            zoneName = show?.name
+            if let show {
+                var coords = show.ring.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+                zoneOverlay = UmweltPolygon(coordinates: &coords, count: coords.count)
+            } else {
+                zoneOverlay = nil
+            }
+            overlaysDirty = true
+        }
+
+        private static func zoneToDraw(_ model: AppModel) -> RouteMind.Zone? {
+            if let nav = model.nav {
+                let me = nav.lastFix.map { LatLng($0.coordinate.latitude, $0.coordinate.longitude) } ?? model.userLatLng
+                return RouteMind.umweltToShow(me: me, destination: nav.destination.location,
+                                              line: nav.route.polyline, along: nav.progress?.alongMeters ?? 0, driving: true)
+            }
+            guard let d = model.directions else { return nil }
+            let me = d.reversed ? d.destination.location : model.userLatLng
+            let dest = d.reversed ? model.userLatLng : d.destination.location
+            return RouteMind.umweltToShow(me: me, destination: dest, line: d.route?.polyline ?? [], along: 0, driving: false)
+        }
+
         /** All lines and the glow, put on the map in the order they must be stacked. */
         private func syncOverlays(_ map: MKMapView) {
             overlaysDirty = false
@@ -569,6 +601,7 @@ struct VelaMapView: UIViewRepresentable {
             var styles: [ObjectIdentifier: LineStyle] = [:]
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
+            if let z = zoneOverlay { ordered.append(z) }
             if let h = heatOverlay { ordered.append(h) }
             for group in [railLines, pathLines, routeLines] {
                 for item in group {
@@ -1283,6 +1316,13 @@ struct VelaMapView: UIViewRepresentable {
             if let tiles = overlay as? MKTileOverlay {
                 let r = MKTileOverlayRenderer(tileOverlay: tiles)
                 r.alpha = tiles is DWDRadarOverlay ? 0.75 : (dark ? 0.22 : 0.32)
+                return r
+            }
+            if let zone = overlay as? UmweltPolygon {
+                let r = MKPolygonRenderer(polygon: zone)
+                r.fillColor = UIColor(hex: 0x22C55E).withAlphaComponent(0.18)
+                r.strokeColor = UIColor(hex: 0x16A34A)
+                r.lineWidth = 2
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)

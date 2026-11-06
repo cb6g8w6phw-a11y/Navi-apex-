@@ -43,6 +43,8 @@ final class Navigator: ObservableObject {
     @Published private(set) var routeSignals: [LatLng] = []
     /// Fuel, border, Umwelt, green wave or a tunnel. Shown on the drive and spoken when it changes.
     @Published private(set) var guidance: GuidanceNote?
+    /// The green zone to paint, only while the trip still has to enter it.
+    @Published private(set) var umweltZone: RouteMind.Zone?
     /// Set while the car is carried by sensors instead of the sky.
     @Published private(set) var reckoningLabel: String?
 
@@ -255,6 +257,7 @@ final class Navigator: ObservableObject {
         checkZones(p)
         checkStops(p)
         checkMind(p, loc)
+        checkUmwelt(p, loc)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
             speak("Przekraczasz dozwoloną prędkość.")
@@ -280,8 +283,6 @@ final class Navigator: ObservableObject {
             next = GuidanceNote(title: label, body: "Pozycja jedzie z czujników i jest trzymana na osi drogi.", tone: "info")
         } else if mind.borderAssist, let note = RouteMind.borderNote(near: here) {
             next = note
-        } else if mind.umwelt, let z = RouteMind.umwelt(at: here) {
-            next = GuidanceNote(title: "Umweltzone \(z.name)", body: "Do wjazdu potrzebna \(z.sticker) plakietka.", tone: "info")
         } else if mind.greenWave, let sig = routeSignals.first,
                   let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
                                                    secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
@@ -318,6 +319,20 @@ final class Navigator: ObservableObject {
             guidance = GuidanceNote(title: "Nie złapałem", body: "Powiedz: paliwo, korek, granica albo objazd.", tone: "info")
         }
         if let guidance, !muted { speak("\(guidance.title). \(guidance.body)") }
+    }
+
+    private var spokenUmwelt: String?
+
+    /// Paints and says the zone only on the way in, not for the whole time spent inside it.
+    private func checkUmwelt(_ p: RouteTracker.Progress, _ loc: CLLocation) {
+        guard route.mode == .drive else { umweltZone = nil; return }
+        let me = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
+        let z = RouteMind.umweltToShow(me: me, destination: destination.location, line: route.polyline, along: p.alongMeters, driving: true)
+        if z?.name != umweltZone?.name { umweltZone = z }
+        if let z, spokenUmwelt != z.name {
+            spokenUmwelt = z.name
+            if !muted, AppSettings.shared.voice { speak("Wjazd do strefy \(z.name). Potrzebna zielona plakietka.") }
+        }
     }
 
     /** A stop picked on the way (search along the route): go there first, then on. */

@@ -28,3 +28,19 @@ struct MindNoteCard: View {
         }
     }
 }
+
+/** One short line: city and the green sticker, only while the trip still has to enter the zone. */
+struct UmweltChip: View {
+    var name: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(Color(hex: 0x22C55E)).frame(width: 8, height: 8)
+            Text(name).font(.system(size: 13, weight: .semibold))
+            Text("zielona plakietka").font(.system(size: 13)).foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}

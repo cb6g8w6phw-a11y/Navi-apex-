@@ -185,17 +185,19 @@ struct SettingsView: View {
 
     private var routesPage: some View {
         Form {
-            Section("Trasy") {
-                Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", icon: "location.slash.fill", color: 0x0F766E) }
-                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", icon: "clock.fill", color: 0x2563EB) }
-                Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", icon: "lightbulb.fill", color: 0x16A34A) }
-                Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
-                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", icon: "flag.fill", color: 0xDC2626) }
-                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", icon: "leaf.fill", color: 0x16A34A) }
-                Toggle(isOn: $settings.avoidTolls) { SettingLabel("Unikaj dróg płatnych", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
+            Section {
+                Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", detail: "Gdy GPS zniknie, pozycja jedzie z czujników telefonu po osi drogi.", icon: "location.slash.fill", color: 0x0F766E) }
+                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", detail: "Objazd tylko wtedy, gdy boczna droga naprawdę jedzie, a nie stoi tak samo.", icon: "clock.fill", color: 0x2563EB) }
+                Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", detail: "Podpowiada prędkość, żeby trafić na następne światła na zielonym.", icon: "lightbulb.fill", color: 0x16A34A) }
+                Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", detail: "Krótka wibracja tuż przed manewrem.", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
+                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", detail: "Przy granicy DE–PL pokazuje przejście z krótszą kolejką.", icon: "flag.fill", color: 0xDC2626) }
+                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", detail: "Rysuje zieloną strefę w niemieckim mieście tylko gdy pinezka albo trasa wymaga wjazdu.", icon: "leaf.fill", color: 0x16A34A) }
+                Toggle(isOn: $settings.avoidTolls) { SettingLabel("Unikaj dróg płatnych", detail: "Omija odcinki z opłatą i bramki.", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
                 Toggle(isOn: $settings.avoidHighways) {
-                    SettingLabel("Unikaj autostrad", icon: "road.lanes", color: 0x1D4ED8)
+                    SettingLabel("Unikaj autostrad", detail: "Prowadzi bez autostrad, bocznymi drogami.", icon: "road.lanes", color: 0x1D4ED8)
                 }
+            } footer: {
+                Text("Zielona strefa nie wisi na mapie cały czas. Pojawia się przy pinezce w strefie albo tuż przed wjazdem i znika, gdy już jesteś w środku.")
             }
             Section {
                 Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {
@@ -324,11 +326,13 @@ struct SettingsView: View {
 /** A settings row's name with a small coloured icon in front, like the iPhone's own Settings. */
 struct SettingLabel: View {
     let title: String
+    var detail: String? = nil
     let icon: String
     let color: UInt32
 
-    init(_ title: String, icon: String, color: UInt32) {
+    init(_ title: String, detail: String? = nil, icon: String, color: UInt32) {
         self.title = title
+        self.detail = detail
         self.icon = icon
         self.color = color
     }
@@ -336,7 +340,12 @@ struct SettingLabel: View {
     var body: some View {
         HStack(spacing: 12) {
             IconBadge(icon: icon, color: Color(hex: color), size: 30, radius: 8)
-            Text(title)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let detail {
+                    Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 }

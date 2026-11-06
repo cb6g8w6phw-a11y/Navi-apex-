@@ -112,22 +112,125 @@ enum RouteMind {
 
     struct Zone: Equatable {
         var name: String
-        var sticker: String
+        var note: String
+        var ring: [LatLng]
         var south: Double
-        var west: Double
         var north: Double
+        var west: Double
         var east: Double
     }
 
-    static let umweltZones: [Zone] = [
-        Zone(name: "Berlin", sticker: "zielona", south: 52.34, west: 13.09, north: 52.67, east: 13.76),
-        Zone(name: "Hannover", sticker: "zielona", south: 52.30, west: 9.60, north: 52.46, east: 9.87),
-        Zone(name: "Braunschweig", sticker: "zielona", south: 52.22, west: 10.44, north: 52.33, east: 10.58),
-        Zone(name: "Magdeburg", sticker: "zielona", south: 52.08, west: 11.55, north: 52.18, east: 11.70),
-    ]
+    /// Inner-city rings of the Umweltzonen still in force in 2026. A green sticker is the only one that counts.
+    static let umweltZones: [Zone] = {
+        func oval(_ name: String, _ lat: Double, _ lng: Double, _ rxKm: Double, _ ryKm: Double, _ note: String = "Wjazd tylko z zieloną plakietką.") -> Zone {
+            let cosLat = cos(lat * .pi / 180)
+            let ring = (0..<32).map { i -> LatLng in
+                let a = Double(i) / 32 * 2 * .pi
+                return LatLng(lat + ryKm * cos(a) / 110.54, lng + rxKm * sin(a) / (111.32 * max(0.2, cosLat)))
+            }
+            return Zone(name: name, note: note,
+                        ring: ring,
+                        south: ring.map(\.lat).min() ?? lat, north: ring.map(\.lat).max() ?? lat,
+                        west: ring.map(\.lng).min() ?? lng, east: ring.map(\.lng).max() ?? lng)
+        }
+        let ruhr = "Zielona plakietka. Autostrady są poza strefą."
+        let diesel = "Zielona plakietka. Starsze diesle mają dodatkowy zakaz."
+        return [
+            oval("Magdeburg", 52.127, 11.639, 1.9, 2.5),
+            oval("Halle", 51.482, 11.970, 2.0, 2.2),
+            oval("Leipzig", 51.339, 12.373, 3.4, 3.1),
+            oval("Berlin", 52.510, 13.405, 6.2, 5.4),
+            oval("Bremen", 53.076, 8.808, 2.3, 2.0),
+            oval("Osnabrück", 52.278, 8.047, 2.0, 1.8),
+            oval("München", 48.137, 11.575, 4.3, 4.0, diesel),
+            oval("Augsburg", 48.366, 10.894, 2.2, 2.0),
+            oval("Regensburg", 49.013, 12.102, 1.7, 1.5),
+            oval("Stuttgart", 48.778, 9.178, 6.2, 5.2, diesel),
+            oval("Pforzheim", 48.893, 8.705, 2.0, 1.6),
+            oval("Ludwigsburg", 48.897, 9.192, 6.5, 4.2),
+            oval("Frankfurt", 50.110, 8.682, 3.6, 3.2),
+            oval("Offenbach", 50.099, 8.766, 1.8, 1.6),
+            oval("Wiesbaden", 50.083, 8.241, 2.4, 2.0),
+            oval("Darmstadt", 49.872, 8.651, 2.2, 2.0, diesel),
+            oval("Marburg", 50.809, 8.771, 1.4, 1.3),
+            oval("Limburg", 50.388, 8.065, 1.2, 1.1),
+            oval("Köln", 50.938, 6.960, 4.6, 4.2),
+            oval("Düsseldorf", 51.227, 6.773, 3.4, 3.1),
+            oval("Bonn", 50.735, 7.098, 2.6, 2.2),
+            oval("Aachen", 50.776, 6.084, 2.3, 2.0),
+            oval("Münster", 51.961, 7.626, 2.4, 2.2),
+            oval("Wuppertal", 51.256, 7.151, 3.2, 1.6),
+            oval("Krefeld", 51.333, 6.562, 2.2, 2.0),
+            oval("Mönchengladbach", 51.194, 6.442, 2.4, 2.0),
+            oval("Neuss", 51.198, 6.688, 1.8, 1.6),
+            oval("Hagen", 51.359, 7.475, 2.0, 1.8),
+            oval("Remscheid", 51.179, 7.192, 1.8, 1.5),
+            oval("Siegen", 50.875, 8.024, 1.6, 1.4),
+            oval("Dinslaken", 51.562, 6.734, 1.6, 1.4, ruhr),
+            oval("Eschweiler", 50.817, 6.272, 1.5, 1.3),
+            oval("Langenfeld", 51.108, 6.949, 1.5, 1.3),
+            oval("Overath", 50.932, 7.284, 1.2, 1.1),
+            oval("Bochum", 51.481, 7.216, 3.0, 2.5, ruhr),
+            oval("Bottrop", 51.523, 6.925, 2.3, 2.0, ruhr),
+            oval("Castrop-Rauxel", 51.550, 7.311, 2.1, 1.7, ruhr),
+            oval("Dortmund", 51.514, 7.465, 4.0, 3.4, ruhr),
+            oval("Duisburg", 51.435, 6.762, 3.4, 2.9, ruhr),
+            oval("Essen", 51.456, 7.012, 3.5, 3.0, ruhr),
+            oval("Gelsenkirchen", 51.508, 7.096, 2.7, 2.3, ruhr),
+            oval("Gladbeck", 51.571, 6.983, 1.7, 1.5, ruhr),
+            oval("Herne", 51.538, 7.221, 2.0, 1.6, ruhr),
+            oval("Herten", 51.592, 7.140, 1.6, 1.4, ruhr),
+            oval("Mülheim", 51.428, 6.883, 2.2, 1.9, ruhr),
+            oval("Oberhausen", 51.470, 6.852, 2.3, 2.0, ruhr),
+            oval("Recklinghausen", 51.614, 7.198, 2.2, 1.9, ruhr),
+        ]
+    }()
 
     static func umwelt(at p: LatLng) -> Zone? {
-        umweltZones.first { p.lat >= $0.south && p.lat <= $0.north && p.lng >= $0.west && p.lng <= $0.east }
+        umweltZones.first { z in
+            p.lat >= z.south && p.lat <= z.north && p.lng >= z.west && p.lng <= z.east && contains(p, z.ring)
+        }
+    }
+
+    /// The zone to draw: the pin is inside and you are not, or the route is about to cross the line.
+    /// Nothing while you are already in it, and nothing for a city the trip never enters.
+    static func umweltToShow(me: LatLng?, destination: LatLng?, line: [LatLng], along: Double, driving: Bool) -> Zone? {
+        guard MindSettings.shared.umwelt else { return nil }
+        let here = me.flatMap { umwelt(at: $0) }?.name
+        if !driving {
+            if let d = destination, let z = umwelt(at: d), z.name != here { return z }
+            return firstZone(on: line, from: 0, to: .greatestFiniteMagnitude, skip: here)
+        }
+        if let z = firstZone(on: line, from: along, to: along + 3_500, skip: here) { return z }
+        if let d = destination, let z = umwelt(at: d), z.name != here, (me?.distance(to: d) ?? 1e12) < 8_000 { return z }
+        return nil
+    }
+
+    private static func firstZone(on line: [LatLng], from: Double, to: Double, skip: String?) -> Zone? {
+        guard line.count >= 2 else { return nil }
+        let cum = Geo.cumulative(line)
+        let end = min(cum.last ?? 0, to)
+        var m = max(0, from)
+        while m <= end {
+            let p = Geo.point(along: line, meters: m, cumulative: cum)
+            if let z = umwelt(at: p), z.name != skip { return z }
+            m += 400
+        }
+        return nil
+    }
+
+    private static func contains(_ p: LatLng, _ ring: [LatLng]) -> Bool {
+        var inside = false
+        var j = ring.count - 1
+        for i in ring.indices {
+            let a = ring[i], b = ring[j]
+            if (a.lat > p.lat) != (b.lat > p.lat), a.lat != b.lat {
+                let x = (b.lng - a.lng) * (p.lat - a.lat) / (b.lat - a.lat) + a.lng
+                if p.lng < x { inside.toggle() }
+            }
+            j = i
+        }
+        return inside
     }
 
     struct Crossing {
