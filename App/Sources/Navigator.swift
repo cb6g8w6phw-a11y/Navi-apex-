@@ -45,6 +45,12 @@ final class Navigator: ObservableObject {
     @Published private(set) var guidance: GuidanceNote?
     /** Set while GPS is being carried by the sensors. */
     @Published private(set) var reckoningLabel: String?
+    /** Couch test: the car stays on a fetched route and real GPS is ignored. */
+    @Published private(set) var couch = false
+    @Published private(set) var couchTitle = ""
+    @Published private(set) var couchNotes: [GuidanceNote] = []
+    @Published private(set) var couchChip: CouchChip?
+    var isCouch: Bool { couch }
 
     let destination: Place
     /** Stops still ahead, in trip order; each is dropped once reached. */
@@ -198,6 +204,7 @@ final class Navigator: ObservableObject {
     }
 
     func handle(_ raw: CLLocation) {
+        guard !couch else { return }
         guard !arrived else { return }
         let loc: CLLocation
         if route.mode == .drive, MindSettings.shared.deadReckoning {
@@ -860,6 +867,21 @@ final class Navigator: ObservableObject {
             let cost = extra >= 60 ? "dokłada \(minutes) minut" : extra <= -60 ? "oszczędza \(minutes) minut" : "zajmuje mniej więcej tyle samo"
             self.speak("Jest objazd zamknięcia, \(cost). Stuknij, żeby go wybrać.")
         }
+    }
+
+    /** Park the car on the route and hold the test cards. GPS updates are ignored until the trip ends. */
+    func holdCouch(title: String, along: Double, notes: [GuidanceNote], chip: CouchChip?, speed: Double) {
+        couch = true
+        demoAlerts = true
+        couchTitle = title
+        couchNotes = notes
+        couchChip = chip
+        guidance = notes.first
+        let point = Geo.point(along: route.polyline, meters: along)
+        progress = tracker.update(point, accuracy: 5, heading: nil)
+        speedMps = speed
+        following = false
+        RouteMind.haptic(.rigid)
     }
 
     /** For the build's screenshots: police reported up the road. */
