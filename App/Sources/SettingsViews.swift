@@ -346,39 +346,6 @@ struct SettingsView: View {
         .navigationTitle("Muzyka")
     }
 
-    private func connectApple(_ result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success(let auth):
-            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential else { return }
-            settings.appleUser = cred.user
-            if let parts = cred.fullName {
-                let name = PersonNameComponentsFormatter().string(from: parts)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty { settings.appleName = name }
-            }
-            if settings.appleName.isEmpty, let email = cred.email, !email.isEmpty {
-                settings.appleName = email
-            }
-            appleNote = ""
-        case .failure(let error):
-            if let auth = error as? ASAuthorizationError, auth.code == .canceled { return }
-            appleNote = "System nie przyjął logowania. Ta kopia aplikacji jest bez podpisu Apple, więc konto często nie przechodzi. Mapy i tak są z Apple Maps."
-        }
-    }
-
-    private func refreshApple() {
-        let id = settings.appleUser
-        guard !id.isEmpty else { return }
-        ASAuthorizationAppleIDProvider().getCredentialState(forUserID: id) { state, _ in
-            guard state == .revoked || state == .notFound else { return }
-            DispatchQueue.main.async {
-                settings.appleUser = ""
-                settings.appleName = ""
-            }
-        }
-    }
-
-
     private var placesPage: some View {
         Form {
             Section {
