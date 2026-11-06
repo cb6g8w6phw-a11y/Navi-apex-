@@ -338,9 +338,25 @@ final class AppModel: ObservableObject {
         if !results.isEmpty { detent = .half }
     }
 
-    /** A tap on a place the basemap draws: look it up on Google by name at that spot. */
+    /** A tap on a place the basemap draws: show the route there at once, then fill in Google's name. */
     func resolveTapped(name: String, at point: LatLng) {
-        resolve(Place(id: "tap:\(point.lat),\(point.lng)", name: name, location: point, source: "osm"))
+        var place = Place(id: "tap:\(point.lat),\(point.lng)", name: name, location: point, source: "osm")
+        place.distanceMeters = userLatLng?.distance(to: point)
+        openDirections(to: place)
+        guard !settings.noGoogle else { return }
+        let pid = place.id
+        Task {
+            let found = (try? await GoogleClient.shared.search(name, center: point, spanMeters: 1_000, pages: 1)) ?? []
+            guard directions?.destination.id == pid else { return }
+            if let best = found.filter({ $0.location.distance(to: point) < 150 })
+                .min(by: { $0.location.distance(to: point) < $1.location.distance(to: point) }) {
+                var b = best
+                b.id = pid
+                b.distanceMeters = userLatLng?.distance(to: b.location)
+                directions?.destination = b
+                if !DemoScript.active { settings.addRecentPlace(b) }
+            }
+        }
     }
 
     /** Show [placeholder] right away, then swap in Google's full place found at the same spot. */
@@ -552,7 +568,9 @@ final class AppModel: ObservableObject {
                                                 heading: m == .drive ? heading : nil, alternatives: true)
                 guard directions?.destination.id == d.destination.id, routesRequest == req else { return }
                 directions?.loading.remove(m)
-                directions?.routes[m] = ClosureBoard.prefer(r.routes, mode: m)
+                var ranked = ClosureBoard.prefer(r.routes, mode: m)
+                if m == .drive { ranked = easierFirst(ranked) }
+                directions?.routes[m] = ranked
                 if m == .drive { directions?.stickerNote = stickerLine(from: from, to: to, line: r.routes.first?.polyline ?? []) }
                 if r.routes.isEmpty {
                     directions?.errors[m] = Connectivity.explain(r.error == "No route found." ? "No route found." : "Couldn't get a route just now. Try again in a moment.")
@@ -575,9 +593,32 @@ final class AppModel: ObservableObject {
               let z = RouteMind.umweltToShow(me: from, destination: to, line: line, along: 0, driving: false) else { return nil }
         if settings.mayEnterUmwelt {
             let kind = z.sticker == "SCT" ? "strefa czystego transportu" : "zielona plakietka"
-            return "\(z.name) — \(kind)."
+            return "Wymagana \(kind) · \(z.name)"
         }
-        return "\(z.name) jest na trasie. Bez zielonej plakietki sprawdź, czy auto może wjechać."
+        return "Bez plakietki nie wjeżdżaj · \(z.name)"
+    }
+
+    /// When the switch is on, a slightly slower route with fewer left turns, U-turns and roundabouts wins.
+    private func easierFirst(_ routes: [Route]) -> [Route] {
+        guard MindSettings.shared.avoidHardJunctions, routes.count > 1 else { return routes }
+        func hard(_ r: Route) -> Int {
+            r.maneuvers.reduce(0) { n, m in
+                switch m.type {
+                case .uturn, .sharpLeft, .sharpRight: return n + 3
+                case .roundabout: return n + ((m.exit ?? 1) > 2 ? 2 : 1)
+                case .turnLeft: return n + 1
+                default: return n
+                }
+            }
+        }
+        let fastest = routes.map(\.durationSeconds).min() ?? 0
+        let cap = fastest + min(480, max(90, fastest * 0.2))
+        guard let easy = routes.filter({ $0.durationSeconds <= cap }).min(by: { hard($0) < hard($1) }),
+              let i = routes.firstIndex(where: { $0.id == easy.id }), i != 0 else { return routes }
+        var out = routes
+        out.remove(at: i)
+        out.insert(easy, at: 0)
+        return out
     }
 
     /** Transit trips for the current trip, leaving now or at the picked time. */
