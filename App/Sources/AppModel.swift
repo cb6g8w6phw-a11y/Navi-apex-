@@ -139,7 +139,7 @@ final class AppModel: ObservableObject {
     @Published var mapTick = 0
     /** Which way the map faces, for the compass button. */
     @Published var mapHeading: Double = 0
-    /** Compass calibration, opened from the location button. */
+    /** Compass figure-eight, opened only from Settings › Trasy. */
     @Published var showCalibrate = false
 
     weak var map: MKMapView? { didSet { glide.map = map } }

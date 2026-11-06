@@ -291,7 +291,7 @@ struct SettingsPage: View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
                 PageBackdrop()
-                SettingsView(settings: settings, inTab: true, pick: { model.picking = $0 }, onChange: { model.reloadRoutes() })
+                SettingsView(settings: settings, inTab: true, pick: { model.picking = $0 }, calibrate: { model.showCalibrate = true }, onChange: { model.reloadRoutes() })
                     .safeAreaInset(edge: .bottom) { Color.clear.frame(height: KiteDock.height + 10) }
                 KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
                     .ignoresSafeArea(edges: .bottom)

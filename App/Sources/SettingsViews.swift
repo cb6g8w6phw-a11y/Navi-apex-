@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 
 struct LayersSheet: View {
@@ -71,9 +72,12 @@ struct SettingsView: View {
     var inTab = false
     /** Opens the search for choosing home or work (the dock's page has it). */
     var pick: ((PickKind) -> Void)? = nil
+    /** Figure-eight compass sheet. Only from here, never from the map's location button. */
+    var calibrate: (() -> Void)? = nil
     let onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
+    @State private var appleNote = ""
     var body: some View {
         if DemoScript.step == "wazesettings" {
             // Straight into the Waze screen, for the build's screenshot of it.
@@ -106,6 +110,8 @@ struct SettingsView: View {
                         CarPage(settings: settings)
                     }
                     menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
+                    menuRow("Konto Apple", detail: "Mapy Apple na tym iPhonie",
+                            value: settings.appleUser.isEmpty ? nil : "Połączone", icon: "applelogo", color: 0x111111) { applePage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
                     menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
@@ -139,16 +145,32 @@ struct SettingsView: View {
         NavigationLink {
             page()
         } label: {
-            HStack(spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
+                    .frame(width: 38, height: 38)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 17, weight: .semibold)).foregroundColor(.primary)
-                    Text(detail).font(.subheadline).foregroundColor(.secondary)
+                    Text(title)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Spacer(minLength: 4)
-                if let value { Text(value).font(.subheadline.weight(.medium)).foregroundColor(.secondary) }
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                if let value {
+                    Text(value)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.secondary.opacity(0.7))
+                    .frame(width: 14, alignment: .center)
             }
             .padding(14)
             .glassCard(18)
@@ -192,13 +214,18 @@ struct SettingsView: View {
                 Stepper(value: $mind.headingTrim, in: -30...30, step: 1) {
                     SettingLabel("Korekta kierunku: \(mind.headingTrim)°", icon: "location.north.line.fill", color: 0x0F766E)
                 }
+                Button { calibrate?() } label: {
+                    SettingLabel("Skalibruj kompas", detail: "Ósemka w powietrzu, gdy auto stoi.", icon: "compass.drawing", color: 0x0891B2)
+                }
+                .foregroundColor(.primary)
                 Button { mind.resetAsked = true } label: {
                     SettingLabel("Wyzeruj czujniki", icon: "arrow.counterclockwise", color: 0xDC2626)
                 }
+                .foregroundColor(.primary)
             } header: {
                 Text("Kalibracja")
             } footer: {
-                Text("Czujniki wchodzą w tunelu albo gdy GPS myli się bardziej niż wybrany próg. Korekta kierunku obraca strzałkę. Kompas iPhone’a kalibrujesz ósemką w powietrzu, potem wyzeruj czujniki.")
+                Text("Czujniki wchodzą w tunelu albo gdy GPS myli się bardziej niż wybrany próg. Korekta kierunku obraca strzałkę. Kompas kalibrujesz tylko tutaj, na postoju: ósemka w powietrzu, potem wyzeruj czujniki. Przycisk lokalizacji na mapie tylko centruje.")
             }
         }
         .kiteList()
@@ -246,6 +273,83 @@ struct SettingsView: View {
         }
         .kiteList()
         .navigationTitle("Mapa i wyświetlanie")
+    }
+
+    private var applePage: some View {
+        Form {
+            Section {
+                LabeledContent {
+                    Text("Apple Maps")
+                } label: {
+                    SettingLabel("Źródło mapy", icon: "map.fill", color: 0x34C759)
+                }
+            } footer: {
+                Text("Mapa, budynki i teren są z Apple Maps. Nic nie jest rysowane z innego silnika.")
+            }
+            Section {
+                if settings.appleUser.isEmpty {
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName, .email]
+                    } onCompletion: { result in
+                        connectApple(result)
+                    }
+                    .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+                } else {
+                    SettingLabel(settings.appleName.isEmpty ? "Konto Apple" : settings.appleName,
+                                 detail: "Połączone z tym iPhone’em",
+                                 icon: "applelogo", color: 0x111111)
+                    Button("Odłącz konto", role: .destructive) {
+                        settings.appleUser = ""
+                        settings.appleName = ""
+                        appleNote = ""
+                    }
+                }
+            } header: {
+                Text("Konto")
+            } footer: {
+                Text(appleNote.isEmpty
+                     ? "Połączenie zapisuje Apple ID w Apexie na tym telefonie. Mapy działają też bez logowania."
+                     : appleNote)
+            }
+        }
+        .kiteList()
+        .navigationTitle("Konto Apple")
+        .onAppear { refreshApple() }
+    }
+
+    private func connectApple(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential else { return }
+            settings.appleUser = cred.user
+            if let parts = cred.fullName {
+                let name = PersonNameComponentsFormatter().string(from: parts)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty { settings.appleName = name }
+            }
+            if settings.appleName.isEmpty, let email = cred.email, !email.isEmpty {
+                settings.appleName = email
+            }
+            appleNote = ""
+        case .failure(let error):
+            if let auth = error as? ASAuthorizationError, auth.code == .canceled { return }
+            appleNote = "System nie przyjął logowania. Ta kopia aplikacji jest bez podpisu Apple, więc konto często nie przechodzi. Mapy i tak są z Apple Maps."
+        }
+    }
+
+    private func refreshApple() {
+        let id = settings.appleUser
+        guard !id.isEmpty else { return }
+        ASAuthorizationAppleIDProvider().getCredentialState(forUserID: id) { state, _ in
+            guard state == .revoked || state == .notFound else { return }
+            DispatchQueue.main.async {
+                settings.appleUser = ""
+                settings.appleName = ""
+            }
+        }
     }
 
     private var placesPage: some View {
@@ -322,15 +426,27 @@ struct SettingLabel: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             IconBadge(icon: icon, color: Color(hex: color), size: 30, radius: 8)
+                .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if let detail, !detail.isEmpty {
-                    Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -224,7 +224,6 @@ struct BrowseOverlay: View {
     @ObservedObject private var settings = AppSettings.shared
     @StateObject private var voice = VoiceSearch()
     @FocusState private var searchFocused: Bool
-    @State private var locateChoice = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
 
@@ -278,30 +277,11 @@ struct BrowseOverlay: View {
                             if idle { WazeMapChips(model: model) }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 10) {
-                                if locateChoice {
-                                    Button {
-                                        locateChoice = false
-                                        model.showCalibrate = true
-                                    } label: {
-                                        Label("Skalibruj lokalizację", systemImage: "compass")
-                                            .font(.system(size: 16, weight: .bold))
-                                            .padding(.horizontal, 14)
-                                            .frame(height: 48)
-                                            .foregroundColor(.white)
-                                            .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.94)))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                                }
                                 MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 64) {
                                     model.centerOnUser()
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { locateChoice = true }
                                 }
                                 .accessibilityLabel("Centre on me")
                                 .contextMenu {
-                                    Button { model.showCalibrate = true } label: {
-                                        Label("Calibrate location", systemImage: "compass")
-                                    }
                                     if let u = model.userLatLng {
                                         ShareLink(item: URL(string: "https://maps.google.com/?q=\(u.lat),\(u.lng)")!) {
                                             Label("Share my location", systemImage: "square.and.arrow.up")
@@ -311,13 +291,6 @@ struct BrowseOverlay: View {
                                         }
                                     }
                                     Button { model.saveParking() } label: { Label("I parked here", systemImage: "parkingsign") }
-                                }
-                            }
-                            .onChange(of: locateChoice) { on in
-                                guard on else { return }
-                                Task {
-                                    try? await Task.sleep(nanoseconds: 6_000_000_000)
-                                    if locateChoice { withAnimation { locateChoice = false } }
                                 }
                             }
                         }

@@ -455,16 +455,16 @@ struct VelaMapView: UIViewRepresentable {
             let key = "\(s.satellite)\(navigating)\(s.traffic)"
             guard key != lastConfigKey else { return }
             lastConfigKey = key
-            // While driving, shop and bin icons go and the map is toned down so the route stands out.
+            // Apple's own map: full colour and relief, same as the Maps app. Shops stay hidden
+            // only while guiding, so the route line is not covered.
             let poi: MKPointOfInterestFilter = navigating ? .excludingAll : .includingAll
             if s.satellite {
-                let c = MKHybridMapConfiguration(elevationStyle: .flat)
+                let c = MKHybridMapConfiguration(elevationStyle: .realistic)
                 c.showsTraffic = s.traffic && !navigating
                 c.pointOfInterestFilter = poi
                 map.preferredConfiguration = c
             } else {
-                let c = MKStandardMapConfiguration(elevationStyle: navigating ? .flat : .realistic,
-                                                   emphasisStyle: navigating ? .muted : .default)
+                let c = MKStandardMapConfiguration(elevationStyle: .realistic, emphasisStyle: .default)
                 c.showsTraffic = s.traffic && !navigating
                 c.pointOfInterestFilter = poi
                 map.preferredConfiguration = c

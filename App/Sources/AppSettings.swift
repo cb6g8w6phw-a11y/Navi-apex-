@@ -123,7 +123,10 @@ final class AppSettings: ObservableObject {
     @Published var greenSticker: Bool {
         didSet { d.set(greenSticker, forKey: "greenSticker"); Self.stickerOn = greenSticker }
     }
-    /// Read off the main actor by the map and the router. Written only from here.
+    /// Sign in with Apple user identifier. Empty until the account is connected in Settings.
+    @Published var appleUser: String { didSet { d.set(appleUser, forKey: "appleUser") } }
+    /// Name (or email) Apple returned the first time this account signed in.
+    @Published var appleName: String { didSet { d.set(appleName, forKey: "appleName") } }
     nonisolated(unsafe) static var stickerOn = true
     nonisolated(unsafe) static var fuelKind = "diesel"
 
@@ -194,6 +197,8 @@ final class AppSettings: ObservableObject {
         carBallOn = d.object(forKey: "carBallOn") as? Bool ?? true
         let sticker = d.object(forKey: "greenSticker") as? Bool ?? true
         greenSticker = sticker
+        appleUser = d.string(forKey: "appleUser") ?? ""
+        appleName = d.string(forKey: "appleName") ?? ""
         Self.stickerOn = sticker
         Self.fuelKind = carFuel
         hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium

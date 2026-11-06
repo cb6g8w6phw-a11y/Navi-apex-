@@ -8,7 +8,6 @@ struct NavigationOverlay: View {
     @State private var showAlong = false
     @State private var confirmEnd = false
     @State private var showPlayer = false
-    @State private var locateChoice = false
     @ObservedObject private var music = NowPlay.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
@@ -113,23 +112,8 @@ struct NavigationOverlay: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 10) {
-                    if locateChoice {
-                        Button {
-                            locateChoice = false
-                            model.showCalibrate = true
-                        } label: {
-                            Label("Skalibruj lokalizację", systemImage: "compass")
-                                .font(.system(size: 16, weight: .bold))
-                                .padding(.horizontal, 14)
-                                .frame(height: 48)
-                                .foregroundColor(.white)
-                                .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.94)))
-                        }
-                        .buttonStyle(.plain)
-                    }
                     MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 56) {
                         model.recenterNav()
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { locateChoice = true }
                     }
                     .accessibilityLabel("Centre on me")
                     MapFab(icon: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 64) { nav.muted.toggle() }
