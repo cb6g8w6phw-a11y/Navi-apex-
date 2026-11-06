@@ -619,16 +619,26 @@ struct VelaMapView: UIViewRepresentable {
         private func renderCameras(_ map: MKMapView) {
             let s = model.settings
             let line = model.nav?.route.polyline ?? model.directions?.route?.polyline ?? []
-            let key = "\(s.speedCameras)\(s.plateCameras)\(cameras.count)\(line.count)\(line.first?.lat ?? 0)\(gates[0])"
+            let key = "\(s.speedCameras)\(s.plateCameras)\(s.watchCameras)\(cameras.count)\(line.count)\(line.first?.lat ?? 0)\(gates[0])"
             guard key != lastCameraKey else { return }
             lastCameraKey = key
             guard gates[0] else { replaceAnnotations(&cameraAnns, [], map); return }
-            let shown = cameras.values.filter { $0.kind == .speed ? s.speedCameras : s.plateCameras }
+            let shown = cameras.values.filter { c in
+                switch c.kind {
+                case .speed: return s.speedCameras
+                case .plate: return s.plateCameras
+                case .watch: return s.watchCameras
+                }
+            }
             let cum = line.count >= 2 ? Geo.cumulative(line) : []
             let anns: [KiteAnnotation] = shown.map { c in
                 let a = KiteAnnotation(layer: .camera, id: "cam\(c.id)", coordinate: coord(c.location))
-                a.icon = c.kind == .speed ? "cam-speed" : "cam-plate"
-                a.big = !cum.isEmpty && Geo.project(c.location, on: line, cumulative: cum).offset < 40
+                switch c.kind {
+                case .speed: a.icon = "cam-speed"
+                case .plate: a.icon = "cam-plate"
+                case .watch: a.icon = "cam-watch"
+                }
+                a.big = c.kind != .watch && !cum.isEmpty && Geo.project(c.location, on: line, cumulative: cum).offset < 40
                 return a
             }
             replaceAnnotations(&cameraAnns, anns, map)
@@ -1068,25 +1078,27 @@ struct VelaMapView: UIViewRepresentable {
         /** Ask Overpass for the cameras in view, a few 0.1° cells at a time, each cell once. */
         func loadCameras(_ map: MKMapView) {
             let s = model.settings
-            guard s.speedCameras || s.plateCameras, map.zoomLevel >= 12, cameraFetch == nil else { return }
+            guard s.speedCameras || s.plateCameras || s.watchCameras, map.zoomLevel >= 12, cameraFetch == nil else { return }
             let b = map.visibleCoordinateBounds
             let cell = 0.1
             let y0 = Int(floor(b.sw.latitude / cell)), y1 = Int(floor(b.ne.latitude / cell))
             let x0 = Int(floor(b.sw.longitude / cell)), x1 = Int(floor(b.ne.longitude / cell))
             guard (y1 - y0 + 1) * (x1 - x0 + 1) <= 12 else { return }
+            let stamp = s.watchCameras ? "w" : ""
             var missing: [(Int, Int)] = []
-            for y in y0...y1 { for x in x0...x1 where !cameraCells.contains("\(y),\(x)") { missing.append((y, x)) } }
+            for y in y0...y1 { for x in x0...x1 where !cameraCells.contains("\(y),\(x)\(stamp)") { missing.append((y, x)) } }
             guard !missing.isEmpty else { return }
             let ys = missing.map(\.0), xs = missing.map(\.1)
             let south = Double(ys.min()!) * cell, north = Double(ys.max()! + 1) * cell
             let west = Double(xs.min()!) * cell, east = Double(xs.max()! + 1) * cell
+            let watch = s.watchCameras
             cameraFetch = Task { [weak self, weak map] in
-                // Both kinds every time, so turning one on later needs no new fetch.
-                let found = await Overpass.cameras(south: south, west: west, north: north, east: east, speed: true, plate: true)
+                // Speed and plate every time, so turning one on later needs no new fetch. Monitoring only when asked.
+                let found = await Overpass.cameras(south: south, west: west, north: north, east: east, speed: true, plate: true, watch: watch)
                 guard let self else { return }
                 self.cameraFetch = nil
                 guard let found else { return }
-                for (y, x) in missing { self.cameraCells.insert("\(y),\(x)") }
+                for (y, x) in missing { self.cameraCells.insert("\(y),\(x)\(stamp)") }
                 for c in found { self.cameras[c.id] = c }
                 guard let map else { return }
                 self.render(map)
