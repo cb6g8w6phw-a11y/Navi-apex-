@@ -1007,6 +1007,7 @@ struct TripSheen: View {
     }
 }
 
+@MainActor
 func tripProgress(_ nav: Navigator) -> Double {
     let total = max(nav.route.distanceMeters, 1)
     return min(1, max(0, (nav.progress?.alongMeters ?? 0) / total))
