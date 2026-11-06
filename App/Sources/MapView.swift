@@ -1124,11 +1124,83 @@ struct VelaMapView: UIViewRepresentable {
         @objc func tapped(_ g: UITapGestureRecognizer) {
             guard let map = g.view as? MKMapView, model.nav == nil, Date().timeIntervalSince(pinDroppedAt) > 1 else { return }
             let pt = g.location(in: map)
-            // Give the map a moment to pick a place under the finger first; if it did, that wins.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self, weak map] in
-                guard let self, let map, Date().timeIntervalSince(self.lastPickAt) > 0.6 else { return }
-                self.emptyTap(at: pt, map)
+            if let hit = annotation(at: pt, on: map) {
+                openTapped(hit, map: map)
+                return
             }
+            // Apple's own places (a shop, a gym) often draw the big marker without delivering
+            // didSelect. A moment later the selection is there, and that is the place.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self, weak map] in
+                guard let self, let map, self.model.nav == nil, self.model.directions == nil else { return }
+                if let selected = map.selectedAnnotations.first(where: { !($0 is MKUserLocation) }) {
+                    let p = map.convert(selected.coordinate, toPointTo: map)
+                    if hypot(p.x - pt.x, p.y - pt.y) < 90 {
+                        self.openTapped(selected, map: map)
+                        return
+                    }
+                }
+                guard Date().timeIntervalSince(self.lastPickAt) > 0.6 else { return }
+                self.emptyTap(at: pt, map: map)
+            }
+        }
+
+        /** A pin we drew, under the finger. Apple's own places are not in this list until selected. */
+        private func annotation(at pt: CGPoint, on map: MKMapView) -> MKAnnotation? {
+            var best: (MKAnnotation, CGFloat)?
+            for a in map.annotations {
+                guard !(a is MKUserLocation), let v = map.view(for: a) else { continue }
+                let p = v.convert(pt, from: map)
+                let r = v.bounds.insetBy(dx: -16, dy: -16)
+                guard r.contains(p) else { continue }
+                let d = hypot(p.x - v.bounds.midX, p.y - v.bounds.midY)
+                if best == nil || d < best!.1 { best = (a, d) }
+            }
+            return best?.0
+        }
+
+        /** Turn a tapped pin or a place on the basemap into a route. */
+        private func openTapped(_ annotation: MKAnnotation, map: MKMapView) {
+            guard model.nav == nil, Date().timeIntervalSince(pinDroppedAt) > 1 else { return }
+            if annotation is MKUserLocation { return }
+            if model.directions != nil, Date().timeIntervalSince(lastPickAt) < 0.5 { return }
+            lastPickAt = Date()
+            map.deselectAnnotation(annotation, animated: false)
+            if let a = annotation as? KiteAnnotation {
+                switch a.layer {
+                case .bubble:
+                    if model.directions != nil, !a.routeSelected { model.selectRoute(a.routeIndex) }
+                case .waze:
+                    guard model.directions == nil, let alert = wazeAlerts.first(where: { $0.id == a.id }) else { return }
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    model.wazeInfo = alert
+                case .fuel:
+                    let fuel = FuelPrices.shared
+                    guard let station = (fuel.stations + fuel.ahead).first(where: { $0.id == a.id }) else { return }
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    model.fuelInfo = station
+                case .roadEvent:
+                    if let mine = ClosureBoard.shared.event(id: a.id) {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        model.roadInfo = mine
+                        return
+                    }
+                    guard let event = RoadEvents.shared.events.first(where: { $0.id == a.id }) else { return }
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    model.roadInfo = event
+                case .mine:
+                    guard let place = model.myPlace(a.id) else { return }
+                    model.openDirections(to: place)
+                case .result:
+                    guard let place = model.results.first(where: { $0.id == a.id }) else { return }
+                    model.openDirections(to: place)
+                default:
+                    break
+                }
+                return
+            }
+            let raw = annotation.title ?? nil
+            let name = (raw?.isEmpty == false) ? raw! : "Miejsce"
+            model.resolveTapped(name: name, at: LatLng(annotation.coordinate.latitude, annotation.coordinate.longitude))
         }
 
         private func emptyTap(at pt: CGPoint, _ map: MKMapView) {
@@ -1233,49 +1305,12 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         func mapView(_ map: MKMapView, didSelect view: MKAnnotationView) {
-            // A place on Apple's own map (a cafe, a station…).
-            if let f = view.annotation as? MKMapFeatureAnnotation {
-                map.deselectAnnotation(f, animated: false)
-                guard model.nav == nil, Date().timeIntervalSince(pinDroppedAt) > 1,
-                      let name = f.title, !name.isEmpty else { return }
-                lastPickAt = Date()
-                model.resolveTapped(name: name, at: LatLng(f.coordinate.latitude, f.coordinate.longitude))
-                return
-            }
-            guard let a = view.annotation as? KiteAnnotation else { return }
-            map.deselectAnnotation(a, animated: false)
-            guard model.nav == nil else { return }
-            lastPickAt = Date()
-            switch a.layer {
-            case .bubble:
-                if model.directions != nil, !a.routeSelected { model.selectRoute(a.routeIndex) }
-            case .waze:
-                guard model.directions == nil, let alert = wazeAlerts.first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
-                model.wazeInfo = alert
-            case .fuel:
-                let fuel = FuelPrices.shared
-                guard let station = (fuel.stations + fuel.ahead).first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
-                model.fuelInfo = station
-            case .roadEvent:
-                if let mine = ClosureBoard.shared.event(id: a.id) {
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    model.roadInfo = mine
-                    return
-                }
-                guard let event = RoadEvents.shared.events.first(where: { $0.id == a.id }) else { return }
-                UISelectionFeedbackGenerator().selectionChanged()
-                model.roadInfo = event
-            case .mine:
-                guard let place = model.myPlace(a.id) else { return }
-                model.openDirections(to: place)
-            case .result:
-                guard let place = model.results.first(where: { $0.id == a.id }) else { return }
-                model.openDirections(to: place)
-            default:
-                break
-            }
+            guard let annotation = view.annotation else { return }
+            openTapped(annotation, map: map)
+        }
+
+        func mapView(_ map: MKMapView, didSelect annotation: any MKAnnotation) {
+            openTapped(annotation, map: map)
         }
 
         func mapView(_ map: MKMapView, regionWillChangeAnimated animated: Bool) {
