@@ -48,6 +48,10 @@ struct NavigationOverlay: View {
                 } else {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let note = nav.guidance {
+                        MindNoteCard(note: note)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if let cam = nav.cameraAhead, !nav.arrived {
                     CameraCard(alert: cam, speedKmh: nav.speedMps * 3.6)

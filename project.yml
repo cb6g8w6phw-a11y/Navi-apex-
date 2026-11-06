@@ -30,6 +30,7 @@ targets:
         NSLocationWhenInUseUsageDescription: Apex pokazuje na mapie, gdzie jesteś, znajduje miejsca w pobliżu i prowadzi krok po kroku.
         NSLocationAlwaysAndWhenInUseUsageDescription: Apex prowadzi dalej z wyłączonym ekranem podczas nawigacji.
         NSMicrophoneUsageDescription: Apex słucha, gdy dotkniesz mikrofonu, aby szukać głosem.
+        NSMotionUsageDescription: Apex używa czujników ruchu, żeby prowadzić przez tunel, gdy GPS ginie.
         NSSpeechRecognitionUsageDescription: Apex zamienia to, co mówisz, na wyszukiwanie.
         UIBackgroundModes:
           - location

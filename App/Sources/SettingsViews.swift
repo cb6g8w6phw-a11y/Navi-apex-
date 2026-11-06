@@ -79,6 +79,7 @@ struct LayersSheet: View {
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
+    @ObservedObject var mind = MindSettings.shared
     /** A page of the dock rather than a sheet: no Done button. */
     var inTab = false
     /** Opens the search for choosing home or work (the dock's page has it). */
@@ -176,6 +177,12 @@ struct SettingsView: View {
                 } label: { SettingLabel("Domyślny tryb podróży", icon: "car.fill", color: 0x2563EB) }
             }
             Section("Trasy") {
+                Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", icon: "location.slash.fill", color: 0x0F766E) }
+                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", icon: "clock.fill", color: 0x2563EB) }
+                Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", icon: "lightbulb.fill", color: 0x16A34A) }
+                Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
+                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", icon: "flag.fill", color: 0xDC2626) }
+                Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", icon: "leaf.fill", color: 0x16A34A) }
                 Toggle(isOn: $settings.avoidTolls) { SettingLabel("Unikaj dróg płatnych", icon: "sterlingsign.circle.fill", color: 0xF59E0B) }
                 Toggle(isOn: $settings.avoidHighways) {
                     SettingLabel("Unikaj autostrad", icon: "road.lanes", color: 0x1D4ED8)

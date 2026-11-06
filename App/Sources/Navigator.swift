@@ -41,6 +41,10 @@ final class Navigator: ObservableObject {
     @Published private(set) var averageCheck: AverageCheck?
     /** Traffic lights on the route, one per junction, drawn on the map like Waze. */
     @Published private(set) var routeSignals: [LatLng] = []
+    /// Fuel, border, Umwelt, green wave or a tunnel. Shown on the drive and spoken when it changes.
+    @Published private(set) var guidance: GuidanceNote?
+    /// Set while the car is carried by sensors instead of the sky.
+    @Published private(set) var reckoningLabel: String?
 
     let destination: Place
     /** Stops still ahead, in trip order; each is dropped once reached. */
@@ -128,6 +132,9 @@ final class Navigator: ObservableObject {
     private var aircraftAt = Date.distantPast
     private var aircraftLoading = false
     private var spokenAircraft: Set<String> = []
+    private let reckoning = DeadReckoning()
+    private var mindAt = Date.distantPast
+    private var hapticTurnAt = -1.0
 
     init(route: Route, destination: Place, stops: [Place] = [], settings: AppSettings) {
         self.route = route
@@ -158,6 +165,7 @@ final class Navigator: ObservableObject {
         speech.stopSpeaking(at: .immediate)
         UIApplication.shared.isIdleTimerDisabled = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        reckoning.stop()
     }
 
     /** The posted limit where the user is now, in km/h. */
@@ -187,8 +195,17 @@ final class Navigator: ObservableObject {
         return b.alongMeters - a.alongMeters < 300 ? b : nil
     }
 
-    func handle(_ loc: CLLocation) {
+    func handle(_ raw: CLLocation) {
         guard !arrived else { return }
+        let loc: CLLocation
+        if route.mode == .drive, MindSettings.shared.deadReckoning {
+            let fused = reckoning.fuse(raw, route: route.polyline)
+            loc = fused.tunnel ? fused.location : raw
+            reckoningLabel = fused.tunnel ? fused.label : nil
+        } else {
+            loc = raw
+            reckoningLabel = nil
+        }
         lastFix = loc
         speedMps = max(0, loc.speed)
         var p = tracker.update(LatLng(loc.coordinate.latitude, loc.coordinate.longitude),
@@ -237,10 +254,69 @@ final class Navigator: ObservableObject {
         checkAircraft(loc)
         checkZones(p)
         checkStops(p)
+        checkMind(p, loc)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
             speak("Przekraczasz dozwoloną prędkość.")
         }
+    }
+
+    /// Fuel, border queue, Umwelt sticker, green-wave speed. Spoken only when the note changes.
+    private func checkMind(_ p: RouteTracker.Progress, _ loc: CLLocation) {
+        guard route.mode == .drive else { guidance = nil; return }
+        let mind = MindSettings.shared
+        if mind.haptics, let m = nextManeuver {
+            let d = m.alongMeters - p.alongMeters
+            if d < 90, d > 35, abs(hapticTurnAt - m.alongMeters) > 1 {
+                hapticTurnAt = m.alongMeters
+                RouteMind.haptic(.rigid)
+            }
+        }
+        guard Date().timeIntervalSince(mindAt) > 12 else { return }
+        mindAt = Date()
+        let here = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
+        let next: GuidanceNote?
+        if let label = reckoningLabel {
+            next = GuidanceNote(title: label, body: "Pozycja jedzie z czujników i jest trzymana na osi drogi.", tone: "info")
+        } else if mind.borderAssist, let note = RouteMind.borderNote(near: here) {
+            next = note
+        } else if mind.umwelt, let z = RouteMind.umwelt(at: here) {
+            next = GuidanceNote(title: "Umweltzone \(z.name)", body: "Do wjazdu potrzebna \(z.sticker) plakietka.", tone: "info")
+        } else if mind.greenWave, let sig = routeSignals.first,
+                  let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
+                                                   secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
+            next = GuidanceNote(title: "Zielona fala \(Int(kmh)) km/h", body: "Tyle, żeby wjechać na światła na zielonym.", tone: "good")
+        } else if here.lng > 10.4, here.lng < 12.2, p.alongMeters < 30_000 {
+            next = RouteMind.fuelNote(alongKm: p.alongMeters / 1000, toBorderKm: max(8, (14.59 - here.lng) * 72))
+        } else {
+            next = nil
+        }
+        if next != guidance {
+            guidance = next
+            if let next, !muted, AppSettings.shared.voice { speak(next.body) }
+        }
+    }
+
+    /// "paliwo", "korek", "granica", "objazd", "koniec".
+    func applyVoice(_ text: String) {
+        switch VoiceIntent.parse(text) {
+        case .fuel:
+            guidance = RouteMind.fuelNote(alongKm: (progress?.alongMeters ?? 0) / 1000, toBorderKm: 180)
+        case .traffic:
+            guidance = GuidanceNote(title: "Ruch", body: "Patrzę na falę na trasie, nie na sam kolor odcinka.", tone: "info")
+        case .border:
+            guidance = RouteMind.borderNote(near: lastFix.map { LatLng($0.coordinate.latitude, $0.coordinate.longitude) } ?? destination.location)
+                ?? GuidanceNote(title: "Granica", body: "Brak kolejki w pobliżu tej trasy.", tone: "info")
+        case .reroute:
+            if MindSettings.shared.trueTime {
+                guidance = GuidanceNote(title: "Prawdziwy czas", body: "Objazd tylko wtedy, gdy boczna droga naprawdę jedzie, a nie stoi z resztą.", tone: "info")
+            }
+        case .stop:
+            guidance = GuidanceNote(title: "Koniec", body: "Zatrzymuję podpowiedzi.", tone: "info")
+        case .unknown:
+            guidance = GuidanceNote(title: "Nie złapałem", body: "Powiedz: paliwo, korek, granica albo objazd.", tone: "info")
+        }
+        if let guidance, !muted { speak("\(guidance.title). \(guidance.body)") }
     }
 
     /** A stop picked on the way (search along the route): go there first, then on. */
