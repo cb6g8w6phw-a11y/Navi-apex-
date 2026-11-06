@@ -14,6 +14,12 @@ final class MindSettings: ObservableObject {
     @Published var haptics: Bool { didSet { d.set(haptics, forKey: "mind.haptics") } }
     @Published var borderAssist: Bool { didSet { d.set(borderAssist, forKey: "mind.border") } }
     @Published var umwelt: Bool { didSet { d.set(umwelt, forKey: "mind.umwelt") } }
+    /** GPS worse than this many metres is handed to the sensors. */
+    @Published var gpsTrust: Int { didSet { d.set(gpsTrust, forKey: "mind.trust") } }
+    /** Degrees added to the arrow, when the compass sits crooked. */
+    @Published var headingTrim: Int { didSet { d.set(headingTrim, forKey: "mind.trim") } }
+    /// The next GPS fix throws away the sensor estimate and starts again.
+    var resetAsked = false
 
     private init() {
         deadReckoning = d.object(forKey: "mind.dr") as? Bool ?? true
@@ -23,6 +29,8 @@ final class MindSettings: ObservableObject {
         haptics = d.object(forKey: "mind.haptics") as? Bool ?? true
         borderAssist = d.object(forKey: "mind.border") as? Bool ?? true
         umwelt = d.object(forKey: "mind.umwelt") as? Bool ?? true
+        gpsTrust = d.object(forKey: "mind.trust") as? Int ?? 80
+        headingTrim = d.object(forKey: "mind.trim") as? Int ?? 0
     }
 }
 

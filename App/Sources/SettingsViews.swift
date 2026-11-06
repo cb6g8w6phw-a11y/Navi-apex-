@@ -101,8 +101,10 @@ struct SettingsView: View {
             // A short menu like Waze's: a few big Liquid Glass cards, each opening a page with its switches.
             ScrollView {
                 VStack(spacing: 12) {
-                    menuRow("Głos i jazda", detail: "Głos, tryb podróży, unikanie opłat i autostrad",
+                    menuRow("Głos i jazda", detail: "Głos i domyślny tryb podróży",
                             icon: "speaker.wave.2.fill", color: 0x0F766E) { drivingPage }
+                    menuRow("Trasy", detail: "Objazd, tunel, granica i kalibracja strzałki",
+                            icon: "point.topleft.down.curvedto.point.bottomright.filled", color: 0x0891B2) { routesPage }
                     menuRow("Kamery i prędkość", detail: "Ostrzeżenia o fotoradarach, alarm prędkości",
                             icon: "camera.fill", color: 0xDC2626) { camerasPage }
                     menuRow("Ostrzeżenia drogowe", detail: Waze.shares.contains(.police) ? "Policja, wypadki, zamknięcia" : "Zamknięcia, samoloty policji",
@@ -176,6 +178,13 @@ struct SettingsView: View {
                     ForEach(TravelMode.allCases) { Text($0.label).tag($0) }
                 } label: { SettingLabel("Domyślny tryb podróży", icon: "car.fill", color: 0x2563EB) }
             }
+        }
+        .kiteList()
+        .navigationTitle("Głos i jazda")
+    }
+
+    private var routesPage: some View {
+        Form {
             Section("Trasy") {
                 Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", icon: "location.slash.fill", color: 0x0F766E) }
                 Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", icon: "clock.fill", color: 0x2563EB) }
@@ -188,9 +197,26 @@ struct SettingsView: View {
                     SettingLabel("Unikaj autostrad", icon: "road.lanes", color: 0x1D4ED8)
                 }
             }
+            Section {
+                Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {
+                    SettingLabel("GPS słaby od \(mind.gpsTrust) m", icon: "location.fill", color: 0x0891B2)
+                }
+                Stepper(value: $mind.headingTrim, in: -30...30, step: 1) {
+                    SettingLabel("Korekta kierunku: \(mind.headingTrim)°", icon: "location.north.line.fill", color: 0x0F766E)
+                }
+                Button {
+                    mind.resetAsked = true
+                } label: {
+                    SettingLabel("Wyzeruj czujniki", icon: "arrow.counterclockwise", color: 0xDC2626)
+                }
+            } header: {
+                Text("Kalibracja")
+            } footer: {
+                Text("Czujniki wchodzą dopiero w tunelu albo gdy GPS myli się bardziej niż wybrany próg, nie przy każdym postoju. Strzałkę kalibrujesz korektą kierunku. Kompas iPhone’a: połóż telefon płasko i zrób ósemkę w powietrzu, potem wyzeruj czujniki.")
+            }
         }
         .kiteList()
-        .navigationTitle("Głos i jazda")
+        .navigationTitle("Trasy")
     }
 
     private var camerasPage: some View {

@@ -43,8 +43,8 @@ final class DeadReckoning {
                 guard let self, let data else { return }
                 let p = data.pressure.doubleValue
                 if self.pressureBase == nil { self.pressureBase = p }
-                if let base = self.pressureBase, p - base > 0.35 { self.tunnel = true }
-                if let base = self.pressureBase, p - base < 0.12 { self.tunnel = false }
+                if let base = self.pressureBase, p - base > 1.2 { self.tunnel = true }
+                if let base = self.pressureBase, p - base < 0.4 { self.tunnel = false }
             }
         }
     }
@@ -58,16 +58,32 @@ final class DeadReckoning {
 
     /// `gps` is the raw fix. The returned location is what the puck and the route matcher should trust.
     func fuse(_ gps: CLLocation, route: [LatLng]) -> ReckoningFix {
+        if MindSettings.shared.resetAsked {
+            MindSettings.shared.resetAsked = false
+            stop()
+            pressureBase = nil
+            tunnel = false
+            ready = false
+        }
         start()
         let now = gps.timestamp
         let dt = min(1.5, max(0.05, lastAt.map { now.timeIntervalSince($0) } ?? 0.2))
         lastAt = now
         let acc = gps.horizontalAccuracy
-        let weak = acc < 0 || acc > 35 || gps.speed < 0 || tunnel
+        let limit = Double(max(25, MindSettings.shared.gpsTrust))
+        let trim = Double(MindSettings.shared.headingTrim)
+        func aimed(_ course: Double) -> Double {
+            var c = course + trim
+            while c < 0 { c += 360 }
+            while c >= 360 { c -= 360 }
+            return c
+        }
+        // A missing speed is not a lost fix. Only a real tunnel or a very bad accuracy leaves GPS.
+        let weak = tunnel || acc < 0 || acc > limit
         if !ready {
             lat = gps.coordinate.latitude
             lng = gps.coordinate.longitude
-            heading = gps.course >= 0 ? gps.course : 0
+            heading = gps.course >= 0 ? aimed(gps.course) : 0
             vN = max(0, gps.speed) * cos(heading * .pi / 180)
             vE = max(0, gps.speed) * sin(heading * .pi / 180)
             ready = true
@@ -80,7 +96,7 @@ final class DeadReckoning {
             while next < 0 { next += 360 }
             while next >= 360 { next -= 360 }
             heading = next
-            if gps.course >= 0 && !weak { heading = blend(heading, gps.course, 0.35) }
+            if gps.course >= 0 && !weak { heading = blend(heading, aimed(gps.course), 0.35) }
             let ax = dm.userAcceleration.x
             let ay = dm.userAcceleration.y
             let rad = heading * .pi / 180
@@ -92,7 +108,7 @@ final class DeadReckoning {
             }
         }
         if gps.speed >= 0 && gps.course >= 0 && !weak {
-            heading = gps.course
+            heading = aimed(gps.course)
             vN = gps.speed * cos(heading * .pi / 180)
             vE = gps.speed * sin(heading * .pi / 180)
         }
@@ -113,7 +129,7 @@ final class DeadReckoning {
             pLat *= 1 - gain
             pLng *= 1 - gain
             weight = gain
-            if gps.course >= 0 { heading = gps.course }
+            if gps.course >= 0 { heading = aimed(gps.course) }
         }
 
         if weak, route.count >= 2 {
@@ -133,7 +149,7 @@ final class DeadReckoning {
                              altitude: gps.altitude, horizontalAccuracy: weak ? 40 : max(5, acc),
                              verticalAccuracy: gps.verticalAccuracy, course: heading, speed: speed,
                              timestamp: now)
-        let label = tunnel ? "Tunel · czujniki" : (weak ? "Słaby GPS · filtr Kalmana" : "GPS")
+        let label = tunnel ? "Tunel · czujniki" : (weak ? "Słaby GPS · czujniki" : "GPS")
         return ReckoningFix(location: loc, gpsWeight: weight, tunnel: tunnel || weak, label: label)
     }
 

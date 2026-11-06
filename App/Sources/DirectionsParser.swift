@@ -204,6 +204,13 @@ enum DirectionsParser {
         sub(#"\bTurn right onto\b"#, "Skręć w prawo na")
         sub(#"\bTurn left\b"#, "Skręć w lewo")
         sub(#"\bTurn right\b"#, "Skręć w prawo")
+        // Google: "Hermsdorfer Str. turns right and becomes Abendstraße"
+        sub(#"\b(turns|bends|curves) slightly right and becomes\b"#, "łagodnie skręca w prawo i przechodzi w")
+        sub(#"\b(turns|bends|curves) slightly left and becomes\b"#, "łagodnie skręca w lewo i przechodzi w")
+        sub(#"\b(turns|bends|curves) sharp right and becomes\b"#, "ostro skręca w prawo i przechodzi w")
+        sub(#"\b(turns|bends|curves) sharp left and becomes\b"#, "ostro skręca w lewo i przechodzi w")
+        sub(#"\b(turns|bends|curves) right and becomes\b"#, "skręca w prawo i przechodzi w")
+        sub(#"\b(turns|bends|curves) left and becomes\b"#, "skręca w lewo i przechodzi w")
         sub(#"\bSlight left onto\b"#, "Łagodnie w lewo na")
         sub(#"\bSlight right onto\b"#, "Łagodnie w prawo na")
         sub(#"\bSlight left\b"#, "Łagodnie w lewo")

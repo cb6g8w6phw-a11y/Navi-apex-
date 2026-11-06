@@ -197,13 +197,13 @@ final class Navigator: ObservableObject {
 
     func handle(_ raw: CLLocation) {
         guard !arrived else { return }
-        let loc: CLLocation
+        var loc: CLLocation
         if route.mode == .drive, MindSettings.shared.deadReckoning {
             let fused = reckoning.fuse(raw, route: route.polyline)
-            loc = fused.tunnel ? fused.location : raw
+            loc = fused.tunnel ? fused.location : Self.trimmed(raw)
             reckoningLabel = fused.tunnel ? fused.label : nil
         } else {
-            loc = raw
+            loc = Self.trimmed(raw)
             reckoningLabel = nil
         }
         lastFix = loc
@@ -955,6 +955,18 @@ final class Navigator: ObservableObject {
     /** The way the phone is moving, once it's fast enough (about 9 mph) for that to be trusted. */
     private static func heading(_ loc: CLLocation) -> Double? {
         loc.course >= 0 && loc.speed >= 4 && loc.courseAccuracy >= 0 && loc.courseAccuracy < 45 ? loc.course : nil
+    }
+
+    /// Adds the compass correction from Settings › Trasy. No course from GPS: the fix stays as it is.
+    private static func trimmed(_ loc: CLLocation) -> CLLocation {
+        let trim = Double(MindSettings.shared.headingTrim)
+        guard trim != 0, loc.course >= 0 else { return loc }
+        var c = loc.course + trim
+        while c < 0 { c += 360 }
+        while c >= 360 { c -= 360 }
+        return CLLocation(coordinate: loc.coordinate, altitude: loc.altitude,
+                          horizontalAccuracy: loc.horizontalAccuracy, verticalAccuracy: loc.verticalAccuracy,
+                          course: c, speed: loc.speed, timestamp: loc.timestamp)
     }
 
     private func reroute(from loc: CLLocation, quiet: Bool = false) {

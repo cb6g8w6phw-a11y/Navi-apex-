@@ -143,8 +143,8 @@ public enum OSRM {
                     let mt = maneuverType(type, modifier, leftTraffic: Geo.drivesOnLeft(loc))
                     let signs = Signs(destinations: step["destinations"] as? String, exits: step["exits"] as? String,
                                       from: maneuvers.last?.road)
-                    var man = Maneuver(type: mt, instruction: instruction(type: type, modifier: modifier, road: name ?? ref,
-                                                                         exit: m["exit"] as? Int, mode: mode, signs: signs),
+                    var man = Maneuver(type: mt, instruction: DirectionsParser.polish(instruction(type: type, modifier: modifier, road: name ?? ref,
+                                                                         exit: m["exit"] as? Int, mode: mode, signs: signs)),
                                        location: loc, alongMeters: min(along, cum.last ?? along),
                                        distanceMeters: dist, road: name ?? ref, laneHint: nil)
                     man.lanes = lanes(step)
@@ -657,7 +657,7 @@ public enum StepMerge {
             guard let g = near.min(by: { abs($0.alongMeters - steps[i].alongMeters) < abs($1.alongMeters - steps[i].alongMeters) }),
                   let n = g.exit, n != steps[i].exit else { continue }
             steps[i].exit = n
-            steps[i].instruction = OSRM.instruction(type: "roundabout", modifier: nil, road: steps[i].road, exit: n, mode: .drive)
+            steps[i].instruction = DirectionsParser.polish(OSRM.instruction(type: "roundabout", modifier: nil, road: steps[i].road, exit: n, mode: .drive))
             // The way off says the same number.
             if i + 1 < steps.count, steps[i + 1].leavesRoundabout { steps[i + 1].exit = n }
         }
