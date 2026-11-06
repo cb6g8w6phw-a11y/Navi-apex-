@@ -35,10 +35,11 @@ final class MindSettings: ObservableObject {
         greenWave = d.object(forKey: "mind.green") as? Bool ?? true
         haptics = d.object(forKey: "mind.haptics") as? Bool ?? true
         borderAssist = d.object(forKey: "mind.border") as? Bool ?? true
-        umwelt = d.object(forKey: "mind.umwelt") as? Bool ?? true
-        Self.umweltOn = umwelt
+        let zoneOn = d.object(forKey: "mind.umwelt") as? Bool ?? true
+        umwelt = zoneOn
         gpsTrust = d.object(forKey: "mind.trust") as? Int ?? 80
         headingTrim = d.object(forKey: "mind.trim") as? Int ?? 0
+        Self.umweltOn = zoneOn
     }
 }
 
