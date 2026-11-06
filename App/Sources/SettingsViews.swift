@@ -1,4 +1,5 @@
 import AuthenticationServices
+import AVFoundation
 import SwiftUI
 
 struct LayersSheet: View {
@@ -81,6 +82,8 @@ struct SettingsView: View {
     @State private var musicName = ""
     @State private var musicLink = ""
     @State private var musicNote = ""
+    @State private var versionTaps = 0
+    @State private var couch: CouchScene?
     var body: some View {
         if DemoScript.step == "wazesettings" {
             // Straight into the Waze screen, for the build's screenshot of it.
@@ -121,6 +124,10 @@ struct SettingsView: View {
                     menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
                     menuRow("O aplikacji", detail: "Wersja " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }
+                    if mind.simUnlocked {
+                        menuRow("Tryb symulacji", detail: "Test Mode · tunel, granica i Umwelt z kanapy",
+                                icon: "play.rectangle.fill", color: 0x0F766E) { simPage }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -460,7 +467,19 @@ struct SettingsView: View {
     private var aboutPage: some View {
         Form {
             Section {
-                LabeledContent("Wersja", value: version)
+                Button {
+                    versionTaps += 1
+                    if versionTaps >= 5 { mind.simUnlocked = true }
+                } label: {
+                    HStack {
+                        Text("Wersja").foregroundColor(.primary)
+                        Spacer()
+                        Text(version).foregroundColor(.secondary)
+                    }
+                }
+                if mind.simUnlocked {
+                    Text("Tryb symulacji jest na dole Ustawień.").font(.caption).foregroundColor(.secondary)
+                }
                 Link("Apex na GitHubie", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
                 Link("Na bazie Vela Maps dla Androida", destination: URL(string: "https://github.com/PimpinPumpkin/Vela")!)
                 Link("Raporty Waze na żywo jak w SABRE Plus (MIT)", destination: URL(string: "https://github.com/nicglazkov/highway-radar-sabre-plus")!)
@@ -470,6 +489,30 @@ struct SettingsView: View {
         }
         .kiteList()
         .navigationTitle("O aplikacji")
+    }
+
+    /// Hidden until the version row is tapped five times. Shows the real drive cards, without moving.
+    private var simPage: some View {
+        Form {
+            Section {
+                Button { couch = .tunnel } label: {
+                    SettingLabel("Symuluj wjazd do tunelu", detail: "Dead reckoning: karta, oś drogi i wibracja.", icon: "location.slash.fill", color: 0x0F766E)
+                }
+                Button { couch = .border } label: {
+                    SettingLabel("Symuluj dojazd do granicy DE–PL", detail: "Kolejka na przejściu i kalkulacja paliwa.", icon: "flag.fill", color: 0xDC2626)
+                }
+                Button { couch = .umwelt } label: {
+                    SettingLabel("Symuluj strefę Umwelt", detail: "Plakietka i powiadomienie o wjeździe.", icon: "leaf.fill", color: 0x16A34A)
+                }
+            } footer: {
+                Text("Telefon zostaje na kanapie. Karty są te same co w jeździe. Liczby biorą się z Twojego auta i z tych samych wzorów co na trasie.")
+            }
+        }
+        .kiteList()
+        .navigationTitle("Tryb symulacji")
+        .fullScreenCover(item: $couch) { scene in
+            CouchPreview(scene: scene)
+        }
     }
 }
 
@@ -648,5 +691,136 @@ struct WazeSettingsView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private let couchSpeaker = AVSpeechSynthesizer()
+
+enum CouchScene: String, Identifiable {
+    case tunnel, border, umwelt
+    var id: String { rawValue }
+}
+
+/// The drive cards, on the couch. Same views as navigation, fed by the real formulas.
+struct CouchPreview: View {
+    let scene: CouchScene
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var mind = MindSettings.shared
+    @State private var notes: [GuidanceNote] = []
+    @State private var zoneName: String?
+    @State private var blocked = false
+    @State private var caption = ""
+    @State private var banner = ("arrow.up", "200 m", "Jedź prosto")
+
+    var body: some View {
+        ZStack {
+            Color(hex: 0x07110F).ignoresSafeArea()
+            VStack(spacing: 12) {
+                HStack(alignment: .center, spacing: 16) {
+                    Image(systemName: banner.0)
+                        .font(.system(size: 52, weight: .heavy))
+                        .frame(width: 84, height: 84)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(banner.1).font(.system(size: 40, weight: .heavy)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                        Text(banner.2).font(.system(size: 22, weight: .bold)).lineLimit(2)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Vela.navGreen))
+
+                ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
+                    MindNoteCard(note: note)
+                }
+                if let zoneName {
+                    HStack {
+                        UmweltChip(name: zoneName, blocked: blocked)
+                        Spacer(minLength: 0)
+                    }
+                }
+                if scene == .tunnel {
+                    HStack {
+                        SpeedBadge(mps: 22, limitKmh: 80)
+                        Spacer()
+                    }
+                }
+                Text(caption)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.72))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Zamknij") { dismiss() }
+                    .font(.system(size: 18, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(Capsule().fill(Color.white.opacity(0.14)))
+                    .foregroundColor(.white)
+                    .padding(.bottom, 12)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 20)
+        }
+        .onAppear(perform: play)
+    }
+
+    private func play() {
+        notes = []
+        zoneName = nil
+        switch scene {
+        case .tunnel:
+            banner = ("location.slash.fill", "GPS off", "Oś tunelu")
+            notes = [GuidanceNote(
+                title: "Tunel · czujniki",
+                body: "Pozycja jedzie z czujników i jest trzymana na osi drogi. GPS gorszy niż \(mind.gpsTrust) m, więc nie skacze na ulicę nad tunelem.",
+                tone: "info")]
+            caption = "Ta sama karta co przy zniknięciu sygnału. Wibracja idzie tylko wtedy, gdy jest włączona w Trasy."
+            RouteMind.haptic(.rigid)
+        case .border:
+            banner = ("flag.fill", "18 km", "A2 · granica")
+            let approach = LatLng(52.32, 14.40)
+            if let queue = RouteMind.borderNote(near: approach) {
+                notes.append(queue)
+            } else {
+                notes.append(GuidanceNote(title: "Granica", body: "Brak krótszej kolejki w tym punkcie testowym.", tone: "info"))
+            }
+            let tank = max(settings.fuelTank, 1)
+            var left = settings.fuelLeft
+            var forced = false
+            if settings.carFuel == "electric" || left * 10 >= tank * 9 {
+                left = max(8, tank / 4)
+                forced = true
+            }
+            if let fuel = RouteMind.borderFuelNote(
+                here: RouteMind.helmstedtPoint, destination: LatLng(52.406, 16.925),
+                tripMeters: 280_000, fuelLeft: left, fuelTank: tank,
+                consumption: settings.carConsumption, electric: false) {
+                notes.append(fuel)
+            }
+            caption = forced
+                ? "Kolejka liczona 18 km przed Świeckiem (Świecko 36 min, Słubice 12 min). Bak jest pełny albo to elektryk, więc do testu wzięte \(left) l z \(tank)."
+                : "Kolejka 18 km przed Świeckiem. Paliwo z Twojego auta: \(left) l z \(tank) l."
+        case .umwelt:
+            banner = ("leaf.fill", "1,2 km", "Wjazd do strefy")
+            let probes = [
+                LatLng(52.1205, 11.629), LatLng(52.131, 11.639), LatLng(52.127, 11.615),
+                LatLng(52.520, 13.405), LatLng(51.340, 12.375),
+            ]
+            let hit = probes.compactMap { CityAtlas.hit($0) }.first
+            let name = hit?.name ?? "Magdeburg"
+            zoneName = name
+            blocked = !settings.mayEnterUmwelt
+            notes = [GuidanceNote(title: "Umweltzone \(name)", body: hit?.body ?? "Do wjazdu potrzebna zielona plakietka.", tone: "info")]
+            caption = blocked
+                ? "Bez plakietki ta strefa jest ścianą. Włącz zieloną plakietkę w Moje auto, żeby zobaczyć wariant z wjazdem."
+                : "Auto może wjechać. Plakietka i karta są takie jak na prawdziwej trasie."
+        }
+        guard settings.voice, let first = notes.first else { return }
+        let said = AVSpeechUtterance(string: "\(first.title). \(first.body)")
+        said.voice = AVSpeechSynthesisVoice(language: "pl-PL")
+        couchSpeaker.stopSpeaking(at: .immediate)
+        couchSpeaker.speak(said)
     }
 }
