@@ -127,8 +127,9 @@ final class AppSettings: ObservableObject {
         fuelOn = d.object(forKey: "fuelOn") as? Bool ?? true
         fuelKey = d.string(forKey: "fuelKey") ?? ""
         fuelType = d.string(forKey: "fuelType") ?? "diesel"
-        fuelTank = d.object(forKey: "fuelTank") as? Int ?? 40
-        fuelLeft = d.object(forKey: "fuelLeft") as? Int ?? fuelTank
+        let tank = d.object(forKey: "fuelTank") as? Int ?? 40
+        fuelTank = tank
+        fuelLeft = d.object(forKey: "fuelLeft") as? Int ?? tank
         fuelCount = d.object(forKey: "fuelCount") as? Int ?? 5
         weatherOn = d.object(forKey: "weatherOn") as? Bool ?? true
         radarOn = d.bool(forKey: "radarOn")
