@@ -8,6 +8,7 @@ struct NavigationOverlay: View {
     @State private var showAlong = false
     @State private var confirmEnd = false
     @State private var showPlayer = false
+    @State private var showClosure = false
     @ObservedObject private var music = NowPlay.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
@@ -115,6 +116,8 @@ struct NavigationOverlay: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 10) {
+                    MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 56) { showClosure = true }
+                        .accessibilityLabel("Zgłoś zamknięcie")
                     MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 56) {
                         model.recenterNav()
                     }
@@ -186,6 +189,9 @@ struct NavigationOverlay: View {
                 MusicPlayerOverlay(music: music, shown: $showPlayer)
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
+        }
+        .sheet(isPresented: $showClosure) {
+            ClosureReportSheet(at: model.userLatLng) { showClosure = false }.kiteType()
         }
         .sheet(isPresented: $showAlong) {
             AlongRouteSheet(nav: nav).kiteType()

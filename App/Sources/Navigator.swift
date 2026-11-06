@@ -741,14 +741,22 @@ final class Navigator: ObservableObject {
         for e in events {
             guard e.location.lat > minLat - 0.01, e.location.lat < maxLat + 0.01,
                   e.location.lng > minLng - 0.01, e.location.lng < maxLng + 0.01 else { continue }
+            if e.id.hasPrefix("user-") {
+                let hit = Geo.project(e.location, on: line, cumulative: cum)
+                guard hit.offset < 80 else { continue }
+                let top = cum.count - 1
+                let at = min(max(hit.along, 0), cum[top])
+                found.append((event: e, start: at, end: at))
+                continue
+            }
             var best = 0
             var bestD = Double.greatestFiniteMagnitude
             for (i, p) in line.enumerated() {
                 let d = p.distance(to: e.location)
                 if d < bestD { bestD = d; best = i }
             }
-            // The opposite carriageway is a few dozen metres away: this keeps most of those out.
-            guard bestD < 40 else { continue }
+            let limit = 40.0
+            guard bestD < limit else { continue }
             // The stretch is the part of the route inside the event's box, around the nearest point.
             var lo = best, hi = best
             if let x = e.extent {
@@ -766,22 +774,24 @@ final class Navigator: ObservableObject {
 
     private func roadWords(_ e: RoadEvent) -> String {
         switch e.kind {
-        case .closure: return "zamknięcie drogi"
+        case .closure: return e.id.hasPrefix("user-") && e.road == "Rower" ? "zamknięta ścieżka" : "zamknięcie drogi"
         case .roadworks: return e.blocked ? "roboty drogowe, droga zablokowana" : "roboty drogowe"
         case .warning: return "ostrzeżenie na drodze"
         }
     }
 
     private func checkRoadEvents(_ p: RouteTracker.Progress, _ loc: CLLocation) {
-        guard route.mode == .drive, !demoAlerts, AppSettings.shared.traffic else {
+        let mine = ClosureBoard.shared.asEvents(for: route.mode)
+        let official = (route.mode == .drive && !demoAlerts && AppSettings.shared.traffic) ? RoadEvents.shared.events : []
+        let events = official + mine
+        guard (route.mode == .drive || route.mode == .bike), !events.isEmpty else {
             if roadAhead != nil { roadAhead = nil }
             if detourOffer != nil { detourOffer = nil }
             return
         }
-        let events = RoadEvents.shared.events
         let line = route.polyline
-        guard line.count >= 2, !events.isEmpty else { return }
-        let key = "\(route.id)-\(events.count)-\(RoadEvents.shared.updatedAt.timeIntervalSince1970)"
+        guard line.count >= 2 else { return }
+        let key = "\(route.id)-\(events.count)-\(RoadEvents.shared.updatedAt.timeIntervalSince1970)-\(ClosureBoard.shared.revision)"
         if key != routeRoadKey {
             routeRoadKey = key
             routeRoad = Self.eventsAlong(line, events)
@@ -833,13 +843,16 @@ final class Navigator: ObservableObject {
         let from = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         let heading = Self.heading(loc), id = route.id, ev = blocked.event
         let to = destination.location, hw = avoidHighways, tolls = avoidTolls
+        let mode = route.mode
         Task {
-            let r = await Directions.routes(from: from, to: to, mode: .drive, avoidHighways: hw, avoidTolls: tolls,
+            let r = await Directions.routes(from: from, to: to, mode: mode, avoidHighways: hw, avoidTolls: tolls,
                                             useGoogle: !AppSettings.shared.noGoogle, via: self.stops.map(\.location),
                                             heading: heading)
             self.detourLoading = false
             guard !self.stopped, self.route.id == id, let now = self.progress else { return }
-            let clear = r.routes.filter { alt in !alt.polyline.contains { $0.distance(to: ev.location) < 250 } }
+            let clear = r.routes.filter { alt in
+                alt.polyline.count >= 2 && Geo.project(ev.location, on: alt.polyline).offset >= 250
+            }
             guard let best = clear.min(by: { $0.durationSeconds < $1.durationSeconds }) else { return }
             let extra = best.durationSeconds - now.remainingSeconds
             self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: ev.id)
@@ -922,8 +935,9 @@ final class Navigator: ObservableObject {
         let to = destination.location, hw = avoidHighways, tolls = avoidTolls, via = stops.map(\.location)
         Task {
             let r = await Directions.routes(from: from, to: to, mode: .drive, avoidHighways: hw, avoidTolls: tolls, via: via, heading: heading)
+            let routes = ClosureBoard.prefer(r.routes, mode: .drive)
             self.trafficLoading = false
-            guard let fresh = r.routes.first, self.route.id == id, !self.rerouting, let now = self.progress,
+            guard let fresh = routes.first, self.route.id == id, !self.rerouting, let now = self.progress,
                   planned > 0, fresh.trafficSeconds != nil else { return }
             let current = now.remainingSeconds
             let saving = current - fresh.durationSeconds
@@ -1002,9 +1016,10 @@ final class Navigator: ObservableObject {
             let r = await Directions.routes(from: from, to: to, mode: mode, avoidHighways: hw, avoidTolls: tolls,
                                             useGoogle: !AppSettings.shared.noGoogle, via: self.stops.map(\.location),
                                             heading: heading)
+            let routes = ClosureBoard.prefer(r.routes, mode: mode)
             guard !self.stopped, req == self.rerouteRequest else { return }
             self.rerouting = false
-            guard let fresh = r.routes.first else { return }
+            guard let fresh = routes.first else { return }
             self.toldNoSignal = false
             self.adopt(fresh)
             if !quiet { self.sayNewRoute() }

@@ -342,6 +342,7 @@ struct VelaMapView: UIViewRepresentable {
         // Reports found by the background sweep show on the heat map straight away.
         WazeHistory.shared.onChange = { [weak c, weak map] in if let c, let map { c.render(map) } }
         RoadEvents.shared.onChange = { [weak c, weak map] in if let c, let map { c.render(map) } }
+        ClosureBoard.shared.onChange = { [weak c, weak map] in if let c, let map { c.render(map) } }
         FuelPrices.shared.onChange = { [weak c, weak map] in if let c, let map { c.render(map) } }
         CityAtlas.shared.onChange = { [weak c, weak map] in if let c, let map { c.render(map) } }
         CityAtlas.shared.warm()
@@ -380,6 +381,7 @@ struct VelaMapView: UIViewRepresentable {
         private var lastSignalsKey = ""
         private var lastWazeKey = ""
         private var lastRoadKey = ""
+        private var lastUserClosureKey = ""
         private var lastFuelKey = ""
         private var lastConfigKey = ""
 
@@ -393,6 +395,7 @@ struct VelaMapView: UIViewRepresentable {
         private var signalAnns: [KiteAnnotation] = []
         private var wazeAnns: [KiteAnnotation] = []
         private var roadAnns: [KiteAnnotation] = []
+        private var userClosureAnns: [KiteAnnotation] = []
         private var fuelAnns: [KiteAnnotation] = []
         private var bubbleAnns: [KiteAnnotation] = []
         private var headAnns: [KiteAnnotation] = []
@@ -441,7 +444,7 @@ struct VelaMapView: UIViewRepresentable {
 
         func repaint(_ map: MKMapView) {
             map.overrideUserInterfaceStyle = dark ? .dark : .light
-            lastResultsKey = ""; lastRouteKey = ""; lastMineKey = ""; lastCameraKey = ""; lastSignalsKey = ""; lastWazeKey = ""; lastRoadKey = ""; lastFuelKey = ""
+            lastResultsKey = ""; lastRouteKey = ""; lastMineKey = ""; lastCameraKey = ""; lastSignalsKey = ""; lastWazeKey = ""; lastRoadKey = ""; lastUserClosureKey = ""; lastFuelKey = ""
             lockedRouteId = ""
             for a in map.annotations {
                 if let ka = a as? KiteAnnotation, let v = map.view(for: ka) as? KiteAnnotationView { v.configure(ka, dark: dark) }
@@ -514,6 +517,7 @@ struct VelaMapView: UIViewRepresentable {
             renderSignals(map)
             renderWaze(map)
             renderRoadEvents(map)
+            renderUserClosures(map)
             renderFuel(map)
             renderMine(map)
             let railWanted = s.transitLines && !navigating
@@ -703,6 +707,21 @@ struct VelaMapView: UIViewRepresentable {
                 return a
             }
             replaceAnnotations(&roadAnns, anns, map)
+        }
+
+        /** Closures reported in Apex, for cars or bikes. */
+        private func renderUserClosures(_ map: MKMapView) {
+            let board = ClosureBoard.shared
+            let key = "\(board.revision)"
+            guard key != lastUserClosureKey else { return }
+            lastUserClosureKey = key
+            let anns: [KiteAnnotation] = board.items.map { c in
+                let a = KiteAnnotation(layer: .roadEvent, id: c.id, coordinate: coord(c.location))
+                a.icon = "road-closure"
+                a.big = true
+                return a
+            }
+            replaceAnnotations(&userClosureAnns, anns, map)
         }
 
         /** Petrol stations with their price under the pin, the cheapest in green, for what's on screen. */
@@ -1227,6 +1246,11 @@ struct VelaMapView: UIViewRepresentable {
                 UISelectionFeedbackGenerator().selectionChanged()
                 model.fuelInfo = station
             case .roadEvent:
+                if let mine = ClosureBoard.shared.event(id: a.id) {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    model.roadInfo = mine
+                    return
+                }
                 guard let event = RoadEvents.shared.events.first(where: { $0.id == a.id }) else { return }
                 UISelectionFeedbackGenerator().selectionChanged()
                 model.roadInfo = event
@@ -1269,6 +1293,7 @@ struct VelaMapView: UIViewRepresentable {
             loadRoadEvents(map)
             loadFuel(map)
             renderRoadEvents(map)
+            renderUserClosures(map)
             renderFuel(map)
             noteHeading(map)
             CityAtlas.shared.consider(map)

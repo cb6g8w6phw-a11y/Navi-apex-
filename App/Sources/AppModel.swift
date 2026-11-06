@@ -552,7 +552,7 @@ final class AppModel: ObservableObject {
                                                 heading: m == .drive ? heading : nil, alternatives: true)
                 guard directions?.destination.id == d.destination.id, routesRequest == req else { return }
                 directions?.loading.remove(m)
-                directions?.routes[m] = r.routes
+                directions?.routes[m] = ClosureBoard.prefer(r.routes, mode: m)
                 if m == .drive { directions?.stickerNote = stickerLine(from: from, to: to, line: r.routes.first?.polyline ?? []) }
                 if r.routes.isEmpty {
                     directions?.errors[m] = Connectivity.explain(r.error == "No route found." ? "No route found." : "Couldn't get a route just now. Try again in a moment.")

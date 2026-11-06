@@ -22,6 +22,7 @@ struct ContentView: View {
 
     @State private var showWeather = false
     @State private var showPlayer = false
+    @State private var showClosure = false
     @ObservedObject private var music = NowPlay.shared
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
@@ -137,10 +138,20 @@ struct ContentView: View {
             }
             if let event = model.roadInfo, model.tab == .map, model.nav == nil {
                 VStack {
-                    RoadEventCard(event: event) { withAnimation { model.roadInfo = nil } }
-                        .padding(.leading, stripPad)
-                        .padding(.top, 64)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    VStack(spacing: 8) {
+                        RoadEventCard(event: event) { withAnimation { model.roadInfo = nil } }
+                        if event.id.hasPrefix("user-") {
+                            Button("Usuń zgłoszenie") {
+                                ClosureBoard.shared.remove(event.id)
+                                withAnimation { model.roadInfo = nil }
+                            }
+                            .font(.system(size: 15, weight: .bold))
+                            .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.leading, stripPad)
+                    .padding(.top, 64)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                     Spacer()
                 }
                 .inSidePanel(panel)
@@ -179,6 +190,9 @@ struct ContentView: View {
                 MusicPlayerOverlay(music: music, shown: $showPlayer)
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
+        }
+        .sheet(isPresented: $showClosure) {
+            ClosureReportSheet(at: model.userLatLng) { showClosure = false }.kiteType()
         }
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
@@ -306,6 +320,7 @@ struct BrowseOverlay: View {
                                             Label("Copy my coordinates", systemImage: "doc.on.doc")
                                         }
                                     }
+                                    Button { showClosure = true } label: { Label("Zgłoś zamknięcie", systemImage: "nosign") }
                                     Button { model.saveParking() } label: { Label("I parked here", systemImage: "parkingsign") }
                                 }
                             }
