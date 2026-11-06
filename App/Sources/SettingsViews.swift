@@ -26,6 +26,7 @@ struct LayersSheet: View {
                 tile("Teren", icon: "mountain.2.fill", on: settings.terrain) { settings.terrain.toggle() }
                 tile("Fotoradary", badge: .speed, on: settings.speedCameras) { settings.speedCameras.toggle() }
                 tile("Kamery tablic", badge: .plate, on: settings.plateCameras) { settings.plateCameras.toggle() }
+                tile("Monitoring", badge: .watch, on: settings.watchCameras) { settings.watchCameras.toggle() }
                 tile("Paliwo", icon: "fuelpump.fill", on: settings.fuelOn) { settings.fuelOn.toggle() }
                 tile("Radar", icon: "cloud.rain.fill", on: settings.radarOn) { settings.radarOn.toggle() }
                 tile("Obrysy miast", icon: "square.dashed", on: cities.enabled) { cities.enabled.toggle() }
@@ -257,10 +258,13 @@ struct SettingsView: View {
                 Toggle(isOn: $settings.plateCameras) {
                     SettingLabel("Kamery tablic rejestracyjnych", icon: "number", color: 0x6B7280)
                 }
+                Toggle(isOn: $settings.watchCameras) {
+                    SettingLabel("Kamery monitoringu", detail: "Publiczne kamery na mapie. Bez głosu.", icon: "video.fill", color: 0x475569)
+                }
             } header: {
                 Text("Pokazuj na mapie i trasie")
             } footer: {
-                Text("Fotoradary i kamery tablic z OpenStreetMap, na mapie i na trasie. W części krajów, jak Francja i Niemcy, ostrzeganie o fotoradarach może być zabronione. Sprawdź, zanim włączysz tam głos.")
+                Text("Fotoradary i kamery tablic z OpenStreetMap, na mapie i na trasie. Monitoring to zwykłe kamery miejskie, tylko ikona na mapie. W części krajów, jak Francja i Niemcy, ostrzeganie o fotoradarach może być zabronione. Sprawdź, zanim włączysz tam głos.")
             }
         }
         .kiteList()
