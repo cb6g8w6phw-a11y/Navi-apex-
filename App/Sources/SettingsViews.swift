@@ -78,6 +78,9 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @State private var appleNote = ""
+    @State private var musicName = ""
+    @State private var musicLink = ""
+    @State private var musicNote = ""
     var body: some View {
         if DemoScript.step == "wazesettings" {
             // Straight into the Waze screen, for the build's screenshot of it.
@@ -112,6 +115,8 @@ struct SettingsView: View {
                     menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
                     menuRow("Konto Apple", detail: "Mapy Apple na tym iPhonie",
                             value: settings.appleUser.isEmpty ? nil : "Połączone", icon: "applelogo", color: 0x111111) { applePage }
+                    menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
+                            value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48) { musicPage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
                     menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
@@ -318,6 +323,63 @@ struct SettingsView: View {
         .kiteList()
         .navigationTitle("Konto Apple")
         .onAppear { refreshApple() }
+    }
+
+    private var musicPage: some View {
+        Form {
+            Section {
+                ForEach(MusicCatalog.builtins) { app in
+                    Toggle(isOn: Binding(
+                        get: { settings.musicEnabled.contains(app.id) || (settings.musicEnabled.isEmpty && app.id == "apple") },
+                        set: { settings.setMusic(app.id, on: $0) }
+                    )) {
+                        SettingLabel(app.name,
+                                     detail: app.isApple ? "Pauza, poprzedni i następny w trakcie jazdy." : "Otwiera aplikację. iPhone nie oddaje jej pauzy.",
+                                     icon: app.symbol, color: app.color)
+                    }
+                    if app.id != "apple" && settings.musicEnabled.contains(app.id) {
+                        Button("Otwórz \(app.name)") { MusicCatalog.open(app) }
+                            .foregroundColor(.primary)
+                    }
+                }
+            } header: {
+                Text("Usługi")
+            } footer: {
+                Text("Włączone usługi widać w odtwarzaczu pod ceną paliwa. Apple Music da się prowadzić stąd. Reszta otwiera swoją aplikację.")
+            }
+            Section {
+                TextField("Nazwa, np. Mornye", text: $musicName)
+                TextField("Link albo schemat, np. livecontainer://", text: $musicLink)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                Button("Dodaj z linku") {
+                    if settings.addMusicLink(name: musicName, link: musicLink) {
+                        musicName = ""
+                        musicLink = ""
+                        musicNote = ""
+                    } else {
+                        musicNote = "Wpisz nazwę i link. Adres ze strony, schemat aplikacji albo link z Live Container."
+                    }
+                }
+                if !musicNote.isEmpty {
+                    Text(musicNote).font(.footnote).foregroundColor(.secondary)
+                }
+                ForEach(settings.musicExtras) { extra in
+                    Button { MusicCatalog.open(MusicTarget(id: extra.id, name: extra.name, symbol: "link", color: 0x0891B2, link: extra.link, store: nil)) } label: {
+                        SettingLabel(extra.name, detail: extra.link, icon: "link", color: 0x0891B2)
+                    }
+                    .foregroundColor(.primary)
+                }
+                .onDelete { settings.removeMusicLinks(at: $0) }
+            } header: {
+                Text("Inne z linku")
+            } footer: {
+                Text("Tak jak dokładanie usługi w Mornye: wklejasz link i Apex go otwiera. Przesuń wiersz w lewo, żeby usunąć. Apex nie pobiera utworów.")
+            }
+        }
+        .kiteList()
+        .navigationTitle("Muzyka")
     }
 
     private func connectApple(_ result: Result<ASAuthorization, Error>) {

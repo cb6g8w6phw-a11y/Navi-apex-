@@ -107,22 +107,89 @@ struct AirPlayButton: UIViewRepresentable {
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
+/** A music app Apex can open. Apple Music is the only one iOS lets us pause and skip. */
+struct MusicExtra: Codable, Identifiable, Equatable {
+    var id: String
+    var name: String
+    var link: String
+}
+
+struct MusicTarget: Identifiable, Sendable {
+    let id: String
+    let name: String
+    let symbol: String
+    let color: UInt32
+    let link: String
+    let store: String?
+    var isApple: Bool { id == "apple" }
+}
+
+enum MusicCatalog {
+    static let builtins: [MusicTarget] = [
+        MusicTarget(id: "apple", name: "Apple Music", symbol: "applelogo", color: 0xFA2D48, link: "music://", store: nil),
+        MusicTarget(id: "spotify", name: "Spotify", symbol: "music.note.list", color: 0x1DB954, link: "spotify://", store: "https://apps.apple.com/app/spotify/id324684580"),
+        MusicTarget(id: "ytmusic", name: "YouTube Music", symbol: "play.rectangle.fill", color: 0xFF0033, link: "youtubemusic://", store: "https://apps.apple.com/app/youtube-music/id1017492454"),
+        MusicTarget(id: "deezer", name: "Deezer", symbol: "waveform", color: 0xEF6C00, link: "deezer://", store: "https://apps.apple.com/app/deezer/id602231273"),
+        MusicTarget(id: "tidal", name: "Tidal", symbol: "hifispeaker.fill", color: 0x111111, link: "tidal://", store: "https://apps.apple.com/app/tidal/id913943275"),
+        MusicTarget(id: "soundcloud", name: "SoundCloud", symbol: "cloud.fill", color: 0xFF5500, link: "soundcloud://", store: "https://apps.apple.com/app/soundcloud/id336353151"),
+        MusicTarget(id: "amazon", name: "Amazon Music", symbol: "music.mic", color: 0x25D1DA, link: "amazonmusic://", store: "https://apps.apple.com/app/amazon-music/id510855668"),
+        MusicTarget(id: "qobuz", name: "Qobuz", symbol: "opticaldisc.fill", color: 0x0D47A1, link: "qobuz://", store: "https://apps.apple.com/app/qobuz/id946166469"),
+    ]
+
+    static func normalize(_ raw: String) -> String? {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        if !t.contains("://") {
+            t = t.contains(".") ? "https://\(t)" : "\(t)://"
+        }
+        guard let url = URL(string: t), let scheme = url.scheme, !scheme.isEmpty else { return nil }
+        return t
+    }
+
+    static func connected(_ s: AppSettings) -> [MusicTarget] {
+        let on = s.musicEnabled.isEmpty ? ["apple"] : s.musicEnabled
+        let list = builtins.filter { on.contains($0.id) }
+        let base = list.isEmpty ? [builtins[0]] : list
+        let extras = s.musicExtras.map {
+            MusicTarget(id: $0.id, name: $0.name, symbol: "link", color: 0x0891B2, link: $0.link, store: nil)
+        }
+        return base + extras
+    }
+
+    static func active(_ s: AppSettings) -> MusicTarget {
+        let all = connected(s)
+        return all.first { $0.id == s.musicActive } ?? all[0]
+    }
+
+    /// Opens the service. If that app is missing, falls through to its App Store page.
+    static func open(_ t: MusicTarget) {
+        guard let url = URL(string: t.link) else { return }
+        let store = t.store
+        UIApplication.shared.open(url, options: [:]) { ok in
+            guard !ok, let store, let page = URL(string: store) else { return }
+            DispatchQueue.main.async { UIApplication.shared.open(page) }
+        }
+    }
+}
+
 /** Tiny Liquid Glass square under the fuel price. Tap opens the player. */
 struct MusicPip: View {
     @ObservedObject var music: NowPlay
+    @ObservedObject private var settings = AppSettings.shared
     var open: () -> Void
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14, style: .continuous) }
 
     var body: some View {
+        let active = MusicCatalog.active(settings)
         Button(action: open) {
             ZStack {
-                if let img = music.art {
+                if active.isApple, let img = music.art {
                     Image(uiImage: img)
                         .resizable().scaledToFill()
                         .frame(width: 28, height: 28)
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 } else {
-                    Image(systemName: music.playing ? "waveform" : "music.note")
+                    Image(systemName: active.isApple ? (music.playing ? "waveform" : "music.note") : active.symbol)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -131,7 +198,7 @@ struct MusicPip: View {
             .glassButton(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Odtwarzacz")
+        .accessibilityLabel(active.name)
         .onAppear { music.attach() }
     }
 }
@@ -162,12 +229,14 @@ struct MusicPlayerOverlay: View {
 /** Square player with rounded corners, Liquid Glass, opened from the little button. */
 struct NowPlayingCard: View {
     @ObservedObject var music: NowPlay
+    @ObservedObject private var settings = AppSettings.shared
     var side: CGFloat
     var close: () -> Void
     @State private var showLyrics = false
     @State private var showQueue = false
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 28, style: .continuous) }
     private var artShape: RoundedRectangle { RoundedRectangle(cornerRadius: 20, style: .continuous) }
+    private var active: MusicTarget { MusicCatalog.active(settings) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -175,10 +244,34 @@ struct NowPlayingCard: View {
                 icon("xmark", close)
                 Spacer(minLength: 0)
                 AirPlayButton().frame(width: 36, height: 36)
-                icon("quote.bubble") { showLyrics = true }
-                icon("list.bullet") { showQueue = true }
+                if active.isApple {
+                    icon("quote.bubble") { showLyrics = true }
+                    icon("list.bullet") { showQueue = true }
+                }
             }
             .frame(height: 36)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(MusicCatalog.connected(settings)) { item in
+                        Button {
+                            settings.musicActive = item.id
+                            if !item.isApple { MusicCatalog.open(item) }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: item.symbol).font(.system(size: 11, weight: .bold))
+                                Text(item.name).font(.system(size: 12, weight: .bold)).lineLimit(1)
+                            }
+                            .padding(.horizontal, 8)
+                            .frame(height: 26)
+                            .foregroundColor(.primary)
+                            .background(Capsule().fill(Color.primary.opacity(item.id == active.id ? 0.16 : 0.06)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(height: 28)
 
             art
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -186,47 +279,63 @@ struct NowPlayingCard: View {
                 .layoutPriority(-1)
                 .clipShape(artShape)
 
-            Text(music.title.isEmpty ? "Nic nie gra" : music.title)
+            Text(headline)
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(.primary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(music.title.isEmpty
-                 ? "Włącz utwór w Muzyce"
-                 : (music.artist.isEmpty ? "Muzyka" : music.artist))
+            Text(subtitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Slider(value: $music.elapsed, in: 0...max(music.duration, 1), onEditingChanged: { editing in
-                music.scrubbing = editing
-                if !editing { music.seek(music.elapsed) }
-            })
-            .tint(.primary)
-            .disabled(!music.allowed || music.duration <= 0)
+            if active.isApple {
+                Slider(value: $music.elapsed, in: 0...max(music.duration, 1), onEditingChanged: { editing in
+                    music.scrubbing = editing
+                    if !editing { music.seek(music.elapsed) }
+                })
+                .tint(.primary)
+                .disabled(!music.allowed || music.duration <= 0)
 
-            HStack(spacing: 18) {
-                jump("backward.fill") { music.previous() }
-                Button { music.toggle() } label: {
-                    Image(systemName: music.playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 22, weight: .bold))
+                HStack(spacing: 18) {
+                    jump("backward.fill") { music.previous() }
+                    Button { music.toggle() } label: {
+                        Image(systemName: music.playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.primary)
+                            .frame(width: 54, height: 54)
+                            .glassButton(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    jump("forward.fill") { music.next() }
+                }
+
+                if !music.allowed {
+                    Button { music.attach() } label: {
+                        Text("Pozwól na dostęp do Muzyki")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(Color(hex: 0x0F766E))
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Button { MusicCatalog.open(active) } label: {
+                    Label("Otwórz \(active.name)", systemImage: "arrow.up.forward.app")
+                        .font(.system(size: 15, weight: .bold))
+                        .lineLimit(1)
                         .foregroundColor(.primary)
-                        .frame(width: 54, height: 54)
-                        .glassButton(Circle())
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .glassButton(Capsule())
                 }
                 .buttonStyle(.plain)
-                jump("forward.fill") { music.next() }
-            }
-
-            if !music.allowed {
-                Button { music.attach() } label: {
-                    Text("Pozwól na dostęp do Muzyki")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(Color(hex: 0x0F766E))
-                }
-                .buttonStyle(.plain)
+                Text("Pauza jest w tej aplikacji. Apex może ją tylko otworzyć.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding(14)
@@ -271,12 +380,23 @@ struct NowPlayingCard: View {
         }
     }
 
+    private var headline: String {
+        if !active.isApple { return active.name }
+        return music.title.isEmpty ? "Nic nie gra" : music.title
+    }
+
+    private var subtitle: String {
+        if !active.isApple { return "Połączone. Stuknij, żeby otworzyć." }
+        if music.title.isEmpty { return "Włącz utwór w Muzyce" }
+        return music.artist.isEmpty ? "Muzyka" : music.artist
+    }
+
     private var art: some View {
         Group {
-            if let img = music.art {
+            if active.isApple, let img = music.art {
                 Image(uiImage: img).resizable().scaledToFill()
             } else {
-                Image(systemName: "music.note")
+                Image(systemName: active.isApple ? "music.note" : active.symbol)
                     .font(.system(size: 42, weight: .bold))
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

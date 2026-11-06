@@ -29,7 +29,17 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: Apex keeps guiding you with the screen off during navigation.
         NSMicrophoneUsageDescription: Apex listens when you tap the microphone to search by voice.
         NSSpeechRecognitionUsageDescription: Apex turns what you say into a search.
-        NSAppleMusicUsageDescription: Apex shows the track playing in Music and lets you pause, skip and scrub it during navigation.
+        NSAppleMusicUsageDescription: Apex shows the track playing in Music and lets you pause, skip and scrub it during navigation. Other music apps are only opened.
+        LSApplicationQueriesSchemes:
+          - music
+          - spotify
+          - youtubemusic
+          - youtube
+          - deezer
+          - tidal
+          - soundcloud
+          - amazonmusic
+          - qobuz
         UIBackgroundModes:
           - location
           - audio

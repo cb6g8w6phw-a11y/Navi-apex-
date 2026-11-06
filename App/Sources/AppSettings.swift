@@ -127,6 +127,12 @@ final class AppSettings: ObservableObject {
     @Published var appleUser: String { didSet { d.set(appleUser, forKey: "appleUser") } }
     /// Name (or email) Apple returned the first time this account signed in.
     @Published var appleName: String { didSet { d.set(appleName, forKey: "appleName") } }
+    /// Builtin music apps the person switched on. Apple Music stays if the list would be empty.
+    @Published var musicEnabled: [String] { didSet { d.set(musicEnabled, forKey: "musicEnabled") } }
+    /// Which connected service the map player opens.
+    @Published var musicActive: String { didSet { d.set(musicActive, forKey: "musicActive") } }
+    /// Services added from a link, the way Mornye takes an extra source.
+    @Published var musicExtras: [MusicExtra] { didSet { save(musicExtras, "musicExtras") } }
     nonisolated(unsafe) static var stickerOn = true
     nonisolated(unsafe) static var fuelKind = "diesel"
 
@@ -199,6 +205,9 @@ final class AppSettings: ObservableObject {
         greenSticker = sticker
         appleUser = d.string(forKey: "appleUser") ?? ""
         appleName = d.string(forKey: "appleName") ?? ""
+        musicEnabled = d.stringArray(forKey: "musicEnabled") ?? ["apple"]
+        musicActive = d.string(forKey: "musicActive") ?? "apple"
+        musicExtras = d.data(forKey: "musicExtras").flatMap { try? JSONDecoder().decode([MusicExtra].self, from: $0) } ?? []
         Self.stickerOn = sticker
         Self.fuelKind = carFuel
         hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
@@ -213,6 +222,35 @@ final class AppSettings: ObservableObject {
 
     private func save<T: Encodable>(_ v: T, _ key: String) {
         if let data = try? JSONEncoder().encode(v) { d.set(data, forKey: key) }
+    }
+
+    func setMusic(_ id: String, on: Bool) {
+        var next = musicEnabled.isEmpty ? ["apple"] : musicEnabled
+        if on {
+            if !next.contains(id) { next.append(id) }
+            musicActive = id
+        } else {
+            next.removeAll { $0 == id }
+            if next.isEmpty { next = ["apple"] }
+            if musicActive == id { musicActive = "apple" }
+        }
+        musicEnabled = next
+    }
+
+    /// Adds a service from a pasted link. Returns false when the link is not an address.
+    func addMusicLink(name: String, link: String) -> Bool {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, let url = MusicCatalog.normalize(link) else { return false }
+        let item = MusicExtra(id: UUID().uuidString, name: n, link: url)
+        musicExtras.append(item)
+        musicActive = item.id
+        return true
+    }
+
+    func removeMusicLinks(at offsets: IndexSet) {
+        let gone = offsets.map { musicExtras[$0].id }
+        musicExtras.remove(atOffsets: offsets)
+        if gone.contains(musicActive) { musicActive = "apple" }
     }
 
     var colorScheme: ColorScheme? {
