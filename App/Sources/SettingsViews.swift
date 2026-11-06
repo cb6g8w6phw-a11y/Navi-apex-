@@ -1,4 +1,3 @@
-import AuthenticationServices
 import SwiftUI
 
 struct LayersSheet: View {
@@ -80,7 +79,6 @@ struct SettingsView: View {
     let onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @State private var appleNote = ""
     @State private var musicName = ""
     @State private var musicLink = ""
     @State private var musicNote = ""
@@ -103,7 +101,7 @@ struct SettingsView: View {
                     menuRow("Głos i jazda", detail: "Polski lektor i domyślny tryb podróży",
                             icon: "speaker.wave.2.fill", color: 0x0F766E) { drivingPage }
                     menuRow("Trasy", detail: "Objazd, tunel, granica i kalibracja",
-                            icon: "point.topleft.down.curvedto.point.bottomright.filled", color: 0x0891B2) { routesPage }
+                            icon: "signpost.right.fill", color: 0x0891B2) { routesPage }
                     menuRow("Kamery i prędkość", detail: "Ostrzeżenia o fotoradarach, alarm prędkości",
                             icon: "camera.fill", color: 0xDC2626) { camerasPage }
                     menuRow("Ostrzeżenia drogowe", detail: Waze.shares.contains(.police) ? "Policja, wypadki, zamknięcia" : "Zamknięcia, samoloty policji",
@@ -119,8 +117,6 @@ struct SettingsView: View {
                         CarPage(settings: settings)
                     }
                     menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
-                    menuRow("Konto Apple", detail: "Mapy Apple na tym iPhonie",
-                            value: settings.appleUser.isEmpty ? nil : "Połączone", icon: "applelogo", color: 0x111111) { applePage }
                     menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
                             value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48) { musicPage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
@@ -291,140 +287,6 @@ struct SettingsView: View {
         }
         .kiteList()
         .navigationTitle("Mapa i wyświetlanie")
-    }
-
-    private var applePage: some View {
-        Form {
-            Section {
-                LabeledContent {
-                    Text("Apple Maps")
-                } label: {
-                    SettingLabel("Źródło mapy", icon: "map.fill", color: 0x34C759)
-                }
-            } footer: {
-                Text("Mapa, budynki i teren są z Apple Maps. Nic nie jest rysowane z innego silnika.")
-            }
-            Section {
-                if settings.appleUser.isEmpty {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        connectApple(result)
-                    }
-                    .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 46)
-                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                } else {
-                    SettingLabel(settings.appleName.isEmpty ? "Konto Apple" : settings.appleName,
-                                 detail: "Połączone z tym iPhone’em",
-                                 icon: "applelogo", color: 0x111111)
-                    Button("Odłącz konto", role: .destructive) {
-                        settings.appleUser = ""
-                        settings.appleName = ""
-                        appleNote = ""
-                    }
-                }
-            } header: {
-                Text("Konto")
-            } footer: {
-                Text(appleNote.isEmpty
-                     ? "Połączenie zapisuje Apple ID w Apexie na tym telefonie. Mapy działają też bez logowania."
-                     : appleNote)
-            }
-        }
-        .kiteList()
-        .navigationTitle("Konto Apple")
-        .onAppear { refreshApple() }
-    }
-
-    private var musicPage: some View {
-        Form {
-            Section {
-                ForEach(MusicCatalog.builtins) { app in
-                    Toggle(isOn: Binding(
-                        get: { settings.musicEnabled.contains(app.id) || (settings.musicEnabled.isEmpty && app.id == "apple") },
-                        set: { settings.setMusic(app.id, on: $0) }
-                    )) {
-                        SettingLabel(app.name,
-                                     detail: app.isApple ? "Pauza, poprzedni i następny w trakcie jazdy." : "Otwiera aplikację. iPhone nie oddaje jej pauzy.",
-                                     icon: app.symbol, color: app.color)
-                    }
-                    if app.id != "apple" && settings.musicEnabled.contains(app.id) {
-                        Button("Otwórz \(app.name)") { MusicCatalog.open(app) }
-                            .foregroundColor(.primary)
-                    }
-                }
-            } header: {
-                Text("Usługi")
-            } footer: {
-                Text("Włączone usługi widać w odtwarzaczu pod ceną paliwa. Apple Music da się prowadzić stąd. Reszta otwiera swoją aplikację.")
-            }
-            Section {
-                TextField("Nazwa, np. Mornye", text: $musicName)
-                TextField("Link albo schemat, np. livecontainer://", text: $musicLink)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                Button("Dodaj z linku") {
-                    if settings.addMusicLink(name: musicName, link: musicLink) {
-                        musicName = ""
-                        musicLink = ""
-                        musicNote = ""
-                    } else {
-                        musicNote = "Wpisz nazwę i link. Adres ze strony, schemat aplikacji albo link z Live Container."
-                    }
-                }
-                if !musicNote.isEmpty {
-                    Text(musicNote).font(.footnote).foregroundColor(.secondary)
-                }
-                ForEach(settings.musicExtras) { extra in
-                    Button { MusicCatalog.open(MusicTarget(id: extra.id, name: extra.name, symbol: "link", color: 0x0891B2, link: extra.link, store: nil)) } label: {
-                        SettingLabel(extra.name, detail: extra.link, icon: "link", color: 0x0891B2)
-                    }
-                    .foregroundColor(.primary)
-                }
-                .onDelete { settings.removeMusicLinks(at: $0) }
-            } header: {
-                Text("Inne z linku")
-            } footer: {
-                Text("Tak jak dokładanie usługi w Mornye: wklejasz link i Apex go otwiera. Przesuń wiersz w lewo, żeby usunąć. Apex nie pobiera utworów.")
-            }
-        }
-        .kiteList()
-        .navigationTitle("Muzyka")
-    }
-
-    private func connectApple(_ result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success(let auth):
-            guard let cred = auth.credential as? ASAuthorizationAppleIDCredential else { return }
-            settings.appleUser = cred.user
-            if let parts = cred.fullName {
-                let name = PersonNameComponentsFormatter().string(from: parts)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty { settings.appleName = name }
-            }
-            if settings.appleName.isEmpty, let email = cred.email, !email.isEmpty {
-                settings.appleName = email
-            }
-            appleNote = ""
-        case .failure(let error):
-            if let auth = error as? ASAuthorizationError, auth.code == .canceled { return }
-            appleNote = "System nie przyjął logowania. Ta kopia aplikacji jest bez podpisu Apple, więc konto często nie przechodzi. Mapy i tak są z Apple Maps."
-        }
-    }
-
-    private func refreshApple() {
-        let id = settings.appleUser
-        guard !id.isEmpty else { return }
-        ASAuthorizationAppleIDProvider().getCredentialState(forUserID: id) { state, _ in
-            guard state == .revoked || state == .notFound else { return }
-            DispatchQueue.main.async {
-                settings.appleUser = ""
-                settings.appleName = ""
-            }
-        }
     }
 
     private var placesPage: some View {
