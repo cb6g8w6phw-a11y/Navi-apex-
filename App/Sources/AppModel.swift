@@ -159,10 +159,31 @@ final class AppModel: ObservableObject {
     private var transitRequest = 0
     private var searchTask: Task<Void, Never>?
     private var navSub: AnyCancellable?
+    private var tripObs: [NSObjectProtocol] = []
 
     init() {
         location = LocationService()
         location.onUpdate = { [weak self] loc in self?.locationChanged(loc) }
+        let end = NotificationCenter.default.addObserver(forName: .kiteEndTrip, object: nil, queue: .main) { [weak self] _ in
+            self?.consumeTripCommands()
+        }
+        let mute = NotificationCenter.default.addObserver(forName: .kiteMuteTrip, object: nil, queue: .main) { [weak self] _ in
+            self?.consumeTripCommands()
+        }
+        tripObs = [end, mute]
+        consumeTripCommands()
+    }
+
+    /// The Dynamic Island asked to stop or mute. Safe to call often.
+    func consumeTripCommands() {
+        if TripCommand.end {
+            TripCommand.end = false
+            if nav != nil { endNavigation() }
+        }
+        if TripCommand.toggleMute {
+            TripCommand.toggleMute = false
+            nav?.muted.toggle()
+        }
     }
 
     var userLatLng: LatLng? {
@@ -665,6 +686,7 @@ final class AppModel: ObservableObject {
     }
 
     private func locationChanged(_ loc: CLLocation) {
+        consumeTripCommands()
         detectActivity(loc)
         guard let n = nav else { return }
         n.handle(loc)

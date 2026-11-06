@@ -1,4 +1,5 @@
 import ActivityKit
+import AppIntents
 import Foundation
 
 /**
@@ -21,12 +22,64 @@ struct NavActivityAttributes: ActivityAttributes {
         var remainingDistance: String
         var speedKmh: Int
         var limitKmh: Int?
-        /** A warning ahead ("Roadworks · 2.4 km") and which kind: roadworks, closure, warning, camera. */
+        /** A warning ahead ("Fotoradar 120 km/h za 450 m") and which kind: roadworks, closure, warning, camera. */
         var alert: String?
         var alertKind: String?
         var rerouting: Bool
         var arrived: Bool
+        /** "A2 / E30" or the road under the car. */
+        var routeTitle: String
+        /** "→ Warszawa". */
+        var routeLine: String
+        var muted: Bool
     }
 
     var destination: String
+}
+
+extension Notification.Name {
+    static let kiteEndTrip = Notification.Name("kite.endTrip")
+    static let kiteMuteTrip = Notification.Name("kite.muteTrip")
+}
+
+/** Set from the island; the app reads it on the main thread (the intent may wake a background trip). */
+enum TripCommand {
+    static var end = false
+    static var toggleMute = false
+
+    static func requestEnd() {
+        DispatchQueue.main.async {
+            end = true
+            NotificationCenter.default.post(name: .kiteEndTrip, object: nil)
+        }
+    }
+
+    static func requestMute() {
+        DispatchQueue.main.async {
+            toggleMute = true
+            NotificationCenter.default.post(name: .kiteMuteTrip, object: nil)
+        }
+    }
+}
+
+@available(iOS 17.0, *)
+struct EndTripIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Zakończ nawigację"
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        TripCommand.requestEnd()
+        return .result()
+    }
+}
+
+@available(iOS 17.0, *)
+struct MuteTripIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Wycisz"
+    static var openAppWhenRun = false
+
+    func perform() async throws -> some IntentResult {
+        TripCommand.requestMute()
+        return .result()
+    }
 }

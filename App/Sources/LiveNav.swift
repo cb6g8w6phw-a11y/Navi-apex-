@@ -35,6 +35,7 @@ final class LiveNav {
         if state == lastState { return }
         let changedLook = lastState == nil || lastState?.symbol != state.symbol || lastState?.street != state.street
             || lastState?.alert != state.alert || lastState?.arrived != state.arrived || lastState?.rerouting != state.rerouting
+            || lastState?.routeTitle != state.routeTitle || lastState?.muted != state.muted || lastState?.limitKmh != state.limitKmh
         if !changedLook, Date().timeIntervalSince(lastSent) < 2.5 { return }
         lastState = state
         lastSent = Date()
@@ -80,28 +81,33 @@ final class LiveNav {
 
         var alert: String?
         var kind: String?
-        if let r = nav.roadAhead {
+        if let c = nav.cameraAhead {
+            let lim = c.limitKmh.map { " \(Int($0.rounded())) km/h" } ?? ""
+            alert = "Fotoradar\(lim) za \(Fmt.distance(c.meters))"
+            kind = "camera"
+        } else if let r = nav.roadAhead {
             let name: String
             switch r.event.kind {
-            case .roadworks: name = "Roadworks"
-            case .closure: name = "Road closed"
-            case .warning: name = "Warning"
+            case .roadworks: name = "Roboty"
+            case .closure: name = "Droga zamknięta"
+            case .warning: name = "Uwaga"
             }
-            alert = "\(name) · " + (r.left.map { "\(Fmt.distance($0)) left" } ?? Fmt.distance(r.meters))
+            alert = "\(name) · " + (r.left.map { "zostało \(Fmt.distance($0))" } ?? "za \(Fmt.distance(r.meters))")
             switch r.event.kind {
             case .roadworks: kind = "roadworks"
             case .closure: kind = "closure"
             case .warning: kind = "warning"
             }
-        } else if let c = nav.cameraAhead {
-            alert = (c.kind == .speed ? "Speed camera" : "Camera") + " · " + Fmt.distance(c.meters)
-            kind = "camera"
         }
+
+        let refs = Self.routeRefs(nav)
+        let title = refs.isEmpty ? (nav.currentRoad ?? nav.route.summary ?? "trasa") : refs.prefix(2).joined(separator: " / ")
+        let place = nav.destination.name.split(separator: ",").first.map(String.init) ?? nav.destination.name
 
         return NavActivityAttributes.ContentState(
             symbol: nav.arrived ? "mappin.circle.fill" : maneuverSymbol(m?.type ?? .straight),
-            distance: nav.arrived ? "Arrived" : Fmt.distance(p?.distanceToNext ?? 0),
-            street: nav.arrived ? nav.destination.name : street,
+            distance: nav.arrived ? "0 m" : Fmt.distance(p?.distanceToNext ?? 0),
+            street: nav.arrived ? nav.destination.name : (m?.instruction ?? street),
             arrival: Fmt.arrival(left),
             remaining: Fmt.duration(left),
             remainingDistance: Fmt.distance(leftMeters),
@@ -110,7 +116,26 @@ final class LiveNav {
             alert: alert,
             alertKind: kind,
             rerouting: nav.rerouting,
-            arrived: nav.arrived
+            arrived: nav.arrived,
+            routeTitle: title,
+            routeLine: "→ \(place)",
+            muted: nav.muted
         )
+    }
+
+    /** A2, E30, DK92 — the numbers worth putting in the island title. */
+    private static func routeRefs(_ nav: Navigator) -> [String] {
+        let blob = ([nav.route.summary, nav.currentRoad].compactMap { $0 }
+                    + nav.route.maneuvers.prefix(16).flatMap { [$0.road ?? "", $0.instruction] })
+            .joined(separator: " ")
+        var refs = RoadRefs.find(blob)
+        if let re = try? NSRegularExpression(pattern: #"\b(DK|S)\s?-?\s?(\d{1,3})\b"#) {
+            let ns = blob as NSString
+            for m in re.matches(in: blob, range: NSRange(location: 0, length: ns.length)) {
+                let ref = ns.substring(with: m.range(at: 1)) + ns.substring(with: m.range(at: 2))
+                if !refs.contains(ref) { refs.append(ref) }
+            }
+        }
+        return refs
     }
 }
