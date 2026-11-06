@@ -22,7 +22,6 @@ struct ContentView: View {
 
     @State private var showWeather = false
     @State private var showPlayer = false
-    @State private var showClosure = false
     @ObservedObject private var music = NowPlay.shared
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
@@ -191,9 +190,6 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.94)))
             }
         }
-        .sheet(isPresented: $showClosure) {
-            ClosureReportSheet(at: model.userLatLng) { showClosure = false }.kiteType()
-        }
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
                 .presentationDetents([.medium, .large])
@@ -256,6 +252,7 @@ struct BrowseOverlay: View {
     @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
+    @State private var showClosure = false
 
     private var hasSheet: Bool { model.selected != nil || !model.results.isEmpty }
     /** Room on the left of the notice for the weather and fuel pills, when they stand there. */
@@ -307,6 +304,8 @@ struct BrowseOverlay: View {
                             if idle { WazeMapChips(model: model) }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 10) {
+                                MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 56) { showClosure = true }
+                                    .accessibilityLabel("Zgłoś zamknięcie")
                                 MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 64) {
                                     model.centerOnUser()
                                 }
@@ -379,6 +378,9 @@ struct BrowseOverlay: View {
             guard DemoScript.step == "searchfocus" else { return }
             try? await Task.sleep(nanoseconds: 8_000_000_000)
             searchFocused = true
+        }
+        .sheet(isPresented: $showClosure) {
+            ClosureReportSheet(at: model.userLatLng) { showClosure = false }.kiteType()
         }
     }
 
