@@ -21,6 +21,8 @@ struct ContentView: View {
     }
 
     @State private var showWeather = false
+    @State private var showPlayer = false
+    @ObservedObject private var music = NowPlay.shared
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
     private var plainMap: Bool {
@@ -74,15 +76,18 @@ struct ContentView: View {
                     if model.wazeInfo?.id == info.id { withAnimation { model.wazeInfo = nil } }
                 }
             }
-            // Fuel and weather share one row under the search bar; while searching they stand in a column on the left.
-            if showFuelChip || showWeatherBall {
+            // Fuel, the tiny music square and weather share the row under the search bar.
+            if plainMap {
                 VStack {
                     if columnMode {
                         HStack {
-                            VStack(spacing: 10) {
+                            VStack(spacing: 8) {
                                 if showWeatherBall { WeatherBall { showWeather = true } }
                                 if showFuelChip, let best = model.fuelBest {
                                     FuelMini(station: best) { withAnimation { model.fuelInfo = best } }
+                                }
+                                MusicPip(music: music) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
                             Spacer()
@@ -90,10 +95,15 @@ struct ContentView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 78)
                     } else {
-                        HStack(alignment: .center) {
-                            if showFuelChip, let best = model.fuelBest {
-                                FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
-                                    withAnimation { model.fuelInfo = best }
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                if showFuelChip, let best = model.fuelBest {
+                                    FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
+                                        withAnimation { model.fuelInfo = best }
+                                    }
+                                }
+                                MusicPip(music: music) {
+                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
                             Spacer()
@@ -164,6 +174,12 @@ struct ContentView: View {
         .animation(.easeOut(duration: 0.2), value: model.tab)
         .kiteType()
         .preferredColorScheme(settings.colorScheme)
+        .overlay {
+            if showPlayer && model.nav == nil {
+                MusicPlayerOverlay(music: music, shown: $showPlayer)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            }
+        }
         .sheet(isPresented: $showWeather) {
             WeatherSheet(spot: model.userLatLng, settings: settings)
                 .presentationDetents([.medium, .large])

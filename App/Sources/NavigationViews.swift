@@ -108,6 +108,9 @@ struct NavigationOverlay: View {
                     // Only worth a look while driving when it isn't low; it would otherwise sit by the road name.
                     if showRiskChip, let risk = nav.policeRisk { PoliceRiskChip(score: risk) }
                     if let f = nav.fuelAhead, !nav.arrived { FuelAheadChip(ahead: f) { withAnimation { nav.dismissFuel() } } }
+                    MusicPip(music: music) {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
+                    }
                     SpeedBadge(mps: nav.speedMps, limitKmh: nav.speedLimitKmh)
                 }
                 Spacer()
@@ -135,9 +138,6 @@ struct NavigationOverlay: View {
                 .frame(maxWidth: .infinity)
                 .padding(.leading, panel)
             }
-            NowPlayingBar(music: music) { showPlayer = true }
-                .padding(.horizontal, 12)
-                .inSidePanel(panel)
             // Arriving answers the question: the trip bar's Done takes over.
             if confirmEnd, !nav.arrived {
                 EndTripCard(destination: nav.destination.name,
@@ -181,8 +181,11 @@ struct NavigationOverlay: View {
                 withAnimation { confirmEnd = true }
             }
         }
-        .sheet(isPresented: $showPlayer) {
-            NowPlayingSheet(music: music).kiteType()
+        .overlay {
+            if showPlayer {
+                MusicPlayerOverlay(music: music, shown: $showPlayer)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+            }
         }
         .sheet(isPresented: $showAlong) {
             AlongRouteSheet(nav: nav).kiteType()

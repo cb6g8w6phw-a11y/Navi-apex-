@@ -98,7 +98,7 @@ final class NowPlay: ObservableObject {
 struct AirPlayButton: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView {
         let v = AVRoutePickerView()
-        v.tintColor = .white
+        v.tintColor = .label
         v.activeTintColor = UIColor(red: 0.18, green: 0.83, blue: 0.75, alpha: 1)
         v.prioritizesVideoDevices = false
         return v
@@ -107,183 +107,132 @@ struct AirPlayButton: UIViewRepresentable {
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
-/** Slim bar on the navigation screen. Tap opens the full player. */
-struct NowPlayingBar: View {
+/** Tiny Liquid Glass square under the fuel price. Tap opens the player. */
+struct MusicPip: View {
     @ObservedObject var music: NowPlay
     var open: () -> Void
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14, style: .continuous) }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: open) {
-                HStack(spacing: 12) {
-                    art
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(music.title.isEmpty ? "Odtwarzacz" : music.title)
-                            .font(.system(size: 16, weight: .bold))
-                            .lineLimit(1)
-                        Text(music.title.isEmpty ? "Muzyka jedzie z nawigacją" : (music.artist.isEmpty ? "Muzyka" : music.artist))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.white.opacity(0.62))
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
+        Button(action: open) {
+            ZStack {
+                if let img = music.art {
+                    Image(uiImage: img)
+                        .resizable().scaledToFill()
+                        .frame(width: 28, height: 28)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                } else {
+                    Image(systemName: music.playing ? "waveform" : "music.note")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.primary)
                 }
             }
-            .buttonStyle(.plain)
-            HStack(spacing: 4) {
-                transport("backward.fill") { music.previous() }
-                transport(music.playing ? "pause.fill" : "play.fill") { music.toggle() }
-                transport("forward.fill") { music.next() }
-            }
-        }
-        .padding(.leading, 10)
-        .padding(.trailing, 8)
-        .frame(height: 64)
-        .foregroundColor(.white)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(hex: 0x1C1C1E).opacity(0.94)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08), lineWidth: 1))
-    }
-
-    private var art: some View {
-        Group {
-            if let img = music.art {
-                Image(uiImage: img).resizable().scaledToFill()
-            } else {
-                Image(systemName: "music.note")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.white.opacity(0.08))
-            }
-        }
-        .frame(width: 46, height: 46)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private func transport(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .bold))
-                .frame(width: 40, height: 44)
+            .frame(width: 46, height: 46)
+            .glassButton(shape)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Odtwarzacz")
+        .onAppear { music.attach() }
     }
 }
 
-/** The player from the reference: title, scrub, skip, AirPlay, lyrics, queue. */
-struct NowPlayingSheet: View {
+/** Dims the map and shows the rounded-square player. Tap outside closes it. */
+struct MusicPlayerOverlay: View {
     @ObservedObject var music: NowPlay
-    @Environment(\.dismiss) private var dismiss
-    @State private var showLyrics = false
-    @State private var showQueue = false
+    @Binding var shown: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 18, weight: .bold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                Spacer()
-                AirPlayButton().frame(width: 44, height: 44)
-                Button { showLyrics = true } label: {
-                    Image(systemName: "quote.bubble").font(.system(size: 20, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                Button { showQueue = true } label: {
-                    Image(systemName: "list.bullet").font(.system(size: 20, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
+        GeometryReader { geo in
+            let side = min(geo.size.width - 36, geo.size.height * 0.70, 420)
+            ZStack {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture { shut() }
+                NowPlayingCard(music: music, side: side, close: shut)
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
+        }
+        .ignoresSafeArea()
+    }
 
-            Spacer(minLength: 12)
+    private func shut() {
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { shown = false }
+    }
+}
 
-            if let img = music.art {
-                Image(uiImage: img)
-                    .resizable().scaledToFill()
-                    .frame(width: 220, height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
-                    .padding(.bottom, 22)
+/** Square player with rounded corners, Liquid Glass, opened from the little button. */
+struct NowPlayingCard: View {
+    @ObservedObject var music: NowPlay
+    var side: CGFloat
+    var close: () -> Void
+    @State private var showLyrics = false
+    @State private var showQueue = false
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 28, style: .continuous) }
+    private var artShape: RoundedRectangle { RoundedRectangle(cornerRadius: 20, style: .continuous) }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 2) {
+                icon("xmark", close)
+                Spacer(minLength: 0)
+                AirPlayButton().frame(width: 36, height: 36)
+                icon("quote.bubble") { showLyrics = true }
+                icon("list.bullet") { showQueue = true }
             }
+            .frame(height: 36)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(music.title.isEmpty ? "Nic nie gra" : music.title)
-                    .font(.system(size: 28, weight: .bold))
-                    .lineLimit(2)
-                Text(music.title.isEmpty
-                     ? "Włącz utwór w aplikacji Muzyka. Pauza, poprzedni i następny działają w trakcie jazdy."
-                     : (music.artist.isEmpty ? "Muzyka" : music.artist))
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(.white.opacity(0.55))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
+            art
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .aspectRatio(1, contentMode: .fit)
+                .layoutPriority(-1)
+                .clipShape(artShape)
+
+            Text(music.title.isEmpty ? "Nic nie gra" : music.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(music.title.isEmpty
+                 ? "Włącz utwór w Muzyce"
+                 : (music.artist.isEmpty ? "Muzyka" : music.artist))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Slider(value: $music.elapsed, in: 0...max(music.duration, 1), onEditingChanged: { editing in
                 music.scrubbing = editing
                 if !editing { music.seek(music.elapsed) }
             })
-            .tint(.white)
-            .padding(.horizontal, 28)
-            .padding(.top, 22)
+            .tint(.primary)
             .disabled(!music.allowed || music.duration <= 0)
 
-            HStack {
-                Text(NowPlay.clock(music.elapsed))
-                Spacer()
-                Text(music.duration > 0 ? music.remainingLabel : "-0:00")
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundColor(.white.opacity(0.55))
-            .padding(.horizontal, 30)
-
-            HStack(spacing: 36) {
-                big("backward.fill") { music.previous() }
+            HStack(spacing: 18) {
+                jump("backward.fill") { music.previous() }
                 Button { music.toggle() } label: {
                     Image(systemName: music.playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 34, weight: .bold))
-                        .frame(width: 78, height: 78)
-                        .background(Circle().fill(Color.white.opacity(0.12)))
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.primary)
+                        .frame(width: 54, height: 54)
+                        .glassButton(Circle())
                 }
                 .buttonStyle(.plain)
-                big("forward.fill") { music.next() }
+                jump("forward.fill") { music.next() }
             }
-            .padding(.top, 18)
-
-            Spacer(minLength: 16)
-
-            Button { showQueue = true } label: {
-                Text("Kolejka")
-                    .font(.system(size: 17, weight: .semibold))
-                    .padding(.horizontal, 22)
-                    .frame(height: 44)
-                    .background(Capsule().fill(Color.white.opacity(0.12)))
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, 28)
 
             if !music.allowed {
                 Button { music.attach() } label: {
                     Text("Pozwól na dostęp do Muzyki")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color(hex: 0x2DD4BF))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Color(hex: 0x0F766E))
                 }
                 .buttonStyle(.plain)
-                .padding(.bottom, 18)
             }
         }
-        .foregroundColor(.white)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(hex: 0x1C1C1E).ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .padding(14)
+        .frame(width: side, height: side)
+        .glass(shape)
+        .clipShape(shape)
         .onAppear { music.attach() }
         .sheet(isPresented: $showLyrics) {
             VStack(alignment: .leading, spacing: 12) {
@@ -322,9 +271,36 @@ struct NowPlayingSheet: View {
         }
     }
 
-    private func big(_ icon: String, action: @escaping () -> Void) -> some View {
+    private var art: some View {
+        Group {
+            if let img = music.art {
+                Image(uiImage: img).resizable().scaledToFill()
+            } else {
+                Image(systemName: "music.note")
+                    .font(.system(size: 42, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.primary.opacity(0.06))
+            }
+        }
+    }
+
+    private func icon(_ name: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: 28, weight: .bold)).frame(width: 56, height: 56)
+            Image(systemName: name)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func jump(_ name: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: name)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
     }
