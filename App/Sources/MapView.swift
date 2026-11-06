@@ -317,6 +317,7 @@ struct VelaMapView: UIViewRepresentable {
 
         let tap = UITapGestureRecognizer(target: c, action: #selector(Coordinator.tapped(_:)))
         tap.delegate = c
+        tap.cancelsTouchesInView = false
         let press = UILongPressGestureRecognizer(target: c, action: #selector(Coordinator.pressed(_:)))
         press.delegate = c
         // A long press must never also count as a tap, or the tap closes the pin it just dropped.
@@ -1102,7 +1103,7 @@ struct VelaMapView: UIViewRepresentable {
         func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
             var v: UIView? = touch.view
             while let cur = v {
-                if let av = cur as? KiteAnnotationView, av.isEnabled { return false }
+                if cur is MKAnnotationView { return false }
                 v = cur.superview
             }
             return true
@@ -1223,7 +1224,7 @@ struct VelaMapView: UIViewRepresentable {
             // A place on Apple's own map (a cafe, a station…).
             if let f = view.annotation as? MKMapFeatureAnnotation {
                 map.deselectAnnotation(f, animated: false)
-                guard model.nav == nil, model.directions == nil, Date().timeIntervalSince(pinDroppedAt) > 1,
+                guard model.nav == nil, Date().timeIntervalSince(pinDroppedAt) > 1,
                       let name = f.title, !name.isEmpty else { return }
                 lastPickAt = Date()
                 model.resolveTapped(name: name, at: LatLng(f.coordinate.latitude, f.coordinate.longitude))
@@ -1255,11 +1256,11 @@ struct VelaMapView: UIViewRepresentable {
                 UISelectionFeedbackGenerator().selectionChanged()
                 model.roadInfo = event
             case .mine:
-                guard model.directions == nil, let place = model.myPlace(a.id) else { return }
-                model.select(place)
+                guard let place = model.myPlace(a.id) else { return }
+                model.openDirections(to: place)
             case .result:
-                guard model.directions == nil, let place = model.results.first(where: { $0.id == a.id }) else { return }
-                model.select(place)
+                guard let place = model.results.first(where: { $0.id == a.id }) else { return }
+                model.openDirections(to: place)
             default:
                 break
             }
