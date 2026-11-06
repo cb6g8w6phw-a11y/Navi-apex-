@@ -2,7 +2,7 @@ import Foundation
 
 /** A mapped camera from OpenStreetMap: a fixed speed camera, or a license plate reader (DeFlock). */
 public struct RoadCamera: Hashable, Codable, Sendable, Identifiable {
-    public enum Kind: String, Codable, Sendable { case speed, plate }
+    public enum Kind: String, Codable, Sendable { case speed, plate, watch }
     public var id: Int64
     public var kind: Kind
     public var location: LatLng
@@ -42,9 +42,9 @@ public enum Overpass {
 
     /** Cameras in a box. Nil when every mirror failed, so the caller can retry later. */
     public static func cameras(south: Double, west: Double, north: Double, east: Double,
-                               speed: Bool, plate: Bool) async -> [RoadCamera]? {
+                               speed: Bool, plate: Bool, watch: Bool = false) async -> [RoadCamera]? {
         let box = String(format: "(%.5f,%.5f,%.5f,%.5f)", south, west, north, east)
-        return await cameras(filter: box, speed: speed, plate: plate)
+        return await cameras(filter: box, speed: speed, plate: plate, watch: watch)
     }
 
     /** Cameras within [radius] meters of a route, one query per route. */
@@ -55,7 +55,7 @@ public enum Overpass {
             line[min(line.count - 1, Int((Double($0) * Double(line.count - 1) / Double(maxPts - 1)).rounded()))]
         }
         let coords = pts.map { String(format: "%.5f,%.5f", $0.lat, $0.lng) }.joined(separator: ",")
-        return await cameras(filter: "(around:\(radius),\(coords))", speed: speed, plate: plate)
+        return await cameras(filter: "(around:\(radius),\(coords))", speed: speed, plate: plate, watch: false)
     }
 
     /** A mapped road with a posted limit (OSM `maxspeed`), in km/h, and its shape. */
@@ -291,16 +291,17 @@ public enum Overpass {
         return out
     }
 
-    public static func query(filter: String, speed: Bool, plate: Bool) -> String {
+    public static func query(filter: String, speed: Bool, plate: Bool, watch: Bool = false) -> String {
         var parts: [String] = []
         if speed { parts.append("node[\"highway\"=\"speed_camera\"]\(filter);") }
         if plate { parts.append("node[\"surveillance:type\"=\"ALPR\"]\(filter);") }
+        if watch { parts.append("node[\"man_made\"=\"surveillance\"][\"surveillance:type\"!=\"ALPR\"][\"indoor\"!=\"yes\"][\"surveillance\"!=\"indoor\"]\(filter);") }
         return "[out:json][timeout:25];(" + parts.joined() + ");out body 4000;"
     }
 
-    private static func cameras(filter: String, speed: Bool, plate: Bool) async -> [RoadCamera]? {
-        guard speed || plate else { return [] }
-        let q = query(filter: filter, speed: speed, plate: plate)
+    private static func cameras(filter: String, speed: Bool, plate: Bool, watch: Bool = false) async -> [RoadCamera]? {
+        guard speed || plate || watch else { return [] }
+        let q = query(filter: filter, speed: speed, plate: plate, watch: watch)
         return await firstAnswer(q) { parse($0) != nil }.flatMap(parse)
     }
 
@@ -338,11 +339,15 @@ public enum Overpass {
             // The same answer holds traffic lights: only cameras are cameras.
             if tags["highway"] == "traffic_signals" { return nil }
             let id = (e["id"] as? NSNumber)?.int64Value ?? 0
-            let plate = tags["surveillance:type"] == "ALPR"
-            return RoadCamera(id: id, kind: plate ? .plate : .speed, location: LatLng(lat, lon),
-                              operatorName: plate ? (tags["operator"] ?? tags["manufacturer"]) : nil,
-                              maxspeedKmh: plate ? nil : britishLimit(maxspeedKmh(tags["maxspeed"]), at: LatLng(lat, lon)),
-                              average: !plate && tags["enforcement"] == "average_speed")
+            let kind: RoadCamera.Kind
+            if tags["highway"] == "speed_camera" { kind = .speed }
+            else if tags["surveillance:type"] == "ALPR" { kind = .plate }
+            else if tags["man_made"] == "surveillance" { kind = .watch }
+            else { return nil }
+            return RoadCamera(id: id, kind: kind, location: LatLng(lat, lon),
+                              operatorName: kind == .speed ? nil : (tags["operator"] ?? tags["manufacturer"]),
+                              maxspeedKmh: kind == .speed ? britishLimit(maxspeedKmh(tags["maxspeed"]), at: LatLng(lat, lon)) : nil,
+                              average: kind == .speed && tags["enforcement"] == "average_speed")
         }
     }
 }
