@@ -111,6 +111,8 @@ final class AppSettings: ObservableObject {
     // The car: what it is, and everything about it that runs out.
     @Published var carName: String { didSet { d.set(carName, forKey: "carName") } }
     @Published var carFuel: String { didSet { d.set(carFuel, forKey: "carFuel"); Self.fuelKind = carFuel } }
+    /// Average use, litres per 100 km. The border-fuel note uses this with the tank, not a fixed 45 l.
+    @Published var carConsumption: Double { didSet { d.set(carConsumption, forKey: "carConsumption") } }
     @Published var carOdometer: Int { didSet { d.set(carOdometer, forKey: "carOdometer") } }
     @Published var insuranceEnd: Date? { didSet { d.set(insuranceEnd, forKey: "insuranceEnd") } }
     @Published var inspectionEnd: Date? { didSet { d.set(inspectionEnd, forKey: "inspectionEnd") } }
@@ -179,6 +181,7 @@ final class AppSettings: ObservableObject {
         // belt — ready to be filled in; it's only left empty when everything was deleted on purpose.
         carName = d.string(forKey: "carName") ?? ""
         carFuel = d.string(forKey: "carFuel") ?? "diesel"
+        carConsumption = d.object(forKey: "carConsumption") as? Double ?? 6.5
         carOdometer = d.object(forKey: "carOdometer") as? Int ?? 0
         insuranceEnd = d.object(forKey: "insuranceEnd") as? Date
         inspectionEnd = d.object(forKey: "inspectionEnd") as? Date

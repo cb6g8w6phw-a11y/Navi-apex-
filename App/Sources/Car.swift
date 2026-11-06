@@ -306,12 +306,26 @@ struct CarPage: View {
             Section(header: Text("Auto"),
                     footer: Text(settings.carFuel == "electric"
                                  ? "Elektryk wjeżdża do zielonej strefy bez plakietki. Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją."
-                                 : "Bez zielonej plakietki trasa omija Umweltzone, a pinezka w strefie kończy się przy jej granicy. Przebieg sam rośnie o każdy kilometr przejechany z włączoną nawigacją.")) {
+                                 : "Baku, spalanie i rodzaj paliwa liczą podpowiedź o tankowaniu przed granicą. Pełny bak albo krótka trasa pod dom zostają ciche. Bez zielonej plakietki sprawdź, czy cel nie leży w strefie. Przebieg sam rośnie o każdy kilometr z włączoną nawigacją.")) {
                 Toggle(isOn: $settings.carBallOn) { SettingLabel("Ikona auta na mapie", icon: "map", color: 0x7C3AED) }
                 TextField("Model (np. VW Golf 7)", text: $settings.carName)
                 Picker(selection: $settings.carFuel) {
                     ForEach(fuels, id: \.0) { Text($0.1).tag($0.0) }
-                } label: { SettingLabel("Paliwo", icon: "drop.fill", color: 0x0891B2) }
+                } label: { SettingLabel("Rodzaj paliwa", icon: "drop.fill", color: 0x0891B2) }
+                if settings.carFuel != "electric" {
+                    Stepper(value: $settings.fuelTank, in: 20...120, step: 1) {
+                        SettingLabel("Pojemność baku: \(settings.fuelTank) l", icon: "fuelpump.fill", color: 0x2563EB)
+                    }
+                    .onChange(of: settings.fuelTank) { tank in
+                        if settings.fuelLeft > tank { settings.fuelLeft = tank }
+                    }
+                    Stepper(value: $settings.fuelLeft, in: 0...max(settings.fuelTank, 1), step: 1) {
+                        SettingLabel("Teraz w baku: \(settings.fuelLeft) l", icon: "drop.halffull", color: 0xF59E0B)
+                    }
+                    Stepper(value: $settings.carConsumption, in: 3...20, step: 0.1) {
+                        SettingLabel(String(format: "Spalanie: %.1f l/100 km", settings.carConsumption), icon: "gauge.with.needle.fill", color: 0xEA580C)
+                    }
+                }
                 Toggle(isOn: $settings.greenSticker) {
                     SettingLabel("Zielona plakietka", detail: "Naklejka na szybie. Wyłącz, jeśli auto nie może wjechać do strefy.", icon: "leaf.fill", color: 0x16A34A)
                 }

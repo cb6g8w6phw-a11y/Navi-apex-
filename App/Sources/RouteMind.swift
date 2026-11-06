@@ -73,27 +73,28 @@ enum RouteMind {
     static let helmstedt = Prices(deEur: 1.89, plPln: 6.49, plnPerEur: 4.28, tankLitres: 45,
                                   deName: "Shell Helmstedt", plName: "Orlen Świecko", plKm: 0)
 
-    /// How many zł a full tank saves by waiting for the Polish side. Negative means fuel in Germany.
-    static func fuelDelta(_ p: Prices = helmstedt) -> Double {
+    /// How many zł waiting for the Polish side saves on `litres`. Negative means fuel in Germany.
+    static func fuelDelta(litres: Double, _ p: Prices = helmstedt) -> Double {
         let plEur = p.plPln / p.plnPerEur
-        return (p.deEur - plEur) * p.tankLitres * p.plnPerEur
+        return (p.deEur - plEur) * litres * p.plnPerEur
     }
 
-    static func fuelNote(alongKm: Double, toBorderKm: Double, nearHelmstedt: Bool = false) -> GuidanceNote {
-        let save = Int(fuelDelta().rounded())
+    static func fuelNote(alongKm: Double, toBorderKm: Double, nearHelmstedt: Bool = false, litres: Double = 45) -> GuidanceNote {
+        let save = Int(fuelDelta(litres: litres).rounded())
+        let amount = "\(Int(litres.rounded())) l"
         if toBorderKm < 30 && save > 0 {
             return GuidanceNote(title: "Tankuj za granicą",
-                                body: "\(helmstedt.plName), \(helmstedt.plPln) zł. Około \(save) zł mniej niż po niemieckiej stronie.",
+                                body: "\(helmstedt.plName), \(helmstedt.plPln) zł. Na \(amount) około \(save) zł mniej niż po niemieckiej stronie.",
                                 tone: "good")
         }
-        if nearHelmstedt && save > 15 {
+        if nearHelmstedt && save > 0 {
             return GuidanceNote(title: "Nie tankuj w Helmstedt",
-                                body: "\(helmstedt.deName) \(helmstedt.deEur) €. Do \(helmstedt.plName) około \(Int(toBorderKm)) km, około \(save) zł mniej na baku.",
+                                body: "\(helmstedt.deName) \(helmstedt.deEur) €. Do \(helmstedt.plName) około \(Int(toBorderKm)) km, na \(amount) około \(save) zł mniej.",
                                 tone: "good")
         }
-        if toBorderKm <= 90 && save > 15 {
+        if toBorderKm <= 120 && save > 0 {
             return GuidanceNote(title: "Paliwo przed granicą",
-                                body: "Do \(helmstedt.plName) około \(Int(toBorderKm)) km. Zostaw bak na polską stronę, około \(save) zł mniej.",
+                                body: "W baku zostało mało na tę trasę. Do \(helmstedt.plName) około \(Int(toBorderKm)) km, na \(amount) około \(save) zł mniej po polskiej stronie.",
                                 tone: "good")
         }
         return GuidanceNote(title: "Paliwo",
@@ -105,21 +106,29 @@ enum RouteMind {
     static let helmstedtPoint = LatLng(52.228, 10.974)
 
     /**
-     * The fuel card only when this drive is actually going to Poland, the tank isn't full,
-     * and you're in the stretch where the choice matters. A 20 km trip for bread stays quiet.
+     * Border fuel card only for a long trip that actually goes to Poland, when the car
+     * profile says the tank will not last, and only once you're near the cheap-fuel stretch.
+     * A full tank or a short hop around home stays quiet.
      */
     static func borderFuelNote(here: LatLng, destination: LatLng, tripMeters: Double,
-                               fuelLeft: Int, fuelTank: Int, electric: Bool) -> GuidanceNote? {
-        if electric || tripMeters < 25_000 { return nil }
-        if fuelTank > 0, fuelLeft * 10 >= fuelTank * 9 { return nil }
+                               fuelLeft: Int, fuelTank: Int, consumption: Double, electric: Bool) -> GuidanceNote? {
+        if electric || tripMeters < 40_000 { return nil }
+        let tank = max(fuelTank, 1)
+        let left = min(max(fuelLeft, 0), tank)
+        if left * 10 >= tank * 9 { return nil }
+        let use = consumption > 1 ? consumption : 6.5
+        let rangeM = Double(left) / (use / 100.0) * 1000
+        // Enough in the tank for this drive, with a small reserve: nothing to say.
+        if rangeM >= tripMeters + 40_000 { return nil }
         let nowD = nearestCrossing(here)
         let destD = nearestCrossing(destination)
-        let toPoland = destination.lng > 14.2 || destD < 45_000
+        let toPoland = destination.lng > 14.35 || destD < 40_000
         guard toPoland else { return nil }
-        let atHelmstedt = here.distance(to: helmstedtPoint) < 35_000 && destD + 40_000 < nowD
-        let closeToBorder = nowD < 70_000
+        let atHelmstedt = here.distance(to: helmstedtPoint) < 40_000 && destD + 50_000 < nowD
+        let closeToBorder = nowD < 80_000
         guard atHelmstedt || closeToBorder else { return nil }
-        return fuelNote(alongKm: 0, toBorderKm: nowD / 1000, nearHelmstedt: atHelmstedt && !closeToBorder)
+        let litres = Double(max(tank - left, 5))
+        return fuelNote(alongKm: 0, toBorderKm: nowD / 1000, nearHelmstedt: atHelmstedt && !closeToBorder, litres: litres)
     }
 
     private static func nearestCrossing(_ p: LatLng) -> Double {

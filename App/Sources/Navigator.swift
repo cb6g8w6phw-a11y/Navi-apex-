@@ -292,6 +292,7 @@ final class Navigator: ObservableObject {
         } else if let note = RouteMind.borderFuelNote(
             here: here, destination: destination.location, tripMeters: route.distanceMeters,
             fuelLeft: AppSettings.shared.fuelLeft, fuelTank: AppSettings.shared.fuelTank,
+            consumption: AppSettings.shared.carConsumption,
             electric: AppSettings.shared.carFuel == "electric") {
             next = note
         } else {
@@ -1042,17 +1043,28 @@ final class Navigator: ObservableObject {
         // What was said, for checking a drive afterwards (Console, or `log stream` on a simulator).
         Self.log.info("say: \(said, privacy: .public)")
         let u = AVSpeechUtterance(string: said)
-        u.voice = Self.voice
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
+        let voice = Self.polishVoice()
+        u.voice = voice
+        u.prefersAssistiveTechnologySettings = false
+        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        if let voice { Self.log.info("voice: \(voice.language, privacy: .public) \(voice.name, privacy: .public)") }
         speech.speak(u)
     }
 
-    /** The phone's Polish voice, the better-sounding download when there is one. */
-    static let voice: AVSpeechSynthesisVoice? = {
-        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("pl") }
-        let better = voices.filter { $0.quality != .default }.max { $0.quality.rawValue < $1.quality.rawValue }
-        return better ?? voices.first ?? AVSpeechSynthesisVoice(language: "pl-PL")
-    }()
+    /// Native Polish voice, chosen again each time so a late-downloaded Zosia is picked up.
+    /// Enhanced or premium beats the compact voice. Never an English voice reading Polish.
+    private static func polishVoice() -> AVSpeechSynthesisVoice? {
+        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.lowercased().hasPrefix("pl") }
+        func rank(_ v: AVSpeechSynthesisVoice) -> Int {
+            var score = v.quality.rawValue * 10
+            let name = (v.name + " " + v.identifier).lowercased()
+            if name.contains("zosia") { score += 6 }
+            if v.language == "pl-PL" { score += 3 }
+            return score
+        }
+        if let best = all.max(by: { rank($0) < rank($1) }) { return best }
+        return AVSpeechSynthesisVoice(language: "pl-PL") ?? AVSpeechSynthesisVoice(language: "pl")
+    }
 
     /// Lane advice for the Polish voice. The picture on screen can stay as the router wrote it.
     private static func lanePolish(_ words: String) -> String {
