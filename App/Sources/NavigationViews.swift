@@ -160,14 +160,15 @@ struct NavigationOverlay: View {
             .padding(.horizontal, 16)
             if !nav.following {
                 Button { model.recenterNav() } label: {
-                    Label("Re-centre", systemImage: "location.north.line.fill")
-                        .font(.system(size: 20, weight: .bold))
-                        .padding(.horizontal, 26).frame(height: 60)
-                        .foregroundColor(Vela.onAccent(scheme))
-                        .background(Capsule().fill(Vela.accent(scheme)))
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+                    Label("Na środek", systemImage: "location.north.line.fill")
+                        .font(.system(size: 15, weight: .bold))
+                        .padding(.horizontal, 14).frame(height: 40)
+                        .foregroundColor(.white)
+                        .background(TripSheen(progress: tripProgress(nav), capsule: true))
+                        .shadow(color: .black.opacity(0.28), radius: 6, y: 2)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Na środek")
                 // Under the car, which drives beside the side panel when there is one.
                 .frame(maxWidth: .infinity)
                 .padding(.leading, panel)
@@ -342,9 +343,9 @@ struct InstructionBanner: View {
             }
         }
         .foregroundColor(.white)
-        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Vela.navGreen))
+        .background(TripSheen(progress: tripProgress(nav), capsule: false))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: .black.opacity(0.4), radius: 12, y: 5)
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
         .accessibilityElement(children: .combine)
     }
 
@@ -508,22 +509,22 @@ struct EndTripCard: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: 14) {
-            VStack(spacing: 2) {
-                Text("End this trip?").font(.system(size: 24, weight: .heavy))
-                Text("to \(destination)").font(.system(size: 16, weight: .medium))
+        VStack(spacing: 8) {
+            VStack(spacing: 1) {
+                Text("Zakończyć tę trasę?").font(.system(size: 17, weight: .bold))
+                Text("do \(destination)").font(.system(size: 13, weight: .medium))
                     .foregroundColor(Vela.muted(scheme)).lineLimit(1)
             }
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Button(action: onKeep) {
-                    Text("Keep going").font(.system(size: 20, weight: .bold))
-                        .frame(maxWidth: .infinity).frame(height: 60)
-                        .foregroundColor(Vela.onAccent(scheme))
-                        .background(Capsule().fill(Vela.accent(scheme)))
+                    Text("Jadę dalej").font(.system(size: 15, weight: .bold))
+                        .frame(maxWidth: .infinity).frame(height: 40)
+                        .foregroundColor(.white)
+                        .background(Capsule().fill(Color(hex: 0x14B8A6)))
                 }
                 Button(action: onEnd) {
-                    Text("End trip").font(.system(size: 20, weight: .bold))
-                        .frame(maxWidth: .infinity).frame(height: 60)
+                    Text("Zakończ").font(.system(size: 15, weight: .bold))
+                        .frame(maxWidth: .infinity).frame(height: 40)
                         .foregroundColor(.white)
                         .background(Capsule().fill(Vela.closed))
                 }
@@ -531,9 +532,10 @@ struct EndTripCard: View {
             .buttonStyle(.plain)
         }
         .foregroundColor(.primary)
-        .padding(18)
-        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(.horizontal, 16)
         .padding(.bottom, 4)
     }
 }
@@ -550,35 +552,36 @@ struct TripBar: View {
         HStack(spacing: 12) {
             Button(action: onEnd) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 24, weight: .heavy))
+                    .font(.system(size: 16, weight: .heavy))
                     .foregroundColor(scheme == .dark ? Color(hex: 0xFCA5A5) : Vela.closed)
-                    .frame(width: 64, height: 64)
+                    .frame(width: 44, height: 44)
                     .background(Circle().fill(scheme == .dark ? Color(hex: 0x3B1820) : Color(hex: 0xFEE2E2)))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("End trip")
+            .accessibilityLabel("Zakończ trasę")
             VStack(spacing: 1) {
-                Text(Fmt.duration(remaining)).font(.system(size: 36, weight: .heavy))
-                    .foregroundColor(Vela.accentText(scheme))
+                Text(Fmt.duration(remaining)).font(.system(size: 28, weight: .heavy))
+                    .foregroundColor(.white)
                     .lineLimit(1).minimumScaleFactor(0.7)
-                Text("\(Fmt.distance(meters)) · \(Fmt.arrival(remaining))").font(.system(size: 17, weight: .medium))
-                    .foregroundColor(Vela.muted(scheme))
+                Text("\(Fmt.distance(meters)) · \(Fmt.arrival(remaining))").font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.82))
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
             Button(action: onSteps) {
                 Image(systemName: "list.bullet")
-                    .font(.system(size: 24, weight: .bold))
-                    .frame(width: 64, height: 64)
+                    .font(.system(size: 18, weight: .bold))
+                    .frame(width: 44, height: 44)
                     .background(Circle().fill(Vela.chip(scheme)))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Trip and steps")
+            .accessibilityLabel("Kroki trasy")
         }
         .foregroundColor(.primary)
-        .padding(.horizontal, 16)
-        .frame(height: 100)
-        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .padding(.horizontal, 12)
+        .frame(height: 72)
+        .background(TripSheen(progress: tripProgress(nav), capsule: false, radius: 22).opacity(0.92))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
@@ -965,10 +968,58 @@ struct CameraBadge: View {
     var size: CGFloat = 28
 
     var body: some View {
-        Image(uiImage: kind == .speed ? MapIcons.speedCamera() : MapIcons.plateCamera())
+        Image(uiImage: Self.icon(kind))
             .resizable()
             .frame(width: size, height: size)
     }
+
+    private static func icon(_ kind: RoadCamera.Kind) -> UIImage {
+        switch kind {
+        case .speed: return MapIcons.speedCamera()
+        case .plate: return MapIcons.plateCamera()
+        case .watch: return MapIcons.watchCamera()
+        }
+    }
+}
+
+/// Green at the start of a drive, easing toward light blue. A pale stripe across the top reads as glass.
+struct TripSheen: View {
+    var progress: Double
+    var capsule: Bool
+    var radius: CGFloat = 28
+
+    var body: some View {
+        let shape = Capsule()
+        let round = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        let gloss = LinearGradient(colors: [Color.white.opacity(0.42), Color.white.opacity(0.08), .clear],
+                                   startPoint: .top, endPoint: .center)
+        Group {
+            if capsule {
+                shape.fill(tripTint(progress))
+                    .overlay(shape.fill(gloss))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.34), lineWidth: 1))
+            } else {
+                round.fill(tripTint(progress))
+                    .overlay(round.fill(gloss))
+                    .overlay(round.strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+            }
+        }
+    }
+}
+
+func tripProgress(_ nav: Navigator) -> Double {
+    let total = max(nav.route.distanceMeters, 1)
+    return min(1, max(0, (nav.progress?.alongMeters ?? 0) / total))
+}
+
+func tripTint(_ t: Double) -> Color {
+    let u = min(1, max(0, t))
+    func channel(_ hex: UInt32, _ shift: Int) -> Double { Double((hex >> shift) & 0xFF) / 255 }
+    let green: UInt32 = 0x14B8A6
+    let blue: UInt32 = 0x60A5FA
+    return Color(red: channel(green, 16) * (1 - u) + channel(blue, 16) * u,
+                 green: channel(green, 8) * (1 - u) + channel(blue, 8) * u,
+                 blue: channel(green, 0) * (1 - u) + channel(blue, 0) * u)
 }
 
 /** Find a stop ahead without leaving navigation: gas, food, coffee… near the road still to drive. */
