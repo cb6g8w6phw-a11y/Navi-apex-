@@ -711,7 +711,7 @@ final class AppModel: ObservableObject {
     }
 
     private func locationChanged(_ loc: CLLocation) {
-        guard let n = nav else { return }
+        guard let n = nav, !n.isCouch else { return }
         n.handle(loc)
         followCamera(n, loc, animated: true)
         mapTick += 1
@@ -767,5 +767,118 @@ final class AppModel: ObservableObject {
         let pad = sideInset > 0 ? UIEdgeInsets(top: 60, left: sideInset + 40, bottom: 60, right: 40)
                                 : UIEdgeInsets(top: top, left: 40, bottom: map.bounds.height * bottomFraction + 20, right: 40)
         map.show(rect, padding: pad, animated: true)
+    }
+
+    /// Fetches a real drive and opens it on the map, without using the phone's GPS.
+    func startCouch(_ scene: CouchScene, done: @escaping (String?) -> Void) {
+        if nav != nil { endNavigation() }
+        let leg = Self.couchLeg(scene)
+        let google = !settings.noGoogle
+        Task { @MainActor in
+            let r = await Directions.routes(from: leg.from, to: leg.to, mode: .drive, avoidHighways: false, avoidTolls: false,
+                                            useGoogle: google, via: [], heading: nil, alternatives: false)
+            guard let route = r.routes.first, route.polyline.count >= 2 else {
+                done("Nie udało się pobrać trasy. Sprawdź sieć i stuknij jeszcze raz.")
+                return
+            }
+            let dest = Place(id: "couch-\(scene.rawValue)", name: leg.place, location: leg.to, source: "sim")
+            let n = Navigator(route: route, destination: dest, stops: [], settings: settings)
+            let along = Self.couchAlong(scene, route.polyline)
+            let built = Self.couchCards(scene, line: route.polyline, along: along, settings: settings)
+            n.holdCouch(title: leg.title, along: along, notes: built.notes, chip: built.chip, speed: 22)
+            self.nav = n
+            self.navSub = n.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+            n.onFinished = { [weak self, weak n] in
+                guard let self, let n, self.nav === n else { return }
+                self.endNavigation()
+            }
+            self.location.setNavigating(true, mode: route.mode.rawValue)
+            self.map?.showsUserLocation = false
+            self.tab = .map
+            let point = Geo.point(along: route.polyline, meters: along)
+            let fix = CLLocation(coordinate: CLLocationCoordinate2D(latitude: point.lat, longitude: point.lng),
+                                 altitude: 0, horizontalAccuracy: 5, verticalAccuracy: -1,
+                                 course: n.progress?.routeBearing ?? -1, speed: 0, timestamp: Date())
+            self.glide.fix(n, fix, across: 1400, jump: true)
+            self.frame(route.polyline, bottomFraction: 0.28, top: 200)
+            self.mapTick += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard self?.nav?.isCouch == true else { return }
+                self?.frame(route.polyline, bottomFraction: 0.28, top: 200)
+            }
+            done(nil)
+        }
+    }
+
+    private struct CouchLeg {
+        var from: LatLng
+        var to: LatLng
+        var title: String
+        var place: String
+    }
+
+    private static func couchLeg(_ scene: CouchScene) -> CouchLeg {
+        switch scene {
+        case .tunnel:
+            return CouchLeg(from: LatLng(53.529, 9.986), to: LatLng(53.581, 9.882), title: "Elbtunnel", place: "Elbtunnel")
+        case .border:
+            return CouchLeg(from: LatLng(52.228, 10.974), to: LatLng(52.406, 16.925), title: "Granica DE–PL", place: "Poznań")
+        case .umwelt:
+            return CouchLeg(from: LatLng(52.172, 11.642), to: LatLng(52.120, 11.630), title: "Umwelt · Magdeburg", place: "Magdeburg")
+        }
+    }
+
+    private static func couchAlong(_ scene: CouchScene, _ line: [LatLng]) -> Double {
+        let total = Geo.length(line)
+        switch scene {
+        case .tunnel: return total * 0.42
+        case .umwelt: return max(80, total - 1_200)
+        case .border: return nearestAlong(line, LatLng(52.33, 14.45))
+        }
+    }
+
+    private static func nearestAlong(_ line: [LatLng], _ target: LatLng) -> Double {
+        let cum = Geo.cumulative(line)
+        let total = cum.last ?? 0
+        var best = total * 0.7
+        var bestD = Double.greatestFiniteMagnitude
+        var m = 0.0
+        while m <= total {
+            let d = Geo.point(along: line, meters: m, cumulative: cum).distance(to: target)
+            if d < bestD { bestD = d; best = m }
+            m += 500
+        }
+        return best
+    }
+
+    private static func couchCards(_ scene: CouchScene, line: [LatLng], along: Double, settings: AppSettings) -> (notes: [GuidanceNote], chip: CouchChip?) {
+        let here = Geo.point(along: line, meters: along)
+        switch scene {
+        case .tunnel:
+            let trust = MindSettings.shared.gpsTrust
+            return ([GuidanceNote(title: "Tunel · czujniki",
+                                  body: "Pozycja jedzie z czujników i jest trzymana na osi drogi. GPS gorszy niż \(trust) m, więc nie skacze na ulicę nad tunelem.",
+                                  tone: "info")], nil)
+        case .border:
+            var notes: [GuidanceNote] = []
+            notes.append(RouteMind.borderNote(near: here)
+                         ?? GuidanceNote(title: "Granica", body: "Brak krótszej kolejki przy tym punkcie trasy.", tone: "info"))
+            let tank = max(settings.fuelTank, 1)
+            var left = settings.fuelLeft
+            if settings.carFuel == "electric" || left * 10 >= tank * 9 { left = max(8, tank / 4) }
+            if let fuel = RouteMind.borderFuelNote(here: here, destination: LatLng(52.406, 16.925),
+                                                    tripMeters: Geo.length(line), fuelLeft: left, fuelTank: tank,
+                                                    consumption: settings.carConsumption, electric: false) {
+                notes.append(fuel)
+            }
+            return (notes, nil)
+        case .umwelt:
+            let probes = [here, LatLng(52.120, 11.630), LatLng(52.131, 11.639), LatLng(52.127, 11.615)]
+            let hit = probes.compactMap { CityAtlas.hit($0) }.first
+            let name = hit?.name ?? "Magdeburg"
+            let blocked = !settings.mayEnterUmwelt
+            let note = GuidanceNote(title: "Umweltzone \(name)", body: hit?.body ?? "Do wjazdu potrzebna zielona plakietka.", tone: "info")
+            return ([note], CouchChip(name: name, blocked: blocked))
+        }
     }
 }
