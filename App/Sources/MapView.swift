@@ -228,19 +228,19 @@ func roadWidthOnScreen(zoomScale: MKZoomScale, latitude: Double) -> CGFloat {
 /** A route line that follows the width of the road under it, instead of a fixed width. */
 final class RoadLineRenderer: MKPolylineRenderer {
     var relative: CGFloat = 1
-    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+    override func applyStrokeProperties(to context: CGContext, atZoomScale zoomScale: MKZoomScale) {
+        super.applyStrokeProperties(to: context, atZoomScale: zoomScale)
         let w = max(roadWidthOnScreen(zoomScale: zoomScale, latitude: polyline.coordinate.latitude) * relative, 2)
-        if abs(lineWidth - w) > 0.01 { lineWidth = w }
-        super.draw(mapRect, zoomScale: zoomScale, in: context)
+        context.setLineWidth(w / zoomScale)
     }
 }
 
 final class RoadGradientRenderer: MKGradientPolylineRenderer {
     var relative: CGFloat = 1
-    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+    override func applyStrokeProperties(to context: CGContext, atZoomScale zoomScale: MKZoomScale) {
+        super.applyStrokeProperties(to: context, atZoomScale: zoomScale)
         let w = max(roadWidthOnScreen(zoomScale: zoomScale, latitude: polyline.coordinate.latitude) * relative, 2)
-        if abs(lineWidth - w) > 0.01 { lineWidth = w }
-        super.draw(mapRect, zoomScale: zoomScale, in: context)
+        context.setLineWidth(w / zoomScale)
     }
 }
 
@@ -406,6 +406,10 @@ struct VelaMapView: UIViewRepresentable {
         private var routeSpans: [StyledLine] = []
         private var routeDynamic: [StyledLine] = []
         private var arrowLines: [StyledLine] = []
+        /// One overlay for the whole drive. Replacing the stroke as the car moved made it vanish.
+        private var ribbon: RouteRibbon?
+        private var waveLink: CADisplayLink?
+        private var wavePump: WavePump?
         private var lineStyles: [ObjectIdentifier: LineStyle] = [:]
         private var overlaysDirty = false
         private var wantedOverlays: Set<ObjectIdentifier> = []
@@ -515,6 +519,7 @@ struct VelaMapView: UIViewRepresentable {
             if pathsWanted == pathLines.isEmpty && !pathShapes.isEmpty { rebuildPaths() }
             if pathsWanted { loadPaths(map) }
             if overlaysDirty { syncOverlays(map) }
+            ensureWave()
         }
 
         /**
@@ -565,11 +570,16 @@ struct VelaMapView: UIViewRepresentable {
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
             if let h = heatOverlay { ordered.append(h) }
-            for group in [railLines, pathLines, routeLines, arrowLines] {
+            for group in [railLines, pathLines, routeLines] {
                 for item in group {
                     styles[ObjectIdentifier(item.line)] = item.style
                     ordered.append(item.line)
                 }
+            }
+            if let ribbon { ordered.append(ribbon) }
+            for item in arrowLines {
+                styles[ObjectIdentifier(item.line)] = item.style
+                ordered.append(item.line)
             }
             // Styles of lines that are still on the map for another moment must stay readable.
             for (k, v) in lineStyles where styles[k] == nil { styles[k] = v }
@@ -866,6 +876,15 @@ struct VelaMapView: UIViewRepresentable {
             let dynKey = staticKey + "\(Int(from / 50))" + "\(model.nav?.nextManeuver?.alongMeters ?? 0)"
             let staticChanged = staticKey != lastStaticRouteKey
             let dynChanged = dynKey != lastDynRouteKey
+            // Progress repaints the same ribbon. It does not build a new line.
+            if let r = main, let ribbon, !staticChanged, ribbon.routeId == r.id {
+                ribbon.traveled = navigating ? from : 0
+                ribbon.live = navigating
+                ribbon.spans = r.trafficSpans.map { s in
+                    (max(0, s.startMeters), s.startMeters + max(0, s.lengthMeters), min(max(s.level, 1), 3))
+                }
+                (map.renderer(for: ribbon) as? RouteRibbonRenderer)?.setNeedsDisplay()
+            }
             guard staticChanged || dynChanged else { return }
             lastStaticRouteKey = staticKey
             lastDynRouteKey = dynKey
@@ -878,7 +897,7 @@ struct VelaMapView: UIViewRepresentable {
             // 1. What changes only when the routes do: alternatives, transit legs, the full
             //    route and the traffic colours along it.
             if staticChanged {
-                var base: [StyledLine] = [], mainOut: [StyledLine] = [], spansOut: [StyledLine] = []
+                var base: [StyledLine] = []
                 for r in alts { add(&base, r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 11, alpha: 0.6, relative: 0.85)) }
                 for r in alts { add(&base, r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.6, relative: 0.55)) }
                 if let t = trip {
@@ -893,48 +912,26 @@ struct VelaMapView: UIViewRepresentable {
                         add(&base, leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
                     }
                 }
+                ribbon = nil
                 if let r = main {
-                    let cum = Geo.cumulative(r.polyline)
-                    let total = cum.last ?? 0
-                    // Full route; the line's width follows the road's width on screen (relative 1.0 = road).
-                    add(&mainOut, r.polyline, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 1.0))
-                    add(&mainOut, r.polyline, LineStyle(color: UIColor(hex: 0x2DD4BF), width: 10,
-                                                          gradient: [UIColor(hex: 0x2DD4BF), UIColor(hex: 0x22D3EE)], relative: 0.70))
-                    // Traffic: coloured spans, only on the part still ahead of the car.
-                    let levelColors: [Int: UInt32] = [1: 0xF59E0B, 2: 0xEF4444, 3: 0xB91C1C]
-                    for level in 1...3 {
-                        for s in r.trafficSpans where min(s.level, 3) == level {
-                            let a = max(s.startMeters, navigating ? from : 0), b = min(s.startMeters + s.lengthMeters, total)
-                            guard b > a else { continue }
-                            add(&spansOut, Geo.slice(r.polyline, from: a, to: b, cumulative: cum),
-                                LineStyle(color: UIColor(hex: levelColors[level] ?? 0xF59E0B), width: 10, relative: 0.70))
-                        }
-                    }
+                    let rib = RouteRibbon(route: r)
+                    rib.traveled = navigating ? from : 0
+                    rib.live = navigating
+                    ribbon = rib
                 }
                 routeBase = base
-                routeMain = mainOut
-                routeSpans = spansOut
+                routeMain = []
+                routeSpans = []
             }
 
             // 2. What moves with the car, every ~50 m: the traveled line, the dots ahead and
             //    the turn arrow.
             if dynChanged {
-                var traveled: [StyledLine] = [], dots: [StyledLine] = []
                 var arrow: [StyledLine] = []
                 var heads: [KiteAnnotation] = []
                 if let r = main {
                     let cum = Geo.cumulative(r.polyline)
                     let total = cum.last ?? 0
-                    if navigating && from > 1 && from < total - 5 {
-                        let remaining = Geo.slice(r.polyline, from: from, to: total, cumulative: cum)
-                        add(&dots, remaining, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
-                    } else if !navigating {
-                        add(&dots, r.polyline, LineStyle(color: .white, width: 3, alpha: 0.5, dash: [1, 18], relative: 0.18))
-                    }
-                    if navigating && from > 1 {
-                        add(&traveled, Geo.slice(r.polyline, from: 0, to: from, cumulative: cum),
-                            LineStyle(color: UIColor(hex: 0x94A3B8), width: 10, alpha: 0.8, relative: 0.7))
-                    }
                     if let n = model.nav, let m = n.nextManeuver, m.type != .arrive, m.type != .depart, m.type != .straight,
                        let p = n.progress, m.alongMeters - p.alongMeters < 600 {
                         var end = m.alongMeters + 22
@@ -958,7 +955,7 @@ struct VelaMapView: UIViewRepresentable {
                         }
                     }
                 }
-                routeDynamic = traveled + dots
+                routeDynamic = []
                 arrowLines = arrow
                 replaceAnnotations(&headAnns, heads, map)
             }
@@ -987,6 +984,31 @@ struct VelaMapView: UIViewRepresentable {
                 replaceAnnotations(&bubbleAnns, bubbles, map)
             } else {
                 replaceAnnotations(&bubbleAnns, [], map)
+            }
+        }
+
+        /// Walks a light band along jams. The route overlay itself stays the same object.
+        private func ensureWave() {
+            let want = model.nav != nil && ribbon?.spans.isEmpty == false
+            if want {
+                if waveLink == nil {
+                    let pump = WavePump()
+                    pump.tick = { [weak self] in
+                        guard let self, let ribbon = self.ribbon, let map = self.model.map else { return }
+                        ribbon.phase += 0.012
+                        if ribbon.phase > 1 { ribbon.phase -= 1 }
+                        (map.renderer(for: ribbon) as? RouteRibbonRenderer)?.setNeedsDisplay()
+                    }
+                    wavePump = pump
+                    let link = CADisplayLink(target: pump, selector: #selector(WavePump.fire))
+                    link.preferredFrameRateRange = CAFrameRateRange(minimum: 8, maximum: 15, preferred: 12)
+                    link.add(to: .main, forMode: .common)
+                    waveLink = link
+                }
+            } else {
+                waveLink?.invalidate()
+                waveLink = nil
+                wavePump = nil
             }
         }
 
@@ -1222,6 +1244,9 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         func mapView(_ map: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if overlay is RouteRibbon {
+                return RouteRibbonRenderer(overlay: overlay)
+            }
             if let line = overlay as? MKPolyline, let st = lineStyles[ObjectIdentifier(line)] {
                 if let colors = st.gradient {
                     let r = RoadGradientRenderer(polyline: line)
