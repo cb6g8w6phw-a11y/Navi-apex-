@@ -20,9 +20,9 @@ struct KiteDock: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            item(.map, on: "map.fill", off: "map", title: "Map")
-            item(.saved, on: "bookmark.fill", off: "bookmark", title: "Saved")
-            item(.settings, on: "gearshape.fill", off: "gearshape", title: "Settings")
+            item(.map, on: "map.fill", off: "map", title: "Mapa")
+            item(.saved, on: "bookmark.fill", off: "bookmark", title: "Zapisane")
+            item(.settings, on: "gearshape.fill", off: "gearshape", title: "Ustawienia")
         }
         .padding(6)
         .frame(height: Self.height)
@@ -105,7 +105,7 @@ struct WazeMapChips: View {
                     let level = PoliceRisk.level(risk)
                     HStack(spacing: 8) {
                         Image(systemName: "shield.lefthalf.filled").font(.system(size: 17, weight: .bold))
-                        Text("Police risk here: \(level.rawValue.capitalized)").font(.system(size: 16, weight: .bold))
+                        Text("Ryzyko kontroli tutaj: \(level.rawValue.capitalized)").font(.system(size: 16, weight: .bold))
                     }
                     .foregroundColor(level == .medium ? Color(hex: 0x1F1300) : .white)
                     .padding(.horizontal, 14).frame(height: 44)
@@ -116,7 +116,7 @@ struct WazeMapChips: View {
                 if let n = model.wazeLiveCount, settings.wazeOnMap || settings.wazeHeatmap {
                     HStack(spacing: 8) {
                         Circle().fill(Color(hex: 0x22C55E)).frame(width: 10, height: 10)
-                        Text("Live from Waze · \(n) report\(n == 1 ? "" : "s")").font(.system(size: 14, weight: .semibold))
+                        Text("Na żywo z Waze · \(n) zgłoszeń").font(.system(size: 14, weight: .semibold))
                     }
                     .padding(.horizontal, 12).frame(height: 34)
                     .glass(Capsule())
@@ -141,7 +141,7 @@ struct SavedPage: View {
                 PageBackdrop()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Saved").font(.system(size: 36, weight: .heavy)).padding(.horizontal, 4)
+                        Text("Zapisane").font(.system(size: 36, weight: .heavy)).padding(.horizontal, 4)
                         HStack(spacing: 12) {
                             mineTile("house.fill", Vela.routeBlue, "Home", settings.home)
                             mineTile("briefcase.fill", Color(hex: 0x8B5CF6), "Work", settings.work)
@@ -153,8 +153,8 @@ struct SavedPage: View {
                         if settings.saved.isEmpty {
                             VStack(spacing: 10) {
                                 Image(systemName: "bookmark").font(.system(size: 40, weight: .semibold)).foregroundColor(Vela.muted(scheme))
-                                Text("No saved places yet").font(.title3.weight(.bold))
-                                Text("Open any place and tap Save to keep it here.").font(.body).foregroundColor(Vela.muted(scheme))
+                                Text("Nie ma jeszcze zapisanych miejsc").font(.title3.weight(.bold))
+                                Text("Otwórz miejsce i stuknij Zapisz, żeby zostało tutaj.").font(.body).foregroundColor(Vela.muted(scheme))
                                     .multilineTextAlignment(.center)
                             }
                             .frame(maxWidth: .infinity)
@@ -167,7 +167,7 @@ struct SavedPage: View {
                                 }
                             }
                             .glassCard()
-                            Text("Hold a place to rename or remove it.").font(.subheadline).foregroundColor(Vela.muted(scheme))
+                            Text("Przytrzymaj miejsce, żeby zmienić nazwę albo usunąć.").font(.subheadline).foregroundColor(Vela.muted(scheme))
                                 .padding(.horizontal, 4)
                         }
                     }
@@ -327,7 +327,7 @@ struct PlacePicker: View {
                                 Image(systemName: "location.fill").font(.system(size: 18, weight: .bold))
                                     .foregroundColor(.white).frame(width: 40, height: 40)
                                     .background(Circle().fill(Vela.routeBlue))
-                                Text("Use where I am now").font(.system(size: 19, weight: .semibold)).foregroundColor(.primary)
+                                Text("Użyj miejsca, w którym jestem").font(.system(size: 19, weight: .semibold)).foregroundColor(.primary)
                                 Spacer()
                                 if locating { ProgressView() }
                             }
@@ -349,7 +349,7 @@ struct PlacePicker: View {
                 } else if !found.isEmpty {
                     Section { ForEach(found) { row($0) } }
                 } else if searching {
-                    HStack(spacing: 10) { ProgressView(); Text("Searching…").foregroundColor(.secondary) }
+                    HStack(spacing: 10) { ProgressView(); Text("Szukam…").foregroundColor(.secondary) }
                 } else {
                     Text(Connectivity.explain("Nothing found yet. Keep typing, or try the postcode."))
                         .foregroundColor(.secondary)

@@ -73,7 +73,7 @@ struct EndpointsCard: View {
                     Button { model.addingStop = true } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus").font(.system(size: 14, weight: .bold)).frame(width: 18)
-                            Text("Add stop").font(.system(size: 15, weight: .semibold))
+                            Text("Dodaj postój").font(.system(size: 15, weight: .semibold))
                             Spacer()
                         }
                         .foregroundColor(Vela.accentText(scheme))
@@ -123,7 +123,7 @@ struct TripHeader: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(d.pickedTrip.map { Fmt.duration($0.durationSeconds) } ?? "Transit")
                                 .font(.system(size: 30, weight: .heavy)).foregroundColor(Vela.accentText(scheme))
-                            Text("By public transport").font(.system(size: 17, weight: .medium)).foregroundColor(Vela.muted(scheme))
+                            Text("Komunikacją").font(.system(size: 17, weight: .medium)).foregroundColor(Vela.muted(scheme))
                         }
                     } else if let r = d.route {
                         VStack(alignment: .leading, spacing: 2) {
@@ -136,7 +136,7 @@ struct TripHeader: View {
                                 .lineLimit(1).minimumScaleFactor(0.8)
                         }
                     } else if d.loading.contains(d.mode) {
-                        HStack(spacing: 10) { ProgressView(); Text("Finding routes…").font(.system(size: 19, weight: .semibold)) }
+                        HStack(spacing: 10) { ProgressView(); Text("Szukam tras…").font(.system(size: 19, weight: .semibold)) }
                             .frame(height: 52)
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
@@ -173,7 +173,7 @@ struct TripHeader: View {
                     Button { model.startNavigation() } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "location.north.fill").font(.system(size: 19, weight: .bold))
-                            Text("Go").font(.system(size: 21, weight: .heavy))
+                            Text("Jedź").font(.system(size: 21, weight: .heavy))
                         }
                         .foregroundColor(Vela.onAccent(scheme))
                         .frame(maxWidth: .infinity, minHeight: 50)
@@ -253,10 +253,10 @@ struct TripBody: View {
                         if let url = d.destination.shareURL { shareButton(url) }
                         if d.current.count > 1 { alternates(d, picked: r) }
                         Divider()
-                        Text("Steps").font(.headline)
+                        Text("Kroki").font(.headline)
                         StepsList(route: r)
                     } else if d.loading.contains(d.mode) {
-                        HStack { ProgressView(); Text("Finding routes…").foregroundColor(.secondary) }
+                        HStack { ProgressView(); Text("Szukam tras…").foregroundColor(.secondary) }
                             .padding(.vertical, 20)
                     } else {
                         Text(d.errors[d.mode] ?? "No route found.").foregroundColor(.secondary).padding(.vertical, 20)
@@ -297,7 +297,7 @@ struct TripBody: View {
         ShareLink(item: url) {
             HStack(spacing: 8) {
                 Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .bold))
-                Text("Share place").font(.system(size: 17, weight: .bold))
+                Text("Udostępnij miejsce").font(.system(size: 17, weight: .bold))
             }
             .padding(.horizontal, 20)
             .frame(height: 52)
@@ -338,7 +338,7 @@ struct TripBody: View {
                                 Text("\(Fmt.duration(r.durationSeconds)) · \(Fmt.distance(r.distanceMeters))").font(.subheadline.weight(.medium))
                                 if let s = r.summary { Text("via \(s)").font(.caption).foregroundColor(.secondary) }
                                 if Self.overlap(r, picked) < 0.4 {
-                                    Text("Different roads: stays off the busiest route")
+                                    Text("Inne drogi: omija najbardziej zatłoczoną")
                                         .font(.caption2.weight(.bold)).foregroundColor(Vela.accentText(scheme))
                                 }
                             }
@@ -408,9 +408,9 @@ struct TransitBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("", selection: $kind) {
-                Text("Leave now").tag(0)
-                Text("Depart at").tag(1)
-                Text("Arrive by").tag(2)
+                Text("Wyjedź teraz").tag(0)
+                Text("Wyjazd o").tag(1)
+                Text("Przyjazd do").tag(2)
             }
             .pickerStyle(.segmented)
             if kind != 0 {
@@ -438,12 +438,12 @@ struct TransitBody: View {
                 }
             }
             if let t = state.pickedTrip {
-                Text("Steps").font(.headline).padding(.top, 6)
+                Text("Kroki").font(.headline).padding(.top, 6)
                 TransitSteps(trip: t)
             }
-            Text("Timetables from Transitous").font(.caption).foregroundColor(.secondary).padding(.top, 4)
+            Text("Rozkłady z Transitous").font(.caption).foregroundColor(.secondary).padding(.top, 4)
         } else if state.trips == nil {
-            HStack { ProgressView(); Text("Finding transit…").foregroundColor(.secondary) }
+            HStack { ProgressView(); Text("Szukam połączeń…").foregroundColor(.secondary) }
                 .padding(.vertical, 20)
         } else {
             Text(state.tripsError ?? "No transit trips found.").foregroundColor(.secondary).padding(.vertical, 20)
@@ -604,7 +604,7 @@ struct TransitSteps: View {
                                 if let h = leg.headsign { Text("to \(h)").font(.subheadline).lineLimit(1) }
                             }
                             Text(times(leg.depart, leg.fromName)).font(.subheadline)
-                            Text("Ride \(leg.stops) stop\(leg.stops == 1 ? "" : "s") · \(Fmt.duration(leg.durationSeconds))")
+                            Text("\(leg.stops) przystanków · \(Fmt.duration(leg.durationSeconds))")
                                 .font(.caption).foregroundColor(.secondary)
                             Text(times(leg.arrive, "Get off at \(leg.toName)")).font(.caption).foregroundColor(.secondary)
                         }
@@ -638,7 +638,7 @@ struct StopPicker: View {
                 if !found.isEmpty {
                     Section("Results") { ForEach(found) { row($0, icon: "mappin.circle.fill") } }
                 } else if searching {
-                    HStack { ProgressView(); Text("Searching…").foregroundColor(.secondary) }
+                    HStack { ProgressView(); Text("Szukam…").foregroundColor(.secondary) }
                 }
                 let mine = [settings.home.map { ($0, "house.fill") }, settings.work.map { ($0, "briefcase.fill") }].compactMap { $0 }
                     + settings.saved.prefix(12).map { ($0, "bookmark.fill") }

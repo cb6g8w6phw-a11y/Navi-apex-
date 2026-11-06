@@ -155,24 +155,24 @@ final class FuelPrices {
     /** For the Settings button: does this key work? Asks about 5 km around the middle of Berlin. */
     nonisolated static func check(key: String) async -> String {
         let k = key.trimmingCharacters(in: .whitespaces)
-        guard !k.isEmpty else { return "Enter your key first." }
-        guard var comps = URLComponents(string: base) else { return "Couldn't build the request." }
+        guard !k.isEmpty else { return "Najpierw wpisz klucz." }
+        guard var comps = URLComponents(string: base) else { return "Nie udało się zbudować zapytania." }
         comps.queryItems = [
             URLQueryItem(name: "lat", value: "52.5200"), URLQueryItem(name: "lng", value: "13.4050"),
             URLQueryItem(name: "rad", value: "5"), URLQueryItem(name: "sort", value: "price"),
             URLQueryItem(name: "type", value: "diesel"), URLQueryItem(name: "apikey", value: k),
         ]
         guard let url = comps.url, let (data, resp) = try? await URLSession.shared.data(from: url) else {
-            return "No answer from Tankerkönig. Check your connection."
+            return "Tankerkönig nie odpowiada. Sprawdź połączenie."
         }
         guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-            return "Unexpected answer (code \((resp as? HTTPURLResponse)?.statusCode ?? 0))."
+            return "Nieoczekiwana odpowiedź (kod \((resp as? HTTPURLResponse)?.statusCode ?? 0))."
         }
         if (json["ok"] as? Bool) == true {
             let n = (json["stations"] as? [[String: Any]])?.count ?? 0
-            return "The key works: \(n) stations found in the test area."
+            return "Klucz działa: \(n) stacji w okolicy testowej."
         }
-        return (json["message"] as? String) ?? "The key was refused."
+        return (json["message"] as? String) ?? "Klucz został odrzucony."
     }
 }
 
@@ -297,7 +297,7 @@ struct FuelCard: View {
                 Text([station.address, meters.map { Fmt.distance($0) }].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline).foregroundColor(.secondary).lineLimit(2)
                 Button(action: go) {
-                    Label("Directions", systemImage: "arrow.triangle.turn.up.right.circle.fill")
+                    Label("Trasa", systemImage: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.system(size: 15, weight: .bold))
                 }
                 .padding(.top, 4)

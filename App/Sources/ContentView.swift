@@ -522,7 +522,7 @@ struct SuggestionsPanel: View {
                         // The system Paste button reads the clipboard without iOS asking first.
                         HStack(spacing: 16) {
                             Image(systemName: "link").frame(width: 22).foregroundColor(.secondary)
-                            Text("Open a copied map link").foregroundColor(.primary)
+                            Text("Otwórz skopiowany link do mapy").foregroundColor(.primary)
                             Spacer()
                             PasteButton(payloadType: String.self) { strings in
                                 guard let text = strings.first else { return }
@@ -541,7 +541,7 @@ struct SuggestionsPanel: View {
                     Shortcuts(model: model, done: done)
                     if !settings.recentPlaces.isEmpty || !settings.recents.isEmpty {
                         HStack {
-                            Text("Recent").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+                            Text("Ostatnie").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
                             Spacer()
                             Button("Clear") { settings.recents = []; settings.recentPlaces = [] }
                                 .font(.subheadline).foregroundColor(Vela.routeBlue)
@@ -581,7 +581,7 @@ struct SuggestionsPanel: View {
                         }
                     }
                     // Recents first, like every maps app: most searches are for somewhere you've been.
-                    Text("Nearby").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+                    Text("W pobliżu").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
                         .padding(.horizontal, 18).padding(.top, 14).padding(.bottom, 4)
                     ForEach(Category.all) { c in
                         row(icon: c.icon, text: c.label) { done(); model.search(c.query, title: c.label) }

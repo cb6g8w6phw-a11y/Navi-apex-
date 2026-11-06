@@ -352,7 +352,7 @@ public enum Geo {
         let across = (dx * py - dy * px) / len
         let ahead = (dx * px + dy * py) / len
         guard abs(across) > 8, ahead > -20, ahead < len + 60 else { return nil }
-        return across > 0 ? "left" : "right"
+        return across > 0 ? "lewej" : "prawej"
     }
 
     public static func bearing(_ a: LatLng, _ b: LatLng) -> Double {

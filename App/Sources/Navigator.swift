@@ -753,9 +753,9 @@ final class Navigator: ObservableObject {
 
     private func roadWords(_ e: RoadEvent) -> String {
         switch e.kind {
-        case .closure: return "Closure"
-        case .roadworks: return e.blocked ? "Roadworks, road blocked" : "Roadworks"
-        case .warning: return "Traffic warning"
+        case .closure: return "zamknięcie drogi"
+        case .roadworks: return e.blocked ? "roboty drogowe, droga zablokowana" : "roboty drogowe"
+        case .warning: return "ostrzeżenie na drodze"
         }
     }
 
@@ -798,9 +798,9 @@ final class Navigator: ObservableObject {
                                       left: here >= next.start ? max(next.end - here, 0) : nil)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 chime()
-                var words = "\(roadWords(next.event)) ahead"
-                if meters > 100 { words += ", in \(Fmt.spokenDistance(meters))" }
-                if length >= 300 { words += ", for \(Fmt.spokenDistance(length))" }
+                var words = "Przed tobą \(roadWords(next.event))"
+                if meters > 100 { words += ", za \(Fmt.spokenDistance(meters))" }
+                if length >= 300 { words += ", przez \(Fmt.spokenDistance(length))" }
                 speak(words + ".")
             }
         }
@@ -866,12 +866,8 @@ final class Navigator: ObservableObject {
         } else if d <= near && d > now + 30 && stage < 2 {
             spokenStage[i] = 2
             // Which lane, like the banner shows, so it's known without looking.
-            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { g -> String in
-                g.words.hasPrefix("Lane") ? ". Use " + g.words.lowercased().replacingOccurrences(of: "from left", with: "from the left")
-                    : ". Use the \(g.words.lowercased())"
-            } ?? ""
-            // "In 200 yards, your destination is on the left", the way Google says it.
-            let words = m.type == .arrive ? destinationSide.map { "your destination is on the \($0)" } ?? m.instruction.lowercasedFirst
+            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { ". Użyj: \($0.words)" } ?? ""
+            let words = m.type == .arrive ? destinationSide.map { "cel jest po \($0)" } ?? m.instruction.lowercasedFirst
                 : m.instruction.lowercasedFirst
             speak("Za \(Fmt.spokenDistance(d)), \(words)\(lane)")
         } else if d <= far && d > near + 150 && stage < 1 && m.type != .arrive {
@@ -1040,13 +1036,11 @@ final class Navigator: ObservableObject {
         speech.speak(u)
     }
 
-    /** The phone's English voice for its region, the better-sounding download when there is one. */
+    /** The phone's Polish voice, the better-sounding download when there is one. */
     static let voice: AVSpeechSynthesisVoice? = {
-        let lang = Locale.preferredLanguages.first.flatMap { $0.hasPrefix("en") ? $0 : nil } ?? (Fmt.yards ? "en-GB" : "en-US")
-        let better = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == lang && $0.quality != .default }
-            .max { $0.quality.rawValue < $1.quality.rawValue }
-        return better ?? AVSpeechSynthesisVoice(language: lang)
+        let voices = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("pl") }
+        let better = voices.filter { $0.quality != .default }.max { $0.quality.rawValue < $1.quality.rawValue }
+        return better ?? voices.first ?? AVSpeechSynthesisVoice(language: "pl-PL")
     }()
 }
 

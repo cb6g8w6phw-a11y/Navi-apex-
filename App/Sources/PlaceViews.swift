@@ -36,7 +36,7 @@ struct PlaceHeader: View {
                 Button { model.openDirections(to: place) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").font(.system(size: 20, weight: .bold))
-                        Text("Directions").font(.system(size: 20, weight: .heavy))
+                        Text("Trasa").font(.system(size: 20, weight: .heavy))
                     }
                     .foregroundColor(Vela.onAccent(scheme))
                     .frame(maxWidth: .infinity, minHeight: 56)
@@ -49,7 +49,7 @@ struct PlaceHeader: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "location.north.fill").font(.system(size: 18, weight: .bold))
-                        Text("Go").font(.system(size: 20, weight: .heavy))
+                        Text("Jedź").font(.system(size: 20, weight: .heavy))
                     }
                     .foregroundColor(Vela.onTonal(scheme))
                     .padding(.horizontal, 24)
@@ -84,8 +84,8 @@ struct PlaceBody: View {
                 PhotoStrip(urls: place.photoUrls, height: 140, opensViewer: true, streetView: place)
                 if hasAbout {
                     Picker("", selection: $tab) {
-                        Text("Overview").tag(0)
-                        Text("About").tag(1)
+                        Text("Przegląd").tag(0)
+                        Text("Informacje").tag(1)
                     }
                     .pickerStyle(.segmented)
                 }
@@ -162,7 +162,7 @@ struct PlaceBody: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold))
-                        Text("More").font(.subheadline.weight(.semibold))
+                        Text("Więcej").font(.subheadline.weight(.semibold))
                     }
                     .padding(.horizontal, 16)
                     .frame(height: 40)
@@ -193,7 +193,7 @@ struct PlaceBody: View {
             InfoRow(icon: "scope", text: coords).copyable(coords)
             if let r = place.featuredReview {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Review").font(.headline)
+                    Text("Opinia").font(.headline)
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "person.crop.circle.fill").font(.title2).foregroundColor(.secondary)
                         Text("“\(r)”").font(.subheadline)
@@ -273,8 +273,8 @@ struct SavedView: View {
                 if settings.saved.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "bookmark").font(.largeTitle).foregroundColor(.secondary)
-                        Text("No saved places yet").font(.headline)
-                        Text("Tap the bookmark on a place to save it here.").font(.subheadline).foregroundColor(.secondary)
+                        Text("Nie ma jeszcze zapisanych miejsc").font(.headline)
+                        Text("Stuknij zakładkę przy miejscu, żeby je tu zapisać.").font(.subheadline).foregroundColor(.secondary)
                     }
                 } else {
                     List {
@@ -329,7 +329,7 @@ struct DepartureBoard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Departures").font(.headline)
+            Text("Odjazdy").font(.headline)
             if let b = board {
                 ForEach(Array(b.departures.prefix(8).enumerated()), id: \.offset) { _, d in
                     HStack(spacing: 10) {
@@ -346,11 +346,11 @@ struct DepartureBoard: View {
                         }
                     }
                 }
-                Text("Live times in green · from Transitous").font(.caption).foregroundColor(.secondary)
+                Text("Czasy na żywo na zielono · Transitous").font(.caption).foregroundColor(.secondary)
             } else if loaded {
-                Text("No departures found here.").font(.subheadline).foregroundColor(.secondary)
+                Text("Nie ma tu odjazdów.").font(.subheadline).foregroundColor(.secondary)
             } else {
-                HStack { ProgressView(); Text("Loading departures…").foregroundColor(.secondary) }
+                HStack { ProgressView(); Text("Wczytuję odjazdy…").foregroundColor(.secondary) }
             }
         }
         .task(id: place.id) {

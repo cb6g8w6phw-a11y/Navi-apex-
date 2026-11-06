@@ -166,32 +166,46 @@ enum Fmt {
         return mi < 9.95 ? String(format: "%.1f mi", mi) : "\(Int(mi.rounded())) mi"
     }
 
-    /** Words for the voice: "400 feet", "1.2 miles". */
+    /** Słowa dla lektora: „400 metrów”, „1,2 kilometra”. */
     static func spokenDistance(_ m: Double) -> String {
         if metric {
-            if m < 950 { return "\(Int((m / 50).rounded()) * 50) meters" }
+            if m < 950 {
+                let meters = max(50, Int((m / 50).rounded()) * 50)
+                return "\(meters) metrów"
+            }
             let km = m / 1000
-            return km < 1.05 ? "1 kilometer" : String(format: "%.1f kilometers", km)
+            if km < 1.05 { return "1 kilometr" }
+            let shown = (km * 10).rounded() / 10
+            if abs(shown - shown.rounded()) > 0.05 {
+                return String(format: "%.1f", shown).replacingOccurrences(of: ".", with: ",") + " kilometra"
+            }
+            return "\(Int(shown.rounded())) \(Self.kilo(Int(shown.rounded())))"
         }
         if yards {
             let yd = m * 1.09361
-            if yd < 500 { return "\(max(Int((yd / 50).rounded()) * 50, 50)) yards" }
+            if yd < 500 { return "\(max(Int((yd / 50).rounded()) * 50, 50)) jardów" }
         } else {
             let ft = m * 3.28084
-            if ft < 1000 { return "\(max(Int((ft / 100).rounded()) * 100, 100)) feet" }
+            if ft < 1000 { return "\(max(Int((ft / 100).rounded()) * 100, 100)) stóp" }
         }
         let mi = m / 1609.344
-        // The way people say it: "a quarter of a mile" in Britain, "a quarter mile" in America.
-        if mi < 0.3 { return yards ? "a quarter of a mile" : "a quarter mile" }
-        if mi < 0.6 { return "half a mile" }
-        if mi < 0.9 { return "three quarters of a mile" }
-        return mi < 1.05 ? "1 mile" : String(format: "%.1f miles", mi)
+        if mi < 0.3 { return "ćwierć mili" }
+        if mi < 0.6 { return "pół mili" }
+        if mi < 0.9 { return "trzy czwarte mili" }
+        return mi < 1.05 ? "1 mila" : String(format: "%.1f mili", mi).replacingOccurrences(of: ".", with: ",")
     }
 
-    /** A limit for the voice: "30 miles per hour" (to the posted 5), "50 kilometers per hour". */
+    private static func kilo(_ n: Int) -> String {
+        let mod10 = n % 10, mod100 = n % 100
+        if mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14) { return "kilometry" }
+        if mod10 == 1 && mod100 != 11 { return "kilometr" }
+        return "kilometrów"
+    }
+
+    /** Limit dla lektora: „50 kilometrów na godzinę”. */
     static func spokenSpeed(_ kmh: Double) -> String {
-        if metric { return "\(Int((kmh / 5).rounded()) * 5) kilometers per hour" }
-        return "\(Int((kmh / 1.609344 / 5).rounded()) * 5) miles per hour"
+        if metric { return "\(Int((kmh / 5).rounded()) * 5) kilometrów na godzinę" }
+        return "\(Int((kmh / 1.609344 / 5).rounded()) * 5) mil na godzinę"
     }
 
     /** A speed in the user's units, without the unit. */
@@ -239,7 +253,7 @@ struct StatusText: View {
 
     var body: some View {
         if place.permanentlyClosed {
-            Text("Permanently closed").foregroundColor(statusColor(place, scheme))
+            Text("Zamknięte na stałe").foregroundColor(statusColor(place, scheme))
         } else if let s = place.statusText {
             let parts = s.components(separatedBy: " · ")
             (Text(parts[0]).foregroundColor(statusColor(place, scheme))

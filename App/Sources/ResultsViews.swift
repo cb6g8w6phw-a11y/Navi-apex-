@@ -78,7 +78,7 @@ struct ResultsList: View {
                     Divider()
                     if model.visibleResults.isEmpty && !model.results.isEmpty {
                         // The filters hid everything: say so rather than show an empty list.
-                        Text("Nothing here matches these filters. Turn one off to see more.")
+                        Text("Nic tu nie pasuje do tych filtrów. Wyłącz jeden, żeby zobaczyć więcej.")
                             .font(.body).foregroundColor(.secondary)
                             .frame(maxWidth: .infinity).multilineTextAlignment(.center)
                             .padding(.vertical, 32).padding(.horizontal, 20)

@@ -249,7 +249,7 @@ struct WeatherSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Text("Weather").font(.system(size: 26, weight: .heavy))
+                    Text("Pogoda").font(.system(size: 26, weight: .heavy))
                     Spacer()
                     CircleIconButton(icon: "xmark") { dismiss() }
                 }
@@ -259,10 +259,10 @@ struct WeatherSheet: View {
                     if !d.hours.isEmpty { hourly(d) }
                     radar
                 } else {
-                    HStack { ProgressView(); Text("Loading the weather…").foregroundColor(.secondary) }
+                    HStack { ProgressView(); Text("Wczytuję pogodę…").foregroundColor(.secondary) }
                         .padding(.vertical, 30)
                 }
-                Text("Weather: Open-Meteo.com. Radar: Deutscher Wetterdienst (DWD).")
+                Text("Pogoda: Open-Meteo.com. Radar: Deutscher Wetterdienst (DWD).")
                     .font(.caption2).foregroundColor(.secondary)
             }
             .padding(20)
@@ -281,7 +281,7 @@ struct WeatherSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(Int(r.temperature.rounded()))\(unit)").font(.system(size: 44, weight: .heavy)).monospacedDigit()
                 Text(WeatherNow.words(r.code)).font(.system(size: 18, weight: .semibold))
-                Text("High \(Int(d.high.rounded()))° · Low \(Int(d.low.rounded()))°").font(.subheadline).foregroundColor(.secondary)
+                Text("Maks. \(Int(d.high.rounded()))° · min. \(Int(d.low.rounded()))°").font(.subheadline).foregroundColor(.secondary)
             }
             Spacer()
         }
@@ -313,7 +313,7 @@ struct WeatherSheet: View {
 
     private func hourly(_ d: WeatherNow.Detail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Next hours").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Najbliższe godziny").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(d.hours) { h in
@@ -335,17 +335,17 @@ struct WeatherSheet: View {
 
     private var radar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Rain radar").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Radar opadów").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             if let s = spot {
                 RadarMiniMap(center: CLLocationCoordinate2D(latitude: s.lat, longitude: s.lng), dark: scheme == .dark)
                     .frame(height: 260)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             Toggle(isOn: $settings.radarOn) {
-                Text("Show the radar on the main map").font(.system(size: 16, weight: .semibold))
+                Text("Pokaż radar na mapie").font(.system(size: 16, weight: .semibold))
             }
             .tint(Vela.accentText(scheme))
-            Text("Blue is light rain; yellow, red and violet are heavy. The radar covers Germany and its surroundings.")
+            Text("Niebieski to słaby deszcz, żółty, czerwony i fiolet to ulewa. Radar obejmuje Niemcy i okolice.")
                 .font(.caption).foregroundColor(.secondary)
         }
     }

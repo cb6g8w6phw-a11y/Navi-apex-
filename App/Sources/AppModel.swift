@@ -407,7 +407,7 @@ final class AppModel: ObservableObject {
         case .car: target = settings.parking
         }
         guard let target else {
-            if kind == .car { notice = "No parking spot saved yet. Tap P on the map when you park." }
+            if kind == .car { notice = "Nie ma jeszcze zapisanego parkingu. Stuknij P na mapie, gdy zaparkujesz." }
             else { picking = kind == .home ? .home : .work }
             return
         }

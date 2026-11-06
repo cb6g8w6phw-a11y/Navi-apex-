@@ -8,29 +8,29 @@ struct LayersSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text("Layers").font(.system(size: 26, weight: .heavy))
+                Text("Warstwy").font(.system(size: 26, weight: .heavy))
                 Spacer()
                 CircleIconButton(icon: "xmark") { dismiss() }
             }
-            Text("Map type").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Typ mapy").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             HStack(spacing: 14) {
-                tile("Default", icon: "map", on: !settings.satellite) { settings.satellite = false }
-                tile("Satellite", icon: "globe.americas.fill", on: settings.satellite) { settings.satellite = true }
+                tile("Zwykła", icon: "map", on: !settings.satellite) { settings.satellite = false }
+                tile("Satelita", icon: "globe.americas.fill", on: settings.satellite) { settings.satellite = true }
             }
-            Text("Map details").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
+            Text("Szczegóły").font(.subheadline.weight(.semibold)).foregroundColor(.secondary)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), alignment: .leading, spacing: 14) {
-                tile("Traffic", icon: "car.2.fill", on: settings.traffic) { settings.traffic.toggle() }
-                tile("Transit", icon: "tram.fill", on: settings.transitLines) { settings.transitLines.toggle() }
-                tile("Terrain", icon: "mountain.2.fill", on: settings.terrain) { settings.terrain.toggle() }
-                tile("Speed cameras", badge: .speed, on: settings.speedCameras) { settings.speedCameras.toggle() }
-                tile("Plate cameras", badge: .plate, on: settings.plateCameras) { settings.plateCameras.toggle() }
-                tile("Fuel", icon: "fuelpump.fill", on: settings.fuelOn) { settings.fuelOn.toggle() }
+                tile("Ruch", icon: "car.2.fill", on: settings.traffic) { settings.traffic.toggle() }
+                tile("Komunikacja", icon: "tram.fill", on: settings.transitLines) { settings.transitLines.toggle() }
+                tile("Teren", icon: "mountain.2.fill", on: settings.terrain) { settings.terrain.toggle() }
+                tile("Fotoradary", badge: .speed, on: settings.speedCameras) { settings.speedCameras.toggle() }
+                tile("Kamery tablic", badge: .plate, on: settings.plateCameras) { settings.plateCameras.toggle() }
+                tile("Paliwo", icon: "fuelpump.fill", on: settings.fuelOn) { settings.fuelOn.toggle() }
                 tile("Radar", icon: "cloud.rain.fill", on: settings.radarOn) { settings.radarOn.toggle() }
-                tile("Road alerts", waze: Waze.shares.contains(.police) ? .police : .closure, on: settings.wazeOn && settings.wazeOnMap) {
+                tile("Alerty", waze: Waze.shares.contains(.police) ? .police : .closure, on: settings.wazeOn && settings.wazeOnMap) {
                     if settings.waze && settings.wazeOnMap { settings.wazeOnMap = false } else { settings.waze = true; settings.wazeOnMap = true }
                 }
                 if Waze.shares.contains(.police) {
-                    tile("Police heat map", icon: "flame.fill", on: settings.wazeOn && settings.wazeHeatmap) {
+                    tile("Mapa policji", icon: "flame.fill", on: settings.wazeOn && settings.wazeHeatmap) {
                         if settings.waze && settings.wazeHeatmap { settings.wazeHeatmap = false } else { settings.waze = true; settings.wazeHeatmap = true }
                     }
                 }

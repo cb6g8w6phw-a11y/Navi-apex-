@@ -405,54 +405,59 @@ public enum OSRM {
 
     static func instruction(type: String, modifier: String?, road: String?, exit: Int?, mode: TravelMode,
                             signs: Signs = Signs()) -> String {
-        let onto = road.map { " onto \($0)" } ?? ""
+        let onto = road.map { " na \($0)" } ?? ""
         let dir = modifier ?? "straight"
-        // A slip road often carries the motorway's name: don't say "onto M27" while leaving the M27.
         let newRoad = road.flatMap { $0 == signs.from ? nil : $0 }
+        func side(_ d: String) -> String {
+            if d.contains("sharp"), d.contains("left") { return "ostro w lewo" }
+            if d.contains("sharp"), d.contains("right") { return "ostro w prawo" }
+            if d.contains("slight"), d.contains("left") { return "łagodnie w lewo" }
+            if d.contains("slight"), d.contains("right") { return "łagodnie w prawo" }
+            if d.contains("left") { return "w lewo" }
+            if d.contains("right") { return "w prawo" }
+            return "prosto"
+        }
         switch type {
         case "depart":
-            let verb = mode == .drive ? "Drive" : (mode == .bike ? "Ride" : "Walk")
-            return road.map { "\(verb) along \($0)" } ?? "Head out"
-        case "arrive": return "You have arrived"
+            let verb = mode == .drive ? "Jedź" : (mode == .bike ? "Jedź rowerem" : "Idź")
+            return road.map { "\(verb) ulicą \($0)" } ?? "Ruszaj"
+        case "arrive": return "Jesteś na miejscu"
         case "roundabout turn" where exit == nil:
-            // A mini-roundabout the router treats as a junction, with no exit count: say the turn.
-            let turn = dir.contains("left") ? "turn left" : dir.contains("right") ? "turn right" : "go straight on"
-            return "At the roundabout, \(turn)" + onto
+            return "Na rondzie skręć \(side(dir))" + onto
         case "roundabout", "rotary", "roundabout turn":
-            // A named roundabout ("Millbrook Roundabout") is where you are, not a road to go onto.
-            if let r = road, r.lowercased().contains("roundabout") {
-                return exit.map { "At \(r), take the \(ordinal($0)) exit" } ?? "Go straight through \(r)"
+            if let r = road, r.lowercased().contains("roundabout") || r.lowercased().contains("rondo") {
+                return exit.map { "Na \(r) weź zjazd nr \($0)" } ?? "Jedź prosto przez \(r)"
             }
-            let n = exit.map { "take the \(ordinal($0)) exit" } ?? "go straight through"
-            return "At the roundabout, \(n)" + onto
-        case "exit roundabout", "exit rotary": return "Exit the roundabout" + onto
-        case "merge": return "Merge" + onto
+            let n = exit.map { "weź zjazd nr \($0)" } ?? "jedź prosto"
+            return "Na rondzie \(n)" + onto
+        case "exit roundabout", "exit rotary": return "Zjedź z ronda" + onto
+        case "merge": return "Włącz się" + onto
         case "on ramp":
-            if let r = newRoad { return "Take the slip road onto \(r)" }
-            return "Take the slip road" + (signs.toward.map { " toward \($0)" } ?? "")
+            if let r = newRoad { return "Weź łącznicę na \(r)" }
+            return "Weź łącznicę" + (signs.toward.map { " w stronę \($0)" } ?? "")
         case "off ramp":
-            let base = signs.number.map { "Take exit \($0)" } ?? "Take the exit"
-            if let t = signs.toward { return base + " toward \(t)" }
-            return base + (newRoad.map { " onto \($0)" } ?? "")
+            let base = signs.number.map { "Zjazd \($0)" } ?? "Weź zjazd"
+            if let t = signs.toward { return base + " w stronę \(t)" }
+            return base + (newRoad.map { " na \($0)" } ?? "")
         case "fork":
-            // Leaving the M27 by a slip road that still carries its name isn't "onto M27".
-            let toward = signs.toward.map { " toward \($0)" } ?? ""
-            return "Keep \(dir.contains("left") ? "left" : "right") at the fork" + (newRoad.map { " onto \($0)" } ?? toward)
-        case "end of road": return "At the end of the road, turn \(dir.replacingOccurrences(of: "slight ", with: ""))" + onto
+            let toward = signs.toward.map { " w stronę \($0)" } ?? ""
+            let keep = dir.contains("left") ? "lewej" : "prawej"
+            return "Trzymaj się \(keep) na rozwidleniu" + (newRoad.map { " na \($0)" } ?? toward)
+        case "end of road":
+            return "Na końcu drogi skręć \(side(dir))" + onto
         case "continue", "new name":
-            let stay = road.map { " to stay on \($0)" } ?? ""
-            if dir == "uturn" { return "Make a U-turn" + (road.map { " on \($0)" } ?? "") }
-            if dir.contains("slight") { return "Keep \(dir.contains("left") ? "left" : "right")" + (type == "continue" ? stay : onto) }
+            let stay = road.map { ", żeby zostać na \($0)" } ?? ""
+            if dir == "uturn" { return "Zawróć" + (road.map { " na \($0)" } ?? "") }
+            if dir.contains("slight") { return "Trzymaj się \(dir.contains("left") ? "lewej" : "prawej")" + (type == "continue" ? stay : onto) }
             if dir.contains("left") || dir.contains("right") {
-                let turn = "Turn \(dir)"
-                return turn + (type == "continue" ? stay : onto)
+                return "Skręć \(side(dir))" + (type == "continue" ? stay : onto)
             }
-            return "Continue" + (road.map { " on \($0)" } ?? "")
+            return "Jedź dalej" + (road.map { " ulicą \($0)" } ?? "")
         default:
             switch dir {
-            case "uturn": return "Make a U-turn" + onto
-            case "straight": return "Continue straight" + onto
-            default: return "Turn \(dir)" + onto
+            case "uturn": return "Zawróć" + onto
+            case "straight": return "Jedź prosto" + onto
+            default: return "Skręć \(side(dir))" + onto
             }
         }
     }
