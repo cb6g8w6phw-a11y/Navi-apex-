@@ -44,6 +44,12 @@ struct GuidanceNote: Equatable {
     var tone: String
 }
 
+/// The Umwelt sticker shown during a couch simulation.
+struct CouchChip: Equatable {
+    var name: String
+    var blocked: Bool
+}
+
 enum VoiceIntent {
     case fuel, traffic, border, reroute, stop, unknown
 
