@@ -14,6 +14,12 @@ final class MindSettings: ObservableObject {
     @Published var haptics: Bool { didSet { d.set(haptics, forKey: "mind.haptics") } }
     @Published var borderAssist: Bool { didSet { d.set(borderAssist, forKey: "mind.border") } }
     @Published var umwelt: Bool { didSet { d.set(umwelt, forKey: "mind.umwelt") } }
+    /// GPS worse than this many metres is handed to the phone sensors.
+    @Published var gpsTrust: Int { didSet { d.set(gpsTrust, forKey: "mind.trust") } }
+    /// Degrees added to the course, when the phone's compass sits crooked.
+    @Published var headingTrim: Int { didSet { d.set(headingTrim, forKey: "mind.trim") } }
+    /// The next GPS fix throws away the sensor estimate and starts again.
+    var resetAsked = false
 
     private init() {
         deadReckoning = d.object(forKey: "mind.dr") as? Bool ?? true
@@ -23,6 +29,8 @@ final class MindSettings: ObservableObject {
         haptics = d.object(forKey: "mind.haptics") as? Bool ?? true
         borderAssist = d.object(forKey: "mind.border") as? Bool ?? true
         umwelt = d.object(forKey: "mind.umwelt") as? Bool ?? true
+        gpsTrust = d.object(forKey: "mind.trust") as? Int ?? 80
+        headingTrim = d.object(forKey: "mind.trim") as? Int ?? 0
     }
 }
 
@@ -104,7 +112,40 @@ enum RouteMind {
 
     /// Real low-emission outline, not a rectangle around the city.
     static func umwelt(at p: LatLng) -> UmweltHere? {
-        CityAtlas.shared.zone(at: p)
+        CityAtlas.hit(p)
+    }
+
+    /// What the route card names. Only the city the trip still has to enter — not the one you are already in.
+    struct Zone: Equatable, Sendable {
+        var name: String
+        var sticker: String
+    }
+
+    static func umweltToShow(me: LatLng?, destination: LatLng?, line: [LatLng], along: Double, driving: Bool) -> Zone? {
+        let here = me.flatMap { umwelt(at: $0)?.name }
+        if !driving {
+            if let d = destination, let z = umwelt(at: d), z.name != here { return Zone(name: z.name, sticker: z.sticker) }
+            return firstZone(on: line, from: 0, to: .greatestFiniteMagnitude, skip: here)
+        }
+        if let z = firstZone(on: line, from: along, to: along + 3_500, skip: here) { return z }
+        if let d = destination, let z = umwelt(at: d), z.name != here, (me?.distance(to: d) ?? 1e12) < 8_000 {
+            return Zone(name: z.name, sticker: z.sticker)
+        }
+        return nil
+    }
+
+    private static func firstZone(on line: [LatLng], from: Double, to: Double, skip: String?) -> Zone? {
+        guard line.count >= 2 else { return nil }
+        let cum = Geo.cumulative(line)
+        let end = min(cum.last ?? 0, to)
+        var m = max(0, from)
+        while m <= end {
+            if let z = umwelt(at: Geo.point(along: line, meters: m, cumulative: cum)), z.name != skip {
+                return Zone(name: z.name, sticker: z.sticker)
+            }
+            m += 250
+        }
+        return nil
     }
 
     struct Crossing {

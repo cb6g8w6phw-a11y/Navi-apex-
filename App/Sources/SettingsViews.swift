@@ -171,6 +171,21 @@ struct SettingsView: View {
                 Toggle(isOn: $mind.borderAssist) { SettingLabel("Border queues", icon: "flag.fill", color: 0x1D4ED8) }
                 Toggle(isOn: $mind.umwelt) { SettingLabel("German low-emission zones", icon: "leaf.fill", color: 0x15803D) }
             }
+            Section {
+                Stepper(value: $mind.gpsTrust, in: 25...150, step: 5) {
+                    SettingLabel("Use sensors past \(mind.gpsTrust) m", icon: "location.fill", color: 0x0891B2)
+                }
+                Stepper(value: $mind.headingTrim, in: -30...30, step: 1) {
+                    SettingLabel("Heading trim \(mind.headingTrim)°", icon: "location.north.line.fill", color: 0x0F766E)
+                }
+                Button { mind.resetAsked = true } label: {
+                    SettingLabel("Reset tunnel sensors", icon: "arrow.counterclockwise", color: 0xDC2626)
+                }
+            } header: {
+                Text("Sensor calibration")
+            } footer: {
+                Text("Sensors take over in a tunnel, or when GPS is worse than the distance above. Heading trim turns the arrow if the compass sits crooked. Reset throws away the current estimate.")
+            }
         }
         .kiteList()
         .navigationTitle("Voice & driving")
@@ -281,11 +296,13 @@ struct SettingsView: View {
 /** A settings row's name with a small coloured icon in front, like the iPhone's own Settings. */
 struct SettingLabel: View {
     let title: String
+    var detail: String?
     let icon: String
     let color: UInt32
 
-    init(_ title: String, icon: String, color: UInt32) {
+    init(_ title: String, detail: String? = nil, icon: String, color: UInt32) {
         self.title = title
+        self.detail = detail
         self.icon = icon
         self.color = color
     }
@@ -297,7 +314,14 @@ struct SettingLabel: View {
                 .foregroundColor(.white)
                 .frame(width: 29, height: 29)
                 .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(hex: color)))
-            Text(title)
+            if let detail, !detail.isEmpty {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                    Text(detail).font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text(title)
+            }
         }
     }
 }

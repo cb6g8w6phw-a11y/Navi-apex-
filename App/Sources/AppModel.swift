@@ -79,6 +79,8 @@ struct DirectionsState {
     var transitTime: Date?
     var arriveBy = false
     var trip = 0
+    /// One line under the route title when the drive still has to enter a low-emission zone.
+    var stickerNote: String?
 
     var current: [Route] { transit ? [] : routes[mode] ?? [] }
     var route: Route? { current.indices.contains(selected) ? current[selected] : current.first }
@@ -542,6 +544,7 @@ final class AppModel: ObservableObject {
         // Already driving (asked at a red light, say): no route that starts with a U-turn.
         let moving = location.last.flatMap { l in l.speed >= 4 && l.course >= 0 && l.courseAccuracy >= 0 && l.courseAccuracy < 45 ? l.course : nil }
         let heading = d.reversed ? nil : moving
+        directions?.stickerNote = nil
         for m in TravelMode.allCases {
             directions?.loading.insert(m)
             Task {
@@ -550,6 +553,7 @@ final class AppModel: ObservableObject {
                 guard directions?.destination.id == d.destination.id, routesRequest == req else { return }
                 directions?.loading.remove(m)
                 directions?.routes[m] = r.routes
+                if m == .drive { directions?.stickerNote = stickerLine(from: from, to: to, line: r.routes.first?.polyline ?? []) }
                 if r.routes.isEmpty {
                     directions?.errors[m] = Connectivity.explain(r.error == "No route found." ? "No route found." : "Couldn't get a route just now. Try again in a moment.")
                 }
@@ -563,6 +567,17 @@ final class AppModel: ObservableObject {
             }
         }
         loadTransit()
+    }
+
+    /// The green line under the route title. Says the zone is on the trip; it does not pretend the route avoids it.
+    private func stickerLine(from: LatLng, to: LatLng, line: [LatLng]) -> String? {
+        guard MindSettings.shared.umwelt,
+              let z = RouteMind.umweltToShow(me: from, destination: to, line: line, along: 0, driving: false) else { return nil }
+        if settings.mayEnterUmwelt {
+            let kind = z.sticker == "SCT" ? "strefa czystego transportu" : "zielona plakietka"
+            return "\(z.name) — \(kind)."
+        }
+        return "\(z.name) jest na trasie. Bez zielonej plakietki sprawdź, czy auto może wjechać."
     }
 
     /** Transit trips for the current trip, leaving now or at the picked time. */

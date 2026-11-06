@@ -108,7 +108,7 @@ final class CityAtlas: ObservableObject {
     private(set) var zoneDrawing: CityRingOverlay?
     var onChange: (() -> Void)?
 
-    private struct LL: Sendable {
+    fileprivate struct LL: Sendable {
         var lat: Double
         var lon: Double
     }
@@ -129,6 +129,8 @@ final class CityAtlas: ObservableObject {
         var name: String
     }
 
+    /// Copy of the bundled zones for hit-tests that are not on the main actor.
+    nonisolated(unsafe) private static var packedZones: [Shape] = []
     private var zones: [Shape] = []
     private var cities: [Int: Shape] = [:]
     private var jobs: [Job] = []
@@ -161,6 +163,7 @@ final class CityAtlas: ObservableObject {
             let packed = await Task.detached { Self.loadBundled() }.value
             let saved = await Task.detached { Self.loadCache(disk) }.value
             self.zones = packed
+            Self.packedZones = packed
             for s in saved { self.cities[s.id] = s }
             self.rebuild()
         }
@@ -187,10 +190,13 @@ final class CityAtlas: ObservableObject {
         }
     }
 
-    func zone(at p: LatLng) -> UmweltHere? {
-        for z in zones {
+    func zone(at p: LatLng) -> UmweltHere? { Self.hit(p) }
+
+    /// Point-in-polygon against the bundled outlines. Safe off the main actor: the snapshot is written once, when the file loads.
+    nonisolated static func hit(_ p: LatLng) -> UmweltHere? {
+        for z in packedZones {
             if p.lat < z.south || p.lat > z.north || p.lng < z.west || p.lng > z.east { continue }
-            guard Self.contains(z, lat: p.lat, lon: p.lng) else { continue }
+            guard contains(z, lat: p.lat, lon: p.lng) else { continue }
             let sticker = z.sticker ?? "zielona"
             let body: String
             if sticker == "SCT" {
