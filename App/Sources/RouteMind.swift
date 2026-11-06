@@ -18,6 +18,8 @@ final class MindSettings: ObservableObject {
     @Published var gpsTrust: Int { didSet { d.set(gpsTrust, forKey: "mind.trust") } }
     /// Degrees added to the course, when the phone's compass sits crooked.
     @Published var headingTrim: Int { didSet { d.set(headingTrim, forKey: "mind.trim") } }
+    /// Couch test page. Stays off until the version row in About is tapped five times.
+    @Published var simUnlocked: Bool { didSet { d.set(simUnlocked, forKey: "mind.sim") } }
     /// The next GPS fix throws away the sensor estimate and starts again.
     var resetAsked = false
 
@@ -31,6 +33,7 @@ final class MindSettings: ObservableObject {
         umwelt = d.object(forKey: "mind.umwelt") as? Bool ?? true
         gpsTrust = d.object(forKey: "mind.trust") as? Int ?? 80
         headingTrim = d.object(forKey: "mind.trim") as? Int ?? 0
+        simUnlocked = d.object(forKey: "mind.sim") as? Bool ?? false
     }
 }
 
