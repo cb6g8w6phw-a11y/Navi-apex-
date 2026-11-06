@@ -1140,7 +1140,7 @@ struct VelaMapView: UIViewRepresentable {
                     }
                 }
                 guard Date().timeIntervalSince(self.lastPickAt) > 0.6 else { return }
-                self.emptyTap(at: pt, map: map)
+                self.emptyTap(at: pt, map)
             }
         }
 
