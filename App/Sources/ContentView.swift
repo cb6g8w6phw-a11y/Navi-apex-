@@ -818,7 +818,7 @@ struct StatusCards: View {
     var body: some View {
         if location.denied || DemoScript.step == "locationoff" {
             card(icon: "location.slash.fill", color: Vela.closed, title: "Location is off",
-                 detail: "Apex needs it to show where you are and to guide you.", button: "Turn on") { LocationService.openSettings() }
+                 detail: "Navapp needs it to show where you are and to guide you.", button: "Turn on") { LocationService.openSettings() }
         } else if !net.online {
             card(icon: "wifi.slash", color: Color(hex: 0xF59E0B), title: "No internet connection",
                  detail: "Search, routes and live traffic need one. The map you've already seen still works.", button: nil) {}

@@ -1021,7 +1021,7 @@ final class Navigator: ObservableObject {
             // Without signal there's no new route to get: say so once, not every few seconds.
             if !quiet && !toldNoSignal {
                 toldNoSignal = true
-                speak("Brak sygnału. Jedź dalej, Apex znajdzie nową trasę, gdy sygnał wróci.")
+                speak("Brak sygnału. Jedź dalej, Navapp znajdzie nową trasę, gdy sygnał wróci.")
             }
         } else if !quiet && Date().timeIntervalSince(rerouteSpokenAt) > 45 {
             rerouteSpokenAt = Date()

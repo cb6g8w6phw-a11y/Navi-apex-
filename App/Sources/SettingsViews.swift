@@ -120,7 +120,7 @@ struct SettingsView: View {
                     menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
                             value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48) { musicPage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
-                    menuRow("Prywatność", detail: "Apex bez Google", value: settings.noGoogle ? "Włączone" : nil,
+                    menuRow("Prywatność", detail: "Navapp bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
                     menuRow("O aplikacji", detail: "Wersja " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }
                     if mind.simUnlocked {
@@ -339,7 +339,7 @@ struct SettingsView: View {
             } header: {
                 Text("Inne z linku")
             } footer: {
-                Text("Tak jak dokładanie usługi w Mornye: wklejasz link i Apex go otwiera. Przesuń wiersz w lewo, żeby usunąć. Apex nie pobiera utworów.")
+                Text("Tak jak dokładanie usługi w Mornye: wklejasz link i Navapp go otwiera. Przesuń wiersz w lewo, żeby usunąć. Navapp nie pobiera utworów.")
             }
         }
         .kiteList()
@@ -380,7 +380,7 @@ struct SettingsView: View {
     private var privacyPage: some View {
         Form {
             Section {
-                Toggle(isOn: $settings.noGoogle) { SettingLabel("Używaj Apexa bez Google", icon: "lock.fill", color: 0x475569) }
+                Toggle(isOn: $settings.noGoogle) { SettingLabel("Używaj Navapp bez Google", icon: "lock.fill", color: 0x475569) }
             } footer: {
                 Text("Wyłączone (zwykle): wyszukiwanie, szczegóły miejsc, trasy i ruch pochodzą z Google, pytane anonimowo, bez konta. Włączone: wszystko pochodzi z otwartych usług i nic nie trafia do Google, ale wyszukiwanie i trasy są mniej kompletne.")
             }
@@ -405,7 +405,7 @@ struct SettingsView: View {
                 if mind.simUnlocked {
                     Text("Tryb symulacji jest na dole Ustawień.").font(.caption).foregroundColor(.secondary)
                 }
-                Link("Apex na GitHubie", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
+                Link("Navapp na GitHubie", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
                 Link("Na bazie Vela Maps dla Androida", destination: URL(string: "https://github.com/PimpinPumpkin/Vela")!)
                 Link("Raporty Waze na żywo jak w SABRE Plus (MIT)", destination: URL(string: "https://github.com/nicglazkov/highway-radar-sabre-plus")!)
                 Text("Wolne oprogramowanie na licencji GPL-3.0. Mapy © Apple. Trasy © FOSSGIS OSRM, współtwórcy OpenStreetMap. Cieniowanie © Esri. Ceny paliw: Tankerkönig / MTS-K (CC BY 4.0). Roboty i zamknięcia: Autobahn GmbH. Pogoda: Open-Meteo.com (CC BY 4.0). Radar opadów: Deutscher Wetterdienst (DWD). Obrysy stref: Tyremap (CC BY 4.0) i OpenStreetMap (ODbL).")
@@ -521,8 +521,8 @@ struct WazeSettingsView: View {
         switch s.code {
         case 200: return ("Closures working: \(s.count) reports, \(when)", Color(hex: 0x188038))
         case 0: return ("Closures: no connection (\(when))", .orange)
-        case 401, 403: return ("Closures: Waze turned Apex away (\(when)). It may work again later.", .red)
-        case -1: return ("Closures: Waze sent something Apex can't read (\(when))", .red)
+        case 401, 403: return ("Closures: Waze turned Navapp away (\(when)). It may work again later.", .red)
+        case -1: return ("Closures: Waze sent something Navapp can't read (\(when))", .red)
         default: return ("Closures: Waze error \(s.code) (\(when))", .orange)
         }
     }
@@ -535,9 +535,9 @@ struct WazeSettingsView: View {
         switch s.code {
         case 200: return ("Driver reports working: \(s.summary), \(when)", Color(hex: 0x188038))
         case 0: return ("Driver reports: no connection (\(when))", .orange)
-        case 401: return ("Driver reports: Waze turned Apex away (\(when)). It may work again later.", .red)
+        case 401: return ("Driver reports: Waze turned Navapp away (\(when)). It may work again later.", .red)
         case 440: return ("Driver reports: reconnecting to Waze (\(when))", .orange)
-        case -1: return ("Driver reports: Waze sent something Apex can't read (\(when))", .red)
+        case -1: return ("Driver reports: Waze sent something Navapp can't read (\(when))", .red)
         default: return ("Driver reports: Waze error \(s.code) (\(when))", .orange)
         }
     }
@@ -548,8 +548,8 @@ struct WazeSettingsView: View {
                 Toggle("Używaj raportów Waze", isOn: $settings.waze).disabled(settings.noGoogle)
             } footer: {
                 Text(settings.noGoogle
-                     ? "Off while \"Use Apex without Google\" is on, since Waze belongs to Google."
-                     : "While you navigate, Apex asks Waze for drivers' reports the way the Waze app does, with an anonymous account Waze makes for it (no name, email or phone). Closures also come from the Waze live map. Waze sees roughly where you are, anonymously. It doesn't allow other apps to do this, so it may stop working one day.")
+                     ? "Off while \"Use Navapp without Google\" is on, since Waze belongs to Google."
+                     : "While you navigate, Navapp asks Waze for drivers' reports the way the Waze app does, with an anonymous account Waze makes for it (no name, email or phone). Closures also come from the Waze live map. Waze sees roughly where you are, anonymously. It doesn't allow other apps to do this, so it may stop working one day.")
             }
             if settings.wazeOn {
                 Section {
@@ -608,7 +608,7 @@ struct WazeSettingsView: View {
                             Button("Zapomnij wszystkie", role: .destructive) { confirmClear = true }
                         }
                     } footer: {
-                        Text("A glow where police get reported most, and a low, medium or high risk for the road ahead (counting reports made at this time of day most). Waze only shares what's live now, so Apex remembers the reports it sees on this phone, for 90 days and never anywhere else, and both fill in the more you use it.")
+                        Text("A glow where police get reported most, and a low, medium or high risk for the road ahead (counting reports made at this time of day most). Waze only shares what's live now, so Navapp remembers the reports it sees on this phone, for 90 days and never anywhere else, and both fill in the more you use it.")
                     }
                 }
             }
@@ -623,7 +623,7 @@ struct WazeSettingsView: View {
         .kiteList()
         .navigationTitle("Ostrzeżenia drogowe")
         .onAppear { remembered = WazeHistory.shared.sightings.count }
-        .confirmationDialog("Forget the \(remembered) police reports Apex remembered? The heat map and risk score start again from nothing.",
+        .confirmationDialog("Forget the \(remembered) police reports Navapp remembered? The heat map and risk score start again from nothing.",
                             isPresented: $confirmClear, titleVisibility: .visible) {
             Button("Zapomnij", role: .destructive) {
                 WazeHistory.shared.clear()
