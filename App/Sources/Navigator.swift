@@ -41,10 +41,16 @@ final class Navigator: ObservableObject {
     @Published private(set) var averageCheck: AverageCheck?
     /** Traffic lights on the route, one per junction, drawn on the map like Waze. */
     @Published private(set) var routeSignals: [LatLng] = []
-    /// Fuel, border, Umwelt, green wave or a tunnel. Shown on the drive and spoken when it changes.
+    /** A quiet note from the driving mind: fuel, border, green wave, tunnel. */
     @Published private(set) var guidance: GuidanceNote?
-    /// Set while the car is carried by sensors instead of the sky.
+    /** Set while GPS is being carried by the sensors. */
     @Published private(set) var reckoningLabel: String?
+    /** Couch test: the car stays on a fetched route and real GPS is ignored. */
+    @Published private(set) var couch = false
+    @Published private(set) var couchTitle = ""
+    @Published private(set) var couchNotes: [GuidanceNote] = []
+    @Published private(set) var couchChip: CouchChip?
+    var isCouch: Bool { couch }
 
     let destination: Place
     /** Stops still ahead, in trip order; each is dropped once reached. */
@@ -106,6 +112,7 @@ final class Navigator: ObservableObject {
     private var spokenCameras: Set<Int64> = []
     private var zones: [AverageSpeedZone] = []
     private var zoneEntry: (index: Int, time: Date, along: Double)?
+    private var demoAlerts = false
     private var speeding = SpeedingAlerts()
     private var routeWaze: [(alert: WazeAlert, along: Double)] = []
     /** Reports already warned about, by Waze's id, so a refresh doesn't warn again. */
@@ -152,7 +159,7 @@ final class Navigator: ObservableObject {
         loadCameras()
         loadWaze()
         loadRoundabouts()
-        speak("Wyruszam do \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
+        speak("Startuję trasę do \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
         // That was the heads-up for the first step: don't say it again a moment later.
         if let f = first, f.alongMeters < 1500, let i = route.maneuvers.firstIndex(of: f) { spokenStage[i] = f.alongMeters < 100 ? 3 : f.alongMeters < 300 ? 2 : 1 }
     }
@@ -171,10 +178,11 @@ final class Navigator: ObservableObject {
 
     /** The posted limit where the user is now, in km/h. */
     var speedLimitKmh: Double? {
-        route.speedLimit(at: progress?.alongMeters ?? 0)
+        demoLimitKmh ?? route.speedLimit(at: progress?.alongMeters ?? 0)
     }
 
     var nextManeuver: Maneuver? {
+        if let demoManeuver { return demoManeuver }
         guard let i = progress?.nextIndex, i < route.maneuvers.count else { return route.maneuvers.first }
         return route.maneuvers[i]
     }
@@ -197,18 +205,20 @@ final class Navigator: ObservableObject {
     }
 
     func handle(_ raw: CLLocation) {
+        guard !couch else { return }
         guard !arrived else { return }
-        var loc: CLLocation
+        let loc: CLLocation
         if route.mode == .drive, MindSettings.shared.deadReckoning {
             let fused = reckoning.fuse(raw, route: route.polyline)
-            loc = fused.tunnel ? fused.location : Self.trimmed(raw)
+            loc = fused.tunnel ? fused.location : raw
             reckoningLabel = fused.tunnel ? fused.label : nil
         } else {
-            loc = Self.trimmed(raw)
+            loc = raw
             reckoningLabel = nil
         }
         lastFix = loc
-        speedMps = max(0, loc.speed)
+        // The build's screenshots keep their made-up speed.
+        if !demoAlerts { speedMps = max(0, loc.speed) }
         var p = tracker.update(LatLng(loc.coordinate.latitude, loc.coordinate.longitude),
                                accuracy: max(loc.horizontalAccuracy, 5), heading: Self.heading(loc))
         // The arrival time follows the traffic as it changes on the way, not only as it was at the start.
@@ -262,7 +272,7 @@ final class Navigator: ObservableObject {
         }
     }
 
-    /// Fuel, border queue, Umwelt sticker, green-wave speed. Spoken only when the note changes.
+    /** Fuel, border queue, Umwelt sticker, green-wave speed. Spoken only when the note changes. */
     private func checkMind(_ p: RouteTracker.Progress, _ loc: CLLocation) {
         guard route.mode == .drive else { guidance = nil; return }
         let mind = MindSettings.shared
@@ -282,12 +292,16 @@ final class Navigator: ObservableObject {
         } else if mind.borderAssist, let note = RouteMind.borderNote(near: here) {
             next = note
         } else if mind.umwelt, let z = RouteMind.umwelt(at: here) {
-            next = GuidanceNote(title: "Umweltzone \(z.name)", body: "Do wjazdu potrzebna \(z.sticker) plakietka.", tone: "info")
+            next = GuidanceNote(title: "Umweltzone \(z.name)", body: z.body, tone: "info")
         } else if mind.greenWave, let sig = routeSignals.first,
                   let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
                                                    secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
             next = GuidanceNote(title: "Zielona fala \(Int(kmh)) km/h", body: "Tyle, żeby wjechać na światła na zielonym.", tone: "good")
-        } else if let note = nearbyFuelNote(here) {
+        } else if let note = RouteMind.borderFuelNote(
+            here: here, destination: destination.location, tripMeters: route.distanceMeters,
+            fuelLeft: AppSettings.shared.fuelLeft, fuelTank: AppSettings.shared.fuelTank,
+            consumption: AppSettings.shared.carConsumption,
+            electric: AppSettings.shared.carFuel == "electric") {
             next = note
         } else {
             next = nil
@@ -298,12 +312,11 @@ final class Navigator: ObservableObject {
         }
     }
 
-    /// "paliwo", "korek", "granica", "objazd", "koniec".
+    /** "paliwo", "korek", "granica", "objazd", "koniec". */
     func applyVoice(_ text: String) {
         switch VoiceIntent.parse(text) {
         case .fuel:
-            guidance = nearbyFuelNote(lastFix.map { LatLng($0.coordinate.latitude, $0.coordinate.longitude) } ?? destination.location)
-                ?? GuidanceNote(title: "Paliwo", body: "Brak cen w okolicy. W ustawieniach sprawdź klucz Tankerkönig.", tone: "info")
+            guidance = RouteMind.fuelNote(alongKm: (progress?.alongMeters ?? 0) / 1000, toBorderKm: 180)
         case .traffic:
             guidance = GuidanceNote(title: "Ruch", body: "Patrzę na falę na trasie, nie na sam kolor odcinka.", tone: "info")
         case .border:
@@ -324,7 +337,7 @@ final class Navigator: ObservableObject {
     /** A stop picked on the way (search along the route): go there first, then on. */
     func addStop(_ p: Place) {
         stops.insert(p, at: 0)
-        speak("Dodaję przystanek: \(p.name).")
+        speak("Dodaję postój: \(p.name).")
         if let fix = lastFix { reroute(from: fix, quiet: true) }
     }
 
@@ -453,6 +466,7 @@ final class Navigator: ObservableObject {
     }
 
     private func checkCameras(_ p: RouteTracker.Progress) {
+        guard !demoAlerts else { return }
         let meters = routeCameras.map(\.along)
         if let ahead = cameraAhead {
             // Keep the card up, counting down, until the camera is passed.
@@ -481,7 +495,7 @@ final class Navigator: ObservableObject {
         if AppSettings.shared.cameraWarnings, cam.kind == .speed {
             chime()
             if !repeatRun {
-                speak((cam.average ? "Przed tobą odcinek pomiaru średniej" : "Przed tobą fotoradar") + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak((cam.average ? "Odcinkowy pomiar prędkości" : "Fotoradar") + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
             cameraSpokenAt = Date()
             cameraSpokenLimit = limit
@@ -490,7 +504,7 @@ final class Navigator: ObservableObject {
 
     /** Live Waze reports along the route; asked again every 90 seconds, since they come and go. */
     private func loadWaze() {
-        guard route.mode == .drive, AppSettings.shared.wazeOn, !wazeLoading else { return }
+        guard route.mode == .drive, AppSettings.shared.wazeOn, !wazeLoading, !demoAlerts else { return }
         wazeLoading = true
         wazeAt = Date()
         let line = route.polyline, id = route.id
@@ -525,6 +539,7 @@ final class Navigator: ObservableObject {
     }
 
     private func checkWaze(_ p: RouteTracker.Progress) {
+        guard !demoAlerts else { return }
         let s = AppSettings.shared
         if Date().timeIntervalSince(wazeAt) > 90 { loadWaze() }
         if let ahead = wazeAhead {
@@ -559,6 +574,7 @@ final class Navigator: ObservableObject {
 
     /** The police risk for the next 3 km, worked out again every 20 seconds. */
     private func checkRisk(_ p: RouteTracker.Progress) {
+        guard !demoAlerts else { return }
         let s = AppSettings.shared
         guard route.mode == .drive, s.wazeOn, s.policeRisk, s.wazePolice else { policeRisk = nil; return }
         guard Date().timeIntervalSince(riskAt) > 20 else { return }
@@ -575,12 +591,13 @@ final class Navigator: ObservableObject {
         if PoliceRisk.level(score) == .high, was != .high, s.wazeVoice, Date().timeIntervalSince(riskSpokenAt) > 600,
            live == 0 || PoliceRisk.level(PoliceRisk.score(ahead: ahead, past: riskPast ?? [], live: 0)) == .high {
             riskSpokenAt = Date()
-            speak("Przed tobą miejsce częstych kontroli policji.")
+            speak("Przed tobą miejsce, gdzie często stoi policja.")
         }
     }
 
     /** Police aircraft near the user, asked every 30 seconds while driving. */
     private func checkAircraft(_ loc: CLLocation) {
+        guard !demoAlerts else { return }
         guard route.mode == .drive, AppSettings.shared.policeAircraft else { aircraftNear = nil; return }
         let here = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         if let near = aircraftNear { aircraftNear = (near.aircraft, near.aircraft.location.distance(to: here)) }
@@ -605,12 +622,13 @@ final class Navigator: ObservableObject {
 
     /** Average speed checks: say when one starts and ends, and keep the user's average on screen. */
     private func checkZones(_ p: RouteTracker.Progress) {
+        guard !demoAlerts else { return }
         let at = p.alongMeters
         let inside = zones.firstIndex { at >= $0.startMeters && at <= $0.endMeters }
         if let entry = zoneEntry, entry.index != inside {
             zoneEntry = nil
             averageCheck = nil
-            if AppSettings.shared.cameraWarnings { speak("Koniec pomiaru średniej prędkości.") }
+            if AppSettings.shared.cameraWarnings { speak("Koniec odcinkowego pomiaru prędkości.") }
         }
         guard let i = inside else { return }
         let z = zones[i]
@@ -619,13 +637,44 @@ final class Navigator: ObservableObject {
             zoneEntry = (i, Date(), at)
             if AppSettings.shared.cameraWarnings {
                 chime()
-                speak("Pomiar średniej przez \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
+                speak("Odcinkowy pomiar przez \(Fmt.spokenDistance(z.endMeters - at))" + (limit.map { ", ograniczenie \(Fmt.spokenSpeed($0))." } ?? "."))
             }
         }
         guard let entry = zoneEntry else { return }
         let secs = Date().timeIntervalSince(entry.time)
         let avg = secs > 5 ? (at - entry.along) / secs * 3.6 : speedMps * 3.6
         averageCheck = AverageCheck(limitKmh: limit, averageKmh: avg, metersLeft: z.endMeters - at)
+    }
+
+    /** For the build's screenshots: a camera coming up and an average speed check. */
+    /** For the build's screenshots: the next turn swapped for a made-up one. */
+    private(set) var demoManeuver: Maneuver?
+    private var demoLimitKmh: Double?
+
+    /** For the build's screenshots: the M27 roundabout at Park Gate, 6th exit, with its seven roads. */
+    func showDemoRoundabout() {
+        var m = Maneuver(type: .roundabout, instruction: "At the roundabout, take the 6th exit onto M27",
+                         location: LatLng(50.87, -1.27), alongMeters: 0, distanceMeters: 400, road: "M27", laneHint: nil)
+        m.exit = 6
+        m.roundabout = RoundaboutShape(exits: [262, 300, 338, 20, 62, 108], taken: 5, entriesOnly: [150],
+                                       clockwise: true, complete: true)
+        demoManeuver = m
+        objectWillChange.send()
+    }
+
+    func showDemoAlerts() {
+        demoAlerts = true
+        cameraAhead = CameraAlert(kind: .speed, meters: 180, startMeters: 400, limitKmh: 48.3)
+        averageCheck = AverageCheck(limitKmh: 80.5, averageKmh: 77, metersLeft: 2400)
+        // 38 in a 30, so the screenshots show the speed sign gone red.
+        showDemoSpeed(limitKmh: 48.3, mph: 38)
+    }
+
+    /** For the build's screenshots: a made-up speed and limit. */
+    func showDemoSpeed(limitKmh: Double, mph: Double) {
+        demoAlerts = true
+        demoLimitKmh = limitKmh
+        speedMps = mph / 2.23694
     }
 
     /** Tapping the Waze card puts it away; the report still won't be warned about again. */
@@ -637,44 +686,17 @@ final class Navigator: ObservableObject {
         fuelAhead = nil
     }
 
-    /// Cheapest open station within 12 km, from the Tankerkönig key. Never a fixed trip to the border.
-    private func nearbyFuelNote(_ here: LatLng) -> GuidanceNote? {
-        let s = AppSettings.shared
-        guard s.fuelOn, !s.fuelKey.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-        var seen = Set<String>()
-        var near: [(FuelStation, Double)] = []
-        for st in FuelPrices.shared.stations + FuelPrices.shared.ahead where st.open && seen.insert(st.id).inserted {
-            let d = here.distance(to: st.location)
-            if d < 12_000 { near.append((st, d)) }
-        }
-        guard let best = near.min(by: { $0.0.price < $1.0.price }) else { return nil }
-        let avg = near.map(\.0.price).reduce(0, +) / Double(near.count)
-        let room = s.fuelTank - min(s.fuelLeft, s.fuelTank)
-        let litres = room > 0 ? room : s.fuelTank
-        let save = (avg - best.0.price) * Double(litres)
-        let km = best.1 < 950 ? "\(Int(best.1.rounded())) m" : String(format: "%.1f km", best.1 / 1000)
-        var body = "\(best.0.title) \(best.0.priceText) €/l, \(km)."
-        if save >= 0.3 {
-            body += " Na \(litres) l około \(String(format: "%.2f", save)) € mniej niż średnia obok."
-        }
-        body += " W baku \(s.fuelLeft) l."
-        return GuidanceNote(title: "Najtaniej w okolicy", body: body, tone: "good")
-    }
-
     /** The cheapest open station within 1.5 km of the route in the next 80 km, and what it saves on a fill-up
      *  compared with the others along the way. Looked at every 20 seconds; the distance counts down in between. */
     private func checkFuel(_ p: RouteTracker.Progress) {
         let s = AppSettings.shared
-        guard route.mode == .drive, s.fuelOn, !s.fuelKey.isEmpty else {
+        guard route.mode == .drive, !demoAlerts, s.fuelOn, !s.fuelKey.isEmpty else {
             if fuelAhead != nil { fuelAhead = nil }
             return
         }
         let line = route.polyline
         guard line.count >= 2 else { return }
         FuelPrices.shared.refreshAhead(line: line, from: p.alongMeters)
-        if let fix = lastFix {
-            FuelPrices.shared.refreshIfNeeded(center: fix.coordinate)
-        }
         let here = p.alongMeters
         if var f = fuelAhead {
             f.meters = max(fuelAlong - here, 0)
@@ -695,14 +717,12 @@ final class Navigator: ObservableObject {
                 let d = pt.distance(to: st.location)
                 if d < bestD { bestD = d; bestAlong = cum[min(i, cum.count - 1)] }
             }
-            if bestD < 2_000, bestAlong > here + 200, bestAlong < here + 12_000 { found.append((st, bestAlong, bestD)) }
+            if bestD < 1_500, bestAlong > here + 300, bestAlong < here + 80_000 { found.append((st, bestAlong, bestD)) }
         }
         let shown = found.filter { !fuelDismissed.contains($0.station.id) }
         guard let best = shown.min(by: { $0.station.price < $1.station.price }) else { return }
         let average = found.map(\.station.price).reduce(0, +) / Double(found.count)
-        let room = s.fuelTank - min(s.fuelLeft, s.fuelTank)
-        let litres = room > 0 ? room : s.fuelTank
-        let saving = (average - best.station.price) * Double(litres)
+        let saving = (average - best.station.price) * Double(s.fuelTank)
         fuelAlong = best.along
         let fresh = FuelAhead(station: best.station, meters: best.along - here, offRoute: best.off, saving: saving > 0 ? saving : nil)
         if fresh != fuelAhead { fuelAhead = fresh }
@@ -713,7 +733,7 @@ final class Navigator: ObservableObject {
         guard let offer = detourOffer else { return }
         detourOffer = nil
         roadAhead = nil
-        speak("Jadę objazdem.")
+        speak("Wybieram objazd.")
         adopt(offer.route)
     }
 
@@ -729,14 +749,22 @@ final class Navigator: ObservableObject {
         for e in events {
             guard e.location.lat > minLat - 0.01, e.location.lat < maxLat + 0.01,
                   e.location.lng > minLng - 0.01, e.location.lng < maxLng + 0.01 else { continue }
+            if e.id.hasPrefix("user-") {
+                let hit = Geo.project(e.location, on: line, cumulative: cum)
+                guard hit.offset < 80 else { continue }
+                let top = cum.count - 1
+                let at = min(max(hit.along, 0), cum[top])
+                found.append((event: e, start: at, end: at))
+                continue
+            }
             var best = 0
             var bestD = Double.greatestFiniteMagnitude
             for (i, p) in line.enumerated() {
                 let d = p.distance(to: e.location)
                 if d < bestD { bestD = d; best = i }
             }
-            // The opposite carriageway is a few dozen metres away: this keeps most of those out.
-            guard bestD < 40 else { continue }
+            let limit = 40.0
+            guard bestD < limit else { continue }
             // The stretch is the part of the route inside the event's box, around the nearest point.
             var lo = best, hi = best
             if let x = e.extent {
@@ -754,22 +782,24 @@ final class Navigator: ObservableObject {
 
     private func roadWords(_ e: RoadEvent) -> String {
         switch e.kind {
-        case .closure: return "Closure"
-        case .roadworks: return e.blocked ? "Roadworks, road blocked" : "Roadworks"
-        case .warning: return "Traffic warning"
+        case .closure: return e.id.hasPrefix("user-") && e.road == "Rower" ? "zamknięta ścieżka" : "zamknięcie drogi"
+        case .roadworks: return e.blocked ? "roboty drogowe, droga zablokowana" : "roboty drogowe"
+        case .warning: return "ostrzeżenie na drodze"
         }
     }
 
     private func checkRoadEvents(_ p: RouteTracker.Progress, _ loc: CLLocation) {
-        guard route.mode == .drive, AppSettings.shared.traffic else {
+        let mine = ClosureBoard.shared.asEvents(for: route.mode)
+        let official = (route.mode == .drive && !demoAlerts && AppSettings.shared.traffic) ? RoadEvents.shared.events : []
+        let events = official + mine
+        guard (route.mode == .drive || route.mode == .bike), !events.isEmpty else {
             if roadAhead != nil { roadAhead = nil }
             if detourOffer != nil { detourOffer = nil }
             return
         }
-        let events = RoadEvents.shared.events
         let line = route.polyline
-        guard line.count >= 2, !events.isEmpty else { return }
-        let key = "\(route.id)-\(events.count)-\(RoadEvents.shared.updatedAt.timeIntervalSince1970)"
+        guard line.count >= 2 else { return }
+        let key = "\(route.id)-\(events.count)-\(RoadEvents.shared.updatedAt.timeIntervalSince1970)-\(ClosureBoard.shared.revision)"
         if key != routeRoadKey {
             routeRoadKey = key
             routeRoad = Self.eventsAlong(line, events)
@@ -799,9 +829,9 @@ final class Navigator: ObservableObject {
                                       left: here >= next.start ? max(next.end - here, 0) : nil)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 chime()
-                var words = "\(roadWords(next.event)) ahead"
-                if meters > 100 { words += ", in \(Fmt.spokenDistance(meters))" }
-                if length >= 300 { words += ", for \(Fmt.spokenDistance(length))" }
+                var words = "\(roadWords(next.event)) przed tobą"
+                if meters > 100 { words += ", za \(Fmt.spokenDistance(meters))" }
+                if length >= 300 { words += ", przez \(Fmt.spokenDistance(length))" }
                 speak(words + ".")
             }
         }
@@ -821,20 +851,49 @@ final class Navigator: ObservableObject {
         let from = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
         let heading = Self.heading(loc), id = route.id, ev = blocked.event
         let to = destination.location, hw = avoidHighways, tolls = avoidTolls
+        let mode = route.mode
         Task {
-            let r = await Directions.routes(from: from, to: to, mode: .drive, avoidHighways: hw, avoidTolls: tolls,
+            let r = await Directions.routes(from: from, to: to, mode: mode, avoidHighways: hw, avoidTolls: tolls,
                                             useGoogle: !AppSettings.shared.noGoogle, via: self.stops.map(\.location),
                                             heading: heading)
             self.detourLoading = false
             guard !self.stopped, self.route.id == id, let now = self.progress else { return }
-            let clear = r.routes.filter { alt in !alt.polyline.contains { $0.distance(to: ev.location) < 250 } }
+            let clear = r.routes.filter { alt in
+                alt.polyline.count >= 2 && Geo.project(ev.location, on: alt.polyline).offset >= 250
+            }
             guard let best = clear.min(by: { $0.durationSeconds < $1.durationSeconds }) else { return }
             let extra = best.durationSeconds - now.remainingSeconds
             self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: ev.id)
             let minutes = Int((abs(extra) / 60).rounded())
-            let cost = extra >= 60 ? "adding \(minutes) minutes" : extra <= -60 ? "saving \(minutes) minutes" : "taking about the same time"
-            self.speak("Jest objazd wokół zamknięcia, \(cost). Dotknij, aby z niego skorzystać.")
+            let cost = extra >= 60 ? "dokłada \(minutes) minut" : extra <= -60 ? "oszczędza \(minutes) minut" : "zajmuje mniej więcej tyle samo"
+            self.speak("Jest objazd zamknięcia, \(cost). Stuknij, żeby go wybrać.")
         }
+    }
+
+    /** Park the car on the route and hold the test cards. GPS updates are ignored until the trip ends. */
+    func holdCouch(title: String, along: Double, notes: [GuidanceNote], chip: CouchChip?, speed: Double) {
+        couch = true
+        demoAlerts = true
+        couchTitle = title
+        couchNotes = notes
+        couchChip = chip
+        guidance = notes.first
+        let point = Geo.point(along: route.polyline, meters: along)
+        progress = tracker.update(point, accuracy: 5, heading: nil)
+        speedMps = speed
+        following = false
+        RouteMind.haptic(.rigid)
+    }
+
+    /** For the build's screenshots: police reported up the road. */
+    func showDemoWaze() {
+        demoAlerts = true
+        let here = progress.map { Geo.point(along: route.polyline, meters: $0.alongMeters + 300) } ?? route.polyline.first ?? LatLng(0, 0)
+        let a = WazeAlert(id: "demo-police", kind: .police, subtype: "POLICE_HIDING", location: here,
+                          street: "A9", reportedAt: Date().addingTimeInterval(-7 * 60), thumbsUp: 3, reliability: 8)
+        wazeAhead = WazeAhead(alert: a, meters: 260, startMeters: 600)
+        policeRisk = 72
+        aircraftNear = (PoliceAircraft(id: "demo-heli", callsign: "NPAS15", location: here, altitudeFeet: 1400, helicopter: true), 3200)
     }
 
     /** A short tone before a camera warning, the way Waze does it. */
@@ -867,12 +926,8 @@ final class Navigator: ObservableObject {
         } else if d <= near && d > now + 30 && stage < 2 {
             spokenStage[i] = 2
             // Which lane, like the banner shows, so it's known without looking.
-            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { g -> String in
-                g.words.hasPrefix("Lane") ? ". Use " + g.words.lowercased().replacingOccurrences(of: "from left", with: "from the left")
-                    : ". Use the \(g.words.lowercased())"
-            } ?? ""
-            // "In 200 yards, your destination is on the left", the way Google says it.
-            let words = m.type == .arrive ? destinationSide.map { "your destination is on the \($0)" } ?? m.instruction.lowercasedFirst
+            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { ". Użyj: \(Self.lanePolish($0.words))" } ?? ""
+            let words = m.type == .arrive ? destinationSide.map { "cel jest po stronie \($0)" } ?? m.instruction.lowercasedFirst
                 : m.instruction.lowercasedFirst
             speak("Za \(Fmt.spokenDistance(d)), \(words)\(lane)")
         } else if d <= far && d > near + 150 && stage < 1 && m.type != .arrive {
@@ -894,7 +949,7 @@ final class Navigator: ObservableObject {
      * with a word about it.
      */
     private func checkTraffic(_ p: RouteTracker.Progress, _ loc: CLLocation) {
-        guard route.mode == .drive, !AppSettings.shared.noGoogle, !rerouting, !trafficLoading,
+        guard route.mode == .drive, !AppSettings.shared.noGoogle, !rerouting, !trafficLoading, !demoAlerts,
               p.remainingMeters > 5000, !p.offRoute, Date().timeIntervalSince(trafficAt) > 240 else { return }
         trafficLoading = true
         trafficAt = Date()
@@ -903,8 +958,9 @@ final class Navigator: ObservableObject {
         let to = destination.location, hw = avoidHighways, tolls = avoidTolls, via = stops.map(\.location)
         Task {
             let r = await Directions.routes(from: from, to: to, mode: .drive, avoidHighways: hw, avoidTolls: tolls, via: via, heading: heading)
+            let routes = ClosureBoard.prefer(r.routes, mode: .drive)
             self.trafficLoading = false
-            guard let fresh = r.routes.first, self.route.id == id, !self.rerouting, let now = self.progress,
+            guard let fresh = routes.first, self.route.id == id, !self.rerouting, let now = self.progress,
                   planned > 0, fresh.trafficSeconds != nil else { return }
             let current = now.remainingSeconds
             let saving = current - fresh.durationSeconds
@@ -934,7 +990,7 @@ final class Navigator: ObservableObject {
            route.maneuvers[..<next].contains(where: { $0.alongMeters > p.alongMeters && $0.road != nil && $0.road != road }) {
             road = nil
         }
-        return "Jedź dalej " + (road.map { "wzdłuż \($0) " } ?? "") + "przez \(Fmt.spokenDistance(meters))."
+        return "Jedź dalej " + (road.map { "drogą \($0) " } ?? "") + "przez \(Fmt.spokenDistance(meters))."
     }
 
     /** Right after a reroute: the first thing to do on the new route, so "Rerouting" isn't the last word. */
@@ -956,18 +1012,6 @@ final class Navigator: ObservableObject {
     /** The way the phone is moving, once it's fast enough (about 9 mph) for that to be trusted. */
     private static func heading(_ loc: CLLocation) -> Double? {
         loc.course >= 0 && loc.speed >= 4 && loc.courseAccuracy >= 0 && loc.courseAccuracy < 45 ? loc.course : nil
-    }
-
-    /// Adds the compass correction from Settings › Trasy. No course from GPS: the fix stays as it is.
-    private static func trimmed(_ loc: CLLocation) -> CLLocation {
-        let trim = Double(MindSettings.shared.headingTrim)
-        guard trim != 0, loc.course >= 0 else { return loc }
-        var c = loc.course + trim
-        while c < 0 { c += 360 }
-        while c >= 360 { c -= 360 }
-        return CLLocation(coordinate: loc.coordinate, altitude: loc.altitude,
-                          horizontalAccuracy: loc.horizontalAccuracy, verticalAccuracy: loc.verticalAccuracy,
-                          course: c, speed: loc.speed, timestamp: loc.timestamp)
     }
 
     private func reroute(from loc: CLLocation, quiet: Bool = false) {
@@ -995,9 +1039,10 @@ final class Navigator: ObservableObject {
             let r = await Directions.routes(from: from, to: to, mode: mode, avoidHighways: hw, avoidTolls: tolls,
                                             useGoogle: !AppSettings.shared.noGoogle, via: self.stops.map(\.location),
                                             heading: heading)
+            let routes = ClosureBoard.prefer(r.routes, mode: mode)
             guard !self.stopped, req == self.rerouteRequest else { return }
             self.rerouting = false
-            guard let fresh = r.routes.first else { return }
+            guard let fresh = routes.first else { return }
             self.toldNoSignal = false
             self.adopt(fresh)
             if !quiet { self.sayNewRoute() }
@@ -1039,19 +1084,44 @@ final class Navigator: ObservableObject {
         // What was said, for checking a drive afterwards (Console, or `log stream` on a simulator).
         Self.log.info("say: \(said, privacy: .public)")
         let u = AVSpeechUtterance(string: said)
-        u.voice = Self.voice
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
+        let voice = Self.polishVoice()
+        u.voice = voice
+        u.prefersAssistiveTechnologySettings = false
+        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        if let voice { Self.log.info("voice: \(voice.language, privacy: .public) \(voice.name, privacy: .public)") }
         speech.speak(u)
     }
 
-    /** The phone's English voice for its region, the better-sounding download when there is one. */
-    static let voice: AVSpeechSynthesisVoice? = {
-        let lang = Locale.preferredLanguages.first.flatMap { $0.hasPrefix("en") ? $0 : nil } ?? (Fmt.yards ? "en-GB" : "en-US")
-        let better = AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language == lang && $0.quality != .default }
-            .max { $0.quality.rawValue < $1.quality.rawValue }
-        return better ?? AVSpeechSynthesisVoice(language: lang)
-    }()
+    /// Native Polish voice, chosen again each time so a late-downloaded Zosia is picked up.
+    /// Enhanced or premium beats the compact voice. Never an English voice reading Polish.
+    private static func polishVoice() -> AVSpeechSynthesisVoice? {
+        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.lowercased().hasPrefix("pl") }
+        func rank(_ v: AVSpeechSynthesisVoice) -> Int {
+            var score = v.quality.rawValue * 10
+            let name = (v.name + " " + v.identifier).lowercased()
+            if name.contains("zosia") { score += 6 }
+            if v.language == "pl-PL" { score += 3 }
+            return score
+        }
+        if let best = all.max(by: { rank($0) < rank($1) }) { return best }
+        return AVSpeechSynthesisVoice(language: "pl-PL") ?? AVSpeechSynthesisVoice(language: "pl")
+    }
+
+    /// Lane advice for the Polish voice. The picture on screen can stay as the router wrote it.
+    private static func lanePolish(_ words: String) -> String {
+        let known = [
+            "Left lane": "lewy pas", "Left 2 lanes": "dwa lewe pasy", "Left 3 lanes": "trzy lewe pasy",
+            "Right lane": "prawy pas", "Right 2 lanes": "dwa prawe pasy", "Right 3 lanes": "trzy prawe pasy",
+            "Middle lane": "środkowy pas", "Middle lanes": "środkowe pasy",
+        ]
+        if let hit = known[words] { return hit }
+        if words.hasPrefix("Lane "), let n = words.split(separator: " ").dropFirst().first, n.allSatisfy({ $0.isNumber }) {
+            return "pas \(n) od lewej"
+        }
+        return words
+            .replacingOccurrences(of: "left", with: "lewy", options: .caseInsensitive)
+            .replacingOccurrences(of: "right", with: "prawy", options: .caseInsensitive)
+    }
 }
 
 /** Hands the sound back once Kite stops talking, so music comes back up between instructions. */
