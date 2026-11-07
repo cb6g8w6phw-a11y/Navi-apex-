@@ -488,9 +488,11 @@ public enum Directions {
                               useGoogle: Bool = true, via: [LatLng] = [], heading: Double? = nil,
                               alternatives: Bool = false) async -> Result {
         // On foot and by bike the line has to stay on paths, not on a car road Google prefers.
-        if (mode == .bike || mode == .walk), heading == nil,
-           let trail = await TrailRouter.route(from: a, to: b, mode: mode, via: via) {
-            return Result(routes: [trail])
+        if (mode == .bike || mode == .walk), heading == nil {
+            let trails = await TrailRouter.routes(from: a, to: b, mode: mode, via: via)
+            if !trails.isEmpty {
+                return Result(routes: alternatives ? trails : Array(trails.prefix(1)))
+            }
         }
         // Ask both at once: Google's route knows traffic, OSRM's steps read better (Vela puts
         // the open router's turn-by-turn on Google's line the same way).
@@ -697,19 +699,20 @@ public enum British {
  * and Valhalla's pedestrian profile (footways and sidewalks). OSRM is the fallback when they don't answer.
  */
 enum TrailRouter {
-    static func route(from a: LatLng, to b: LatLng, mode: TravelMode, via: [LatLng]) async -> Route? {
+    static func routes(from a: LatLng, to b: LatLng, mode: TravelMode, via: [LatLng]) async -> [Route] {
         switch mode {
-        case .bike: return await bike(from: a, to: b, via: via)
-        case .walk: return await walk(from: a, to: b, via: via)
-        case .drive: return nil
+        case .bike: return await bikeRoutes(from: a, to: b, via: via)
+        case .walk: return await walkRoutes(from: a, to: b, via: via)
+        case .drive: return []
         }
     }
 
-    private static func walk(from a: LatLng, to b: LatLng, via: [LatLng]) async -> Route? {
+    private static func walkRoutes(from a: LatLng, to b: LatLng, via: [LatLng]) async -> [Route] {
         let pts = [a] + via + [b]
         let body: [String: Any] = [
             "locations": pts.map { ["lon": $0.lng, "lat": $0.lat] },
             "costing": "pedestrian",
+            "alternates": 2,
             "costing_options": ["pedestrian": [
                 "walking_speed": 5.0,
                 "walkway_factor": 0.15,
@@ -722,21 +725,44 @@ enum TrailRouter {
             "format": "osrm",
         ]
         guard let url = URL(string: "https://valhalla1.openstreetmap.de/route"),
-              let data = await post(url, body),
-              var route = OSRM.parse(data, mode: .walk).first, route.polyline.count >= 2 else { return nil }
-        route.summary = "Chodniki i ścieżki"
-        route.source = "osm"
-        return route
+              let data = await post(url, body) else { return [] }
+        let names = ["Chodniki i ścieżki", "Inne chodniki", "Krócej na przełaj"]
+        return OSRM.parse(data, mode: .walk).filter { $0.polyline.count >= 2 }.enumerated().map { i, route in
+            var route = route
+            route.summary = names[min(i, names.count - 1)]
+            route.source = "osm"
+            return route
+        }
     }
 
-    private static func bike(from a: LatLng, to b: LatLng, via: [LatLng]) async -> Route? {
+    private static func bikeRoutes(from a: LatLng, to b: LatLng, via: [LatLng]) async -> [Route] {
+        let names = ["Ścieżki rowerowe", "Spokojniejsza", "Objazd"]
+        let parts: [(Int, Route?)] = await withTaskGroup(of: (Int, Route?).self) { group in
+            for idx in 0..<3 {
+                group.addTask { (idx, await oneBike(from: a, to: b, via: via, alternative: idx)) }
+            }
+            var acc: [(Int, Route?)] = []
+            for await item in group { acc.append(item) }
+            return acc
+        }
+        var out: [Route] = []
+        for (idx, found) in parts.sorted(by: { $0.0 < $1.0 }) {
+            guard var route = found else { continue }
+            if out.contains(where: { abs($0.distanceMeters - route.distanceMeters) < 500 && abs($0.typicalSeconds - route.typicalSeconds) < 120 }) { continue }
+            route.summary = names[min(idx, names.count - 1)]
+            out.append(Roundabouts.settle(route))
+        }
+        return out
+    }
+
+    private static func oneBike(from a: LatLng, to b: LatLng, via: [LatLng], alternative: Int) async -> Route? {
         let pts = [a] + via + [b]
         let lonlats = pts.map { String(format: "%.5f,%.5f", $0.lng, $0.lat) }.joined(separator: "|")
         var comps = URLComponents(string: "https://brouter.de/brouter")
         comps?.queryItems = [
             URLQueryItem(name: "lonlats", value: lonlats),
             URLQueryItem(name: "profile", value: "trekking"),
-            URLQueryItem(name: "alternativeidx", value: "0"),
+            URLQueryItem(name: "alternativeidx", value: "\(alternative)"),
             URLQueryItem(name: "format", value: "geojson"),
         ]
         guard let url = comps?.url else { return nil }

@@ -67,7 +67,7 @@ struct ContentView: View {
                 }
             }
             .id(settings.theme == .black)
-            if surface != .drive {
+            if surface != .drive, model.nav == nil, model.directions == nil, model.tab == .map {
                 VStack {
                     Spacer()
                     HStack {
@@ -129,6 +129,7 @@ struct ContentView: View {
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
+                            .padding(.top, 52)
                             Spacer()
                         }
                         .padding(.horizontal, 12)
@@ -145,6 +146,7 @@ struct ContentView: View {
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
+                            .padding(.top, 52)
                             Spacer()
                             if showWeatherBall { WeatherBall { showWeather = true } }
                         }

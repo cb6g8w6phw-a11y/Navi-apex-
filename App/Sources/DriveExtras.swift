@@ -25,6 +25,8 @@ final class NowPlay: ObservableObject {
     private var timer: Timer?
     private var tokens: [NSObjectProtocol] = []
     private var attached = false
+    /// The system player was going before a voice prompt. Live Container does not resume it on its own.
+    private var resumeAfterVoice = false
 
     private init() {}
 
@@ -35,6 +37,7 @@ final class NowPlay: ObservableObject {
             Task { @MainActor in
                 self.allowed = status == .authorized
                 guard self.allowed else { return }
+                let was = self.player.playbackState
                 self.player.beginGeneratingPlaybackNotifications()
                 let center = NotificationCenter.default
                 self.tokens.append(center.addObserver(forName: .MPMusicPlayerControllerNowPlayingItemDidChange, object: self.player, queue: .main) { _ in
@@ -44,6 +47,7 @@ final class NowPlay: ObservableObject {
                     Task { @MainActor in NowPlay.shared.refresh() }
                 })
                 self.refresh()
+                if was == .playing, self.player.playbackState != .playing { self.player.play() }
                 self.timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
                     Task { @MainActor in NowPlay.shared.tick() }
                 }
@@ -77,6 +81,19 @@ final class NowPlay: ObservableObject {
 
     func next() { guard allowed else { return }; player.skipToNextItem(); refresh() }
     func previous() { guard allowed else { return }; player.skipToPreviousItem(); refresh() }
+
+    /// Called just before a spoken instruction, so the song can be started again afterwards.
+    func prepareForVoice() {
+        if player.playbackState == .playing { resumeAfterVoice = true }
+    }
+
+    /// Live Container drops the system player when this app takes the audio session. Put the song back.
+    func restoreAfterVoice() {
+        let want = resumeAfterVoice
+        resumeAfterVoice = false
+        guard want, allowed else { return }
+        if player.playbackState != .playing { player.play() }
+    }
 
     func seek(_ t: Double) {
         guard allowed else { return }
