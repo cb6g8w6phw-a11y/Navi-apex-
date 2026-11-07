@@ -487,6 +487,11 @@ public enum Directions {
                               avoidHighways: Bool = false, avoidTolls: Bool = false,
                               useGoogle: Bool = true, via: [LatLng] = [], heading: Double? = nil,
                               alternatives: Bool = false) async -> Result {
+        // On foot and by bike the line has to stay on paths, not on a car road Google prefers.
+        if (mode == .bike || mode == .walk), heading == nil,
+           let trail = await TrailRouter.route(from: a, to: b, mode: mode, via: via) {
+            return Result(routes: [trail])
+        }
         // Ask both at once: Google's route knows traffic, OSRM's steps read better (Vela puts
         // the open router's turn-by-turn on Google's line the same way).
         let osrmTask = Task { try await OSRM.route(from: a, to: b, mode: mode, via: via, heading: heading) }
@@ -684,5 +689,159 @@ public enum British {
             .replacingOccurrences(of: #"\bparking lot\b"#, with: "car park", options: .regularExpression)
             .replacingOccurrences(of: #"\bparking garage\b"#, with: "multi-storey car park", options: .regularExpression)
             .replacingOccurrences(of: #"\bfreeway\b"#, with: "motorway", options: .regularExpression)
+    }
+}
+
+/**
+ * The dedicated routers: BRouter's everyday cycling profile (cycleways first, not the carriageway)
+ * and Valhalla's pedestrian profile (footways and sidewalks). OSRM is the fallback when they don't answer.
+ */
+enum TrailRouter {
+    static func route(from a: LatLng, to b: LatLng, mode: TravelMode, via: [LatLng]) async -> Route? {
+        switch mode {
+        case .bike: return await bike(from: a, to: b, via: via)
+        case .walk: return await walk(from: a, to: b, via: via)
+        case .drive: return nil
+        }
+    }
+
+    private static func walk(from a: LatLng, to b: LatLng, via: [LatLng]) async -> Route? {
+        let pts = [a] + via + [b]
+        let body: [String: Any] = [
+            "locations": pts.map { ["lon": $0.lng, "lat": $0.lat] },
+            "costing": "pedestrian",
+            "costing_options": ["pedestrian": [
+                "walking_speed": 5.0,
+                "walkway_factor": 0.15,
+                "sidewalk_factor": 0.35,
+                "alley_factor": 2.0,
+                "driveway_factor": 5.0,
+                "use_hills": 0.3,
+            ]],
+            "directions_options": ["units": "kilometers", "language": "pl-PL"],
+            "format": "osrm",
+        ]
+        guard let url = URL(string: "https://valhalla1.openstreetmap.de/route"),
+              let data = await post(url, body),
+              var route = OSRM.parse(data, mode: .walk).first, route.polyline.count >= 2 else { return nil }
+        route.summary = "Chodniki i ścieżki"
+        route.source = "osm"
+        return route
+    }
+
+    private static func bike(from a: LatLng, to b: LatLng, via: [LatLng]) async -> Route? {
+        let pts = [a] + via + [b]
+        let lonlats = pts.map { String(format: "%.5f,%.5f", $0.lng, $0.lat) }.joined(separator: "|")
+        var comps = URLComponents(string: "https://brouter.de/brouter")
+        comps?.queryItems = [
+            URLQueryItem(name: "lonlats", value: lonlats),
+            URLQueryItem(name: "profile", value: "trekking"),
+            URLQueryItem(name: "alternativeidx", value: "0"),
+            URLQueryItem(name: "format", value: "geojson"),
+        ]
+        guard let url = comps?.url else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue(OSRM.userAgent, forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 22
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let route = parseBike(data), route.polyline.count >= 2 else { return nil }
+        return Roundabouts.settle(route)
+    }
+
+    private static func post(_ url: URL, _ body: [String: Any]) async -> Data? {
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(OSRM.userAgent, forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 22
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        return data
+    }
+
+    private static func parseBike(_ data: Data) -> Route? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let feature = (root["features"] as? [[String: Any]])?.first,
+              let coords = (feature["geometry"] as? [String: Any])?["coordinates"] as? [[Double]] else { return nil }
+        let line: [LatLng] = coords.compactMap { pair in
+            guard pair.count >= 2 else { return nil }
+            return LatLng(pair[1], pair[0])
+        }
+        guard line.count >= 2 else { return nil }
+        let props = feature["properties"] as? [String: Any] ?? [:]
+        let meters = number(props["track-length"]) ?? Geo.length(line)
+        let seconds = number(props["total-time"]) ?? meters / 4.2
+        let mans = turns(props["messages"], line: line, meters: meters)
+        return Route(mode: .bike, polyline: line, distanceMeters: meters, typicalSeconds: max(30, seconds),
+                     trafficSeconds: nil, summary: "Ścieżki rowerowe", maneuvers: mans,
+                     trafficSpans: [], speedLimits: [], source: "osm", stepsComplete: true)
+    }
+
+    private static func turns(_ raw: Any?, line: [LatLng], meters: Double) -> [Maneuver] {
+        let cum = Geo.cumulative(line)
+        let table = raw as? [[Any]] ?? []
+        let header = table.first?.map { "\($0)" } ?? []
+        func col(_ name: String) -> Int? { header.firstIndex(of: name) }
+        let iDist = col("Distance"), iTurn = col("Turn"), iVoice = col("VoiceHint")
+        let iStreet = col("StreetName") ?? col("Wayname") ?? col("Street")
+        let iLon = col("Longitude"), iLat = col("Latitude")
+        var mans: [Maneuver] = []
+        for row in table.dropFirst() {
+            let voice = cell(row, iVoice), turn = cell(row, iTurn)
+            guard !voice.isEmpty || !turn.isEmpty else { continue }
+            let along = number(iDist.flatMap { $0 < row.count ? row[$0] : nil }) ?? 0
+            let lon = number(iLon.flatMap { $0 < row.count ? row[$0] : nil })
+            let lat = number(iLat.flatMap { $0 < row.count ? row[$0] : nil })
+            let at = (lat != nil && lon != nil) ? LatLng(lat!, lon!) : Geo.point(along: line, meters: along, cumulative: cum)
+            let road = cell(row, iStreet)
+            let named = road.isEmpty ? nil : road
+            let (kind, words) = bikeWords(turn: turn, voice: voice, road: named)
+            if kind == .straight, mans.last?.type == .straight { continue }
+            mans.append(Maneuver(type: kind, instruction: words, location: at,
+                                 alongMeters: min(along, cum.last ?? along), distanceMeters: 0, road: named))
+        }
+        if mans.isEmpty {
+            mans = [Maneuver(type: .depart, instruction: "Ruszaj ścieżką rowerową", location: line[0],
+                             alongMeters: 0, distanceMeters: meters, road: nil)]
+        }
+        if mans.last?.type != .arrive, let end = line.last {
+            mans.append(Maneuver(type: .arrive, instruction: "Jesteś na miejscu", location: end,
+                                 alongMeters: cum.last ?? meters, distanceMeters: 0, road: nil))
+        }
+        for i in mans.indices.dropLast() {
+            mans[i].distanceMeters = max(0, mans[i + 1].alongMeters - mans[i].alongMeters)
+        }
+        return mans
+    }
+
+    private static func bikeWords(turn: String, voice: String, road: String?) -> (ManeuverType, String) {
+        let v = (voice.isEmpty ? turn : voice).lowercased()
+        let tail = road.map { " w \($0)" } ?? ""
+        if v.contains("roundabout") || v.contains("kreisverkehr") || v.contains("rnd") { return (.roundabout, "Rondo\(tail)") }
+        if v.contains("u-turn") || v.contains("wenden") || v == "tu" { return (.uturn, "Zawróć\(tail)") }
+        if v.contains("sharp left") || v.contains("scharf links") || v == "tl" { return (.sharpLeft, "Ostro w lewo\(tail)") }
+        if v.contains("sharp right") || v.contains("scharf rechts") || v == "tr" { return (.sharpRight, "Ostro w prawo\(tail)") }
+        if v.contains("slight left") || v.contains("halb links") || v == "tsl" || v == "kl" { return (.slightLeft, "Lekko w lewo\(tail)") }
+        if v.contains("slight right") || v.contains("halb rechts") || v == "tsr" || v == "kr" { return (.slightRight, "Lekko w prawo\(tail)") }
+        if v.contains("left") || v.contains("links") || v == "l" { return (.turnLeft, "Skręć w lewo\(tail)") }
+        if v.contains("right") || v.contains("rechts") || v == "r" { return (.turnRight, "Skręć w prawo\(tail)") }
+        return (.straight, road.map { "Jedź dalej: \($0)" } ?? "Jedź dalej ścieżką")
+    }
+
+    private static func cell(_ row: [Any], _ i: Int?) -> String {
+        guard let i, i < row.count else { return "" }
+        if let s = row[i] as? String { return s }
+        if let n = row[i] as? NSNumber { return n.stringValue }
+        return ""
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        if let n = value as? Double { return n }
+        if let n = value as? Int { return Double(n) }
+        if let n = value as? NSNumber { return n.doubleValue }
+        if let s = value as? String { return Double(s.replacingOccurrences(of: ",", with: ".")) }
+        return nil
     }
 }

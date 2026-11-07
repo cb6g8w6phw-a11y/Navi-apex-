@@ -411,6 +411,7 @@ struct VelaMapView: UIViewRepresentable {
 
         private var heatOverlay: HeatOverlay?
         private var terrainOverlay: MKTileOverlay?
+        private var modeTiles: ModeTiles?
         private var radarOverlay: DWDRadarOverlay?
         private var cityOverlay: CityRingOverlay?
         private var zoneOverlay: CityRingOverlay?
@@ -453,16 +454,22 @@ struct VelaMapView: UIViewRepresentable {
             rebuildRail()
         }
 
-        /** Satellite, traffic and the driving look are all just settings of Apple's map. */
+        /** Satellite and traffic are Apple's map. On foot or by bike the specialist map replaces it. */
         private func configure(_ map: MKMapView, navigating: Bool) {
             let s = model.settings
-            let key = "\(s.satellite)\(navigating)\(s.traffic)"
+            let mode = Self.surfaceMode(model)
+            let specialist = mode != .drive
+            let key = "\(s.satellite)\(navigating)\(s.traffic)\(specialist)"
             guard key != lastConfigKey else { return }
             lastConfigKey = key
-            // Apple's own map: full colour and relief, same as the Maps app. Shops stay hidden
-            // only while guiding, so the route line is not covered.
-            let poi: MKPointOfInterestFilter = navigating ? .excludingAll : .includingAll
-            if s.satellite {
+            let poi: MKPointOfInterestFilter = (navigating || specialist) ? .excludingAll : .includingAll
+            map.selectableMapFeatures = specialist ? [] : [.pointsOfInterest]
+            if specialist {
+                let c = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
+                c.showsTraffic = false
+                c.pointOfInterestFilter = .excludingAll
+                map.preferredConfiguration = c
+            } else if s.satellite {
                 let c = MKHybridMapConfiguration(elevationStyle: .realistic)
                 c.showsTraffic = s.traffic && !navigating
                 c.pointOfInterestFilter = poi
@@ -475,6 +482,12 @@ struct VelaMapView: UIViewRepresentable {
             }
         }
 
+        static func surfaceMode(_ model: AppModel) -> TravelMode {
+            if let n = model.nav { return n.route.mode }
+            if let d = model.directions, !d.transit { return d.mode }
+            return model.settings.defaultMode
+        }
+
         // MARK: Render
 
         func render(_ map: MKMapView) {
@@ -484,7 +497,15 @@ struct VelaMapView: UIViewRepresentable {
             if map.showsUserLocation == navigating { map.showsUserLocation = !navigating }
             configure(map, navigating: navigating)
 
-            let wantTerrain = s.terrain && !s.satellite
+            let mode = Self.surfaceMode(model)
+            if mode == .drive {
+                if modeTiles != nil { modeTiles = nil; overlaysDirty = true }
+            } else if modeTiles?.mode != mode {
+                modeTiles = ModeTiles(mode: mode)
+                overlaysDirty = true
+            }
+
+            let wantTerrain = s.terrain && !s.satellite && mode == .drive
             if wantTerrain != (terrainOverlay != nil) {
                 if wantTerrain {
                     let t = MKTileOverlay(urlTemplate: "https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}")
@@ -539,6 +560,7 @@ struct VelaMapView: UIViewRepresentable {
             overlaysDirty = false
             var ordered: [MKOverlay] = []
             var styles: [ObjectIdentifier: LineStyle] = [:]
+            if let tiles = modeTiles { ordered.append(tiles) }
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
             if let h = heatOverlay { ordered.append(h) }
@@ -1298,7 +1320,11 @@ struct VelaMapView: UIViewRepresentable {
             }
             if let tiles = overlay as? MKTileOverlay {
                 let r = MKTileOverlayRenderer(tileOverlay: tiles)
-                r.alpha = tiles is DWDRadarOverlay ? 0.75 : (dark ? 0.22 : 0.32)
+                if tiles is ModeTiles {
+                    r.alpha = 1
+                } else {
+                    r.alpha = tiles is DWDRadarOverlay ? 0.75 : (dark ? 0.22 : 0.32)
+                }
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)
@@ -1360,5 +1386,40 @@ struct VelaMapView: UIViewRepresentable {
             guard model.results.isEmpty, model.selected == nil else { return }
             map.setCenter(loc.coordinate, zoomLevel: 15, animated: false)
         }
+    }
+}
+
+/** The pedestrian map (paths and footways) or the cycling map (CyclOSM). Replaces Apple's roads. */
+final class ModeTiles: MKTileOverlay {
+    let mode: TravelMode
+
+    init(mode: TravelMode) {
+        self.mode = mode
+        super.init(urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+        canReplaceMapContent = true
+        tileSize = CGSize(width: 256, height: 256)
+        minimumZ = 0
+        maximumZ = 19
+    }
+
+    override func url(forTilePath path: MKTileOverlayPath) -> URL {
+        let sub = ["a", "b", "c"][(path.x + path.y) % 3]
+        let raw: String
+        if mode == .bike {
+            raw = "https://\(sub).tile-cyclosm.openstreetmap.fr/cyclosm/\(path.z)/\(path.x)/\(path.y).png"
+        } else {
+            raw = "https://\(sub).tile.openstreetmap.fr/hot/\(path.z)/\(path.x)/\(path.y).png"
+        }
+        return URL(string: raw)!
+    }
+
+    override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
+        var req = URLRequest(url: url(forTilePath: path))
+        req.setValue(OSRM.userAgent, forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 12
+        URLSession.shared.dataTask(with: req) { data, resp, err in
+            let ok = (resp as? HTTPURLResponse)?.statusCode == 200
+            result(ok ? data : nil, err ?? (ok ? nil : URLError(.badServerResponse)))
+        }.resume()
     }
 }

@@ -41,6 +41,13 @@ struct ContentView: View {
 
     private var dark: Bool { settings.colorScheme.map { $0 == .dark } ?? (systemScheme == .dark) }
 
+    /// Apple's map while driving. A path map on foot, CyclOSM on a bike.
+    private var surface: TravelMode {
+        if let n = model.nav { return n.route.mode }
+        if let d = model.directions, !d.transit { return d.mode }
+        return settings.defaultMode
+    }
+
     var body: some View {
         ZStack {
             VelaMapView(model: model, settings: settings, dark: dark)
@@ -60,6 +67,25 @@ struct ContentView: View {
                 }
             }
             .id(settings.theme == .black)
+            if surface != .drive {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Text(surface == .bike
+                             ? "CyclOSM · trasy rowerowe · © OpenStreetMap"
+                             : "Mapa piesza · chodniki i ścieżki · © OpenStreetMap")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.ultraThinMaterial, in: Capsule())
+                        Spacer()
+                    }
+                    .padding(.leading, 10)
+                    .padding(.bottom, model.nav != nil ? 108 : 96)
+                }
+                .allowsHitTesting(false)
+            }
             if let ask = model.pump {
                 VStack {
                     FuelPumpCard(settings: settings, ask: ask,
@@ -257,6 +283,57 @@ struct ContentView: View {
     }
 }
 
+/** Auto, on foot, or by bike: swaps the map and the routes that follow. */
+struct ModeMapSwitch: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach([TravelMode.drive, .walk, .bike]) { m in
+                let on = settings.defaultMode == m
+                Button { settings.defaultMode = m } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: icon(m))
+                        Text(title(m))
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .foregroundColor(on ? .white : .primary)
+                    .background(Capsule().fill(on ? Color(hex: tint(m)) : Color.primary.opacity(0.08)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title(m))
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func icon(_ m: TravelMode) -> String {
+        switch m {
+        case .drive: return "car.fill"
+        case .walk: return "figure.walk"
+        case .bike: return "bicycle"
+        }
+    }
+
+    private func title(_ m: TravelMode) -> String {
+        switch m {
+        case .drive: return "Auto"
+        case .walk: return "Pieszo"
+        case .bike: return "Rower"
+        }
+    }
+
+    private func tint(_ m: TravelMode) -> UInt32 {
+        switch m {
+        case .drive: return 0x0F766E
+        case .walk: return 0x16A34A
+        case .bike: return 0x2563EB
+        }
+    }
+}
+
 /** The map page: a big "Where to?" bar, Home and Work one tap away, and the results or place sheet. */
 struct BrowseOverlay: View {
     @ObservedObject var model: AppModel
@@ -367,6 +444,9 @@ struct BrowseOverlay: View {
 
                 VStack(spacing: 12) {
                     SearchBar(model: model, voice: voice, focused: $searchFocused)
+                    if !searchFocused && !voice.listening {
+                        ModeMapSwitch(settings: settings)
+                    }
                     if voice.listening { ListeningCard(voice: voice) }
                     // Home, Work and recents are one tap away under "Where to?", so the map itself stays clear.
                     if searchFocused {
