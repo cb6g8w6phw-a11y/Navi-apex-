@@ -148,7 +148,12 @@ struct SettingsView: View {
         .navigationViewStyle(.stack)
     }
 
-    private var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "" }
+    private var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? ""
+        let build = info?["CFBundleVersion"] as? String ?? ""
+        return build.isEmpty || build == "1" ? short : "\(short) · \(build)"
+    }
 
     /** One big row of the menu: an icon, the name, what's inside in small, and the page it opens. */
     private func menuRow<Page: View>(_ title: String, detail: String, value: String? = nil, icon: String, color: UInt32,

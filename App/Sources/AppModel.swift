@@ -384,7 +384,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    static let locationOffText = "Location is off for Apex. Turn it on in Settings to get directions from where you are."
+    static let locationOffText = "Location is off for Navapp. Turn it on in Settings to get directions from where you are."
 
     // MARK: My places
 
@@ -427,7 +427,7 @@ final class AppModel: ObservableObject {
     /** Remember where the car is: here, now, with the street name when one is found. */
     func saveParking() {
         guard let me = userLatLng else {
-            notice = location.denied ? "Location is off for Apex. Turn it on in Settings to save where you parked." : "Still finding your location. Try again in a moment."
+            notice = location.denied ? "Location is off for Navapp. Turn it on in Settings to save where you parked." : "Still finding your location. Try again in a moment."
             return
         }
         var p = Place(id: "parking:\(Int(Date().timeIntervalSince1970))", name: "Parked car", location: me, source: "osm")

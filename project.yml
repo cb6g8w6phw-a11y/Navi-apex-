@@ -19,6 +19,7 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Navapp
+        CFBundleName: Navapp
         CFBundleShortVersionString: "0.7.7"
         CFBundleVersion: "1"
         UILaunchScreen: {}
@@ -56,6 +57,7 @@ targets:
       base:
         # Kept from the Vela days so updates install over the old app and keep saved places.
         PRODUCT_BUNDLE_IDENTIFIER: app.vela.ios
+        PRODUCT_NAME: Navapp
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -71,6 +73,7 @@ targets:
       path: Widget/Info.plist
       properties:
         CFBundleDisplayName: Navapp
+        CFBundleName: Navapp
         CFBundleShortVersionString: "0.7.7"
         CFBundleVersion: "1"
         NSExtension:

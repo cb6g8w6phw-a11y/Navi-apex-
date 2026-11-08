@@ -348,7 +348,7 @@ struct NowPlayingCard: View {
                         .glassButton(Capsule())
                 }
                 .buttonStyle(.plain)
-                Text("Pauza jest w tej aplikacji. Apex może ją tylko otworzyć.")
+                Text("Pauza jest w tej aplikacji. Navapp może ją tylko otworzyć.")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(2)

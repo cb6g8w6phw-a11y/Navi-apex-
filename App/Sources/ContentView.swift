@@ -41,13 +41,6 @@ struct ContentView: View {
 
     private var dark: Bool { settings.colorScheme.map { $0 == .dark } ?? (systemScheme == .dark) }
 
-    /// Apple's map while driving. A path map on foot, CyclOSM on a bike.
-    private var surface: TravelMode {
-        if let n = model.nav { return n.route.mode }
-        if let d = model.directions, !d.transit { return d.mode }
-        return settings.defaultMode
-    }
-
     var body: some View {
         ZStack {
             VelaMapView(model: model, settings: settings, dark: dark)
@@ -67,25 +60,6 @@ struct ContentView: View {
                 }
             }
             .id(settings.theme == .black)
-            if surface != .drive, model.nav == nil, model.directions == nil, model.tab == .map {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Text(surface == .bike
-                             ? "CyclOSM · trasy rowerowe · © OpenStreetMap"
-                             : "Mapa piesza · chodniki i ścieżki · © OpenStreetMap")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(.ultraThinMaterial, in: Capsule())
-                        Spacer()
-                    }
-                    .padding(.leading, 10)
-                    .padding(.bottom, model.nav != nil ? 108 : 96)
-                }
-                .allowsHitTesting(false)
-            }
             if let ask = model.pump {
                 VStack {
                     FuelPumpCard(settings: settings, ask: ask,
