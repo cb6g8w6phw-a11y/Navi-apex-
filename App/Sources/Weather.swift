@@ -197,6 +197,81 @@ final class DWDRadarOverlay: MKTileOverlay {
 }
 
 /** A small map for the weather sheet: the rain radar over where you are. */
+/** Weather at the hour you will be there, not the weather right now. Open-Meteo, one point at a time. */
+enum RouteSky {
+    static func lines(along line: [LatLng], arrive: Date) async -> [String] {
+        guard line.count >= 2 else { return [] }
+        let cum = Geo.cumulative(line)
+        let total = max(cum.last ?? 1, 1)
+        let ahead = max(0, arrive.timeIntervalSinceNow)
+        let marks: [(String, Double)] = ahead > 20 * 60
+            ? [(L.t("W drodze", "Unterwegs", "On the way"), 0.45), (L.t("Przy celu", "Am Ziel", "At the end"), 1)]
+            : [(L.t("Przy celu", "Am Ziel", "At the end"), 1)]
+        var out: [String] = []
+        for (name, frac) in marks {
+            let p = Geo.point(along: line, meters: total * min(frac, 0.98), cumulative: cum)
+            let when = Date().addingTimeInterval(ahead * frac)
+            if let text = await one(p, at: when) { out.append("\(name) · \(text)") }
+        }
+        return out
+    }
+
+    private static func one(_ p: LatLng, at when: Date) async -> String? {
+        guard var comps = URLComponents(string: "https://api.open-meteo.com/v1/forecast") else { return nil }
+        comps.queryItems = [
+            URLQueryItem(name: "latitude", value: String(format: "%.3f", p.lat)),
+            URLQueryItem(name: "longitude", value: String(format: "%.3f", p.lng)),
+            URLQueryItem(name: "hourly", value: "temperature_2m,precipitation_probability,weather_code,visibility"),
+            URLQueryItem(name: "forecast_days", value: "2"),
+            URLQueryItem(name: "timezone", value: "auto"),
+        ]
+        guard let url = comps.url,
+              let (data, resp) = try? await URLSession.shared.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let h = json["hourly"] as? [String: Any],
+              let times = h["time"] as? [String],
+              let temps = h["temperature_2m"] as? [Double],
+              let codes = h["weather_code"] as? [Int] else { return nil }
+        let rain = h["precipitation_probability"] as? [Int] ?? []
+        let vis = h["visibility"] as? [Double] ?? []
+        let stamp = Self.stamp.string(from: when)
+        guard let i = times.firstIndex(where: { $0 >= stamp }) ?? times.indices.last else { return nil }
+        let code = codes[i]
+        let temp = temps[i]
+        let wet = i < rain.count ? rain[i] : 0
+        let see = i < vis.count ? vis[i] : 20_000
+        return phrase(code: code, temp: temp, rain: wet, visibility: see, hour: TripClock.time.string(from: when))
+    }
+
+    private static func phrase(code: Int, temp: Double, rain: Int, visibility: Double, hour: String) -> String {
+        let t = "\(Int(temp.rounded()))°"
+        let what: String
+        if code == 45 || code == 48 || visibility < 1_000 {
+            what = L.t("mgła", "Nebel", "fog")
+        } else if temp <= 0, [56, 57, 66, 67, 71, 73, 75, 77, 85, 86].contains(code) {
+            what = L.t("lód", "Glätte", "ice")
+        } else if (51...67).contains(code) || (80...82).contains(code) || rain >= 50 {
+            what = L.t("deszcz", "Regen", "rain")
+        } else if (71...77).contains(code) || code == 85 || code == 86 {
+            what = L.t("śnieg", "Schnee", "snow")
+        } else if (95...99).contains(code) {
+            what = L.t("burza", "Gewitter", "storm")
+        } else {
+            what = L.t("sucho", "trocken", "dry")
+        }
+        return "\(hour) · \(what) · \(t)"
+    }
+
+    private static let stamp: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        return f
+    }()
+}
+
 struct RadarMiniMap: UIViewRepresentable {
     let center: CLLocationCoordinate2D
     let dark: Bool

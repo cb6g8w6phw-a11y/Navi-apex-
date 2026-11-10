@@ -1011,16 +1011,19 @@ final class Navigator: ObservableObject {
             return
         } else if d <= near && d > now + 30 && stage < 2 {
             spokenStage[i] = 2
-            // Which lane, like the banner shows, so it's known without looking.
-            let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { ". Użyj: \(Self.lanePolish($0.words))" } ?? ""
-            let words = m.type == .arrive ? destinationSide.map { "cel jest po stronie \($0)" } ?? m.instruction.lowercasedFirst
-                : m.instruction.lowercasedFirst
-            speak("Za \(Fmt.spokenDistance(d)), \(words)\(lane)")
+            if let slip = slipWords(m, meters: d) {
+                speak(slip)
+            } else {
+                let lane = LaneGuide.lanes(for: m, leftTraffic: Geo.drivesOnLeft(m.location)).map { ". \(L.t("Użyj", "Nimm", "Use")): \(Self.lanePolish($0.words))" } ?? ""
+                let words = m.type == .arrive ? destinationSide.map { L.t("cel jest po stronie \($0)", "Ziel liegt \($0)", "the destination is on the \($0)") } ?? m.instruction.lowercasedFirst
+                    : m.instruction.lowercasedFirst
+                speak("\(L.t("Za", "In", "In")) \(Fmt.spokenDistance(d)), \(words)\(lane)")
+            }
         } else if d <= far && d > near + 150 && stage < 1 && m.type != .arrive {
             spokenStage[i] = 1
-            // On a phone call only what's needed now is said; the early heads-up would talk over it.
             if onCall { return }
-            speak("Za \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)")
+            if let slip = slipWords(m, meters: d) { speak(slip) }
+            else { speak("\(L.t("Za", "In", "In")) \(Fmt.spokenDistance(d)), \(m.instruction.lowercasedFirst)") }
         } else if drive && d > 3000 && stage < 1 && !toldContinue.contains(i) && justPassed(p) {
             // A long way to the next turn, like after joining a motorway: say so once, the way
             // Google does ("Continue on M27 for 7 miles"), so a quiet stretch doesn't feel lost.
@@ -1059,6 +1062,28 @@ final class Navigator: ObservableObject {
                 self.trafficScale = min(3, max(0.5, fresh.durationSeconds / planned))
             }
         }
+    }
+
+    private func slipWords(_ m: Maneuver, meters: Double) -> String? {
+        let exit: Set<ManeuverType> = [.rampLeft, .rampRight, .forkLeft, .forkRight]
+        let join: Set<ManeuverType> = [.merge]
+        guard exit.contains(m.type) || join.contains(m.type) else { return nil }
+        let right = [.rampRight, .forkRight, .keepRight].contains(m.type)
+        let dist = Fmt.spokenDistance(meters)
+        let crowded = route.maneuvers.contains {
+            $0.alongMeters != m.alongMeters && exit.contains($0.type) && abs($0.alongMeters - m.alongMeters) < 700
+        }
+        if join.contains(m.type) {
+            return L.t("Za \(dist) włącz się \(right ? "prawym" : "lewym") pasem.",
+                       "In \(dist) \(right ? "rechts" : "links") einfädeln.",
+                       "In \(dist), merge on the \(right ? "right" : "left").")
+        }
+        let which = crowded
+            ? L.t("Nie pierwszy zjazd. ", "Nicht die erste Ausfahrt. ", "Not the first exit. ")
+            : ""
+        return which + L.t("Za \(dist) zjedź \(right ? "prawym" : "lewym") pasem.",
+                           "In \(dist) \(right ? "rechts" : "links") abfahren.",
+                           "In \(dist), exit on the \(right ? "right" : "left").")
     }
 
     /** Just past a step the driver was told about (or the start), so "continue" follows on from it. */
@@ -1175,7 +1200,7 @@ final class Navigator: ObservableObject {
         // What was said, for checking a drive afterwards (Console, or `log stream` on a simulator).
         Self.log.info("say: \(said, privacy: .public)")
         let u = AVSpeechUtterance(string: said)
-        let voice = Self.polishVoice()
+        let voice = Self.speechVoice()
         u.voice = voice
         u.prefersAssistiveTechnologySettings = false
         u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
@@ -1183,20 +1208,26 @@ final class Navigator: ObservableObject {
         speech.speak(u)
     }
 
-    /// Native Polish voice, chosen again each time so a late-downloaded Zosia is picked up.
-    /// Enhanced or premium beats the compact voice. Never an English voice reading Polish.
-    private static func polishVoice() -> AVSpeechSynthesisVoice? {
-        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.lowercased().hasPrefix("pl") }
+    /// Native voice for the chosen language. Enhanced beats the compact one.
+    private static func speechVoice() -> AVSpeechSynthesisVoice? {
+        let prefix: String
+        switch AppSettings.shared.language {
+        case "de": prefix = "de"
+        case "en": prefix = "en"
+        default: prefix = "pl"
+        }
+        let all = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.lowercased().hasPrefix(prefix) }
         func rank(_ v: AVSpeechSynthesisVoice) -> Int {
             var score = v.quality.rawValue * 10
             let name = (v.name + " " + v.identifier).lowercased()
-            if name.contains("zosia") { score += 6 }
-            if v.language == "pl-PL" { score += 3 }
+            if prefix == "pl", name.contains("zosia") { score += 6 }
+            if prefix == "de", name.contains("anna") || name.contains("helena") { score += 4 }
             return score
         }
-        if let best = all.max(by: { rank($0) < rank($1) }) { return best }
-        return AVSpeechSynthesisVoice(language: "pl-PL") ?? AVSpeechSynthesisVoice(language: "pl")
+        return all.max { rank($0) < rank($1) }
     }
+
+    private static func polishVoice() -> AVSpeechSynthesisVoice? { speechVoice() }
 
     /// Lane advice for the Polish voice. The picture on screen can stay as the router wrote it.
     private static func lanePolish(_ words: String) -> String {

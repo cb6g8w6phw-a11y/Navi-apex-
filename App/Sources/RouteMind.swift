@@ -251,11 +251,25 @@ enum RouteMind {
     }
 
     static let borders: [Crossing] = [
-        Crossing(name: "Świecko", waitMin: 36, carsOk: true, location: LatLng(52.348, 14.59)),
-        Crossing(name: "Słubice", waitMin: 12, carsOk: true, location: LatLng(52.35, 14.56)),
-        Crossing(name: "Osinów Dolny", waitMin: 9, carsOk: true, location: LatLng(52.52, 14.62)),
-        Crossing(name: "Kostrzyn", waitMin: 18, carsOk: true, location: LatLng(52.58, 14.65)),
+        Crossing(name: "Świecko", waitMin: 40, carsOk: true, location: LatLng(52.3494, 14.5906)),
+        Crossing(name: "Słubice", waitMin: 15, carsOk: true, location: LatLng(52.3506, 14.5605)),
+        Crossing(name: "Kostrzyn", waitMin: 20, carsOk: true, location: LatLng(52.5882, 14.6495)),
+        Crossing(name: "Osinów Dolny", waitMin: 10, carsOk: true, location: LatLng(52.8478, 14.1468)),
+        Crossing(name: "Gubin", waitMin: 12, carsOk: true, location: LatLng(51.9540, 14.7280)),
+        Crossing(name: "Zgorzelec", waitMin: 18, carsOk: true, location: LatLng(51.1510, 15.0080)),
+        Crossing(name: "Jędrzychowice", waitMin: 25, carsOk: true, location: LatLng(51.2040, 15.0470)),
+        Crossing(name: "Kołbaskowo", waitMin: 22, carsOk: true, location: LatLng(53.3360, 14.4470)),
+        Crossing(name: "Lubieszyn", waitMin: 14, carsOk: true, location: LatLng(53.4630, 14.3960)),
     ]
+
+    /// Crossings worth offering when the route actually runs up to the border. Shortest typical wait first.
+    static func borderChoices(along line: [LatLng]) -> [Crossing] {
+        guard line.count >= 2 else { return [] }
+        let cum = Geo.cumulative(line)
+        let hit = borders.filter { Geo.project($0.location, on: line, cumulative: cum).offset < 18_000 }
+        guard let anchor = hit.first?.location else { return [] }
+        return borders.filter { $0.location.distance(to: anchor) < 80_000 }.sorted { $0.waitMin < $1.waitMin }
+    }
 
     static func borderNote(near p: LatLng) -> GuidanceNote? {
         let ranked = borders.map { ($0, p.distance(to: $0.location)) }.sorted { $0.1 < $1.1 }

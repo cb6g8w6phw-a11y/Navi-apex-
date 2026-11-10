@@ -106,7 +106,7 @@ final class LiveNav {
 
         return NavActivityAttributes.ContentState(
             symbol: nav.arrived ? "mappin.circle.fill" : maneuverSymbol(m.maneuver?.type ?? .straight),
-            distance: nav.arrived ? "0 m" : Fmt.distance(m.meters),
+            distance: nav.arrived ? L.t("Na miejscu", "Angekommen", "Arrived") : L.t("Za \(Fmt.distance(m.meters))", "In \(Fmt.distance(m.meters))", "In \(Fmt.distance(m.meters))"),
             street: nav.arrived ? nav.destination.name : (m.maneuver?.instruction ?? street),
             arrival: Fmt.arrival(left),
             remaining: Fmt.duration(left),

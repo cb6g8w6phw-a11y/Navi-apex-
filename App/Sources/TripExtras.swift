@@ -51,19 +51,23 @@ enum TripExtras {
     }
 
     static func parking(near p: LatLng) async -> [Place] {
-        let q = String(format: "[out:json][timeout:20];(node[\"amenity\"=\"parking\"](around:700,%.5f,%.5f);way[\"amenity\"=\"parking\"](around:700,%.5f,%.5f););out center 20;", p.lat, p.lng, p.lat, p.lng)
-        guard let data = await Overpass.query(q),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let els = root["elements"] as? [[String: Any]] else { return [] }
-        return els.compactMap { e in
-            let center = e["center"] as? [String: Any]
-            let lat = e["lat"] as? Double ?? center?["lat"] as? Double
-            let lon = e["lon"] as? Double ?? center?["lon"] as? Double
-            guard let lat, let lon else { return nil }
-            let tags = e["tags"] as? [String: String] ?? [:]
-            let id = "park:\((e["id"] as? NSNumber)?.int64Value ?? 0)"
-            return Place(id: id, name: tags["name"] ?? "Parking", location: LatLng(lat, lon), source: "osm")
-        }
+        guard var comps = URLComponents(string: "https://photon.komoot.io/api/") else { return [] }
+        comps.queryItems = [
+            URLQueryItem(name: "q", value: "Parkplatz"),
+            URLQueryItem(name: "lat", value: String(p.lat)),
+            URLQueryItem(name: "lon", value: String(p.lng)),
+            URLQueryItem(name: "limit", value: "15"),
+            URLQueryItem(name: "osm_tag", value: "amenity:parking"),
+            URLQueryItem(name: "lang", value: "de"),
+        ]
+        guard let url = comps.url else { return [] }
+        var req = URLRequest(url: url, timeoutInterval: 8)
+        req.setValue(Photon.userAgent, forHTTPHeaderField: "User-Agent")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200 else { return [] }
+        return Photon.parse(data, near: p)
+            .filter { $0.location.distance(to: p) < 2_000 && $0.location.distance(to: p) > 25 }
+            .sorted { $0.location.distance(to: p) < $1.location.distance(to: p) }
     }
 
     /// How far along the route the nearest schools and kindergartens sit.

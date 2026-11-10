@@ -201,12 +201,19 @@ struct SettingsView: View {
     private var drivingPage: some View {
         Form {
             Section {
-                Toggle(isOn: $settings.voice) { SettingLabel("Prowadzenie głosem", detail: "Polski lektor: Zosia albo inny głos pl-PL z telefonu.", icon: "speaker.wave.2.fill", color: 0x0F766E) }
+                Toggle(isOn: $settings.voice) { SettingLabel("Prowadzenie głosem", detail: "Lektor czyta manewry w wybranym języku.", icon: "speaker.wave.2.fill", color: 0x0F766E) }
+                Picker(selection: $settings.language) {
+                    Text("Polski").tag("pl")
+                    Text("Deutsch").tag("de")
+                    Text("English").tag("en")
+                } label: { SettingLabel("Język jazdy", detail: "Głos i komunikaty na trasie.", icon: "character.bubble.fill", color: 0x0F766E) }
                 Picker(selection: $settings.defaultMode) {
                     ForEach(TravelMode.allCases) { Text($0.label).tag($0) }
                 } label: { SettingLabel("Domyślny tryb podróży", icon: "car.fill", color: 0x2563EB) }
             } footer: {
-                Text("Lektor czyta manewry po polsku. Jeśli głos brzmi mechanicznie, w Ustawieniach iPhone’a pobierz rozszerzony głos polski (Ułatwienia dostępu → Zawartość mówiona → Głosy).")
+                Text(L.t("Lektor czyta manewry w wybranym języku. Niemiecki i angielski głos pobierasz w Ustawieniach iPhone’a: Ułatwienia dostępu → Zawartość mówiona → Głosy.",
+                        "Die Ansagen folgen der gewählten Sprache. Eine deutsche Stimme lädst du unter Bedienungshilfen → Gesprochene Inhalte → Stimmen.",
+                        "Spoken turns follow the language you pick. Download a voice in Settings → Accessibility → Spoken Content → Voices."))
             }
         }
         .kiteList()

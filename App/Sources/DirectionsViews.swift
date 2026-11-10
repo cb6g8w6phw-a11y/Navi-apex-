@@ -75,7 +75,7 @@ struct EndpointsCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Wróć")
             VStack(spacing: 0) {
-                endpoint(icon: "circle", color: Vela.tealLight, text: state.reversed ? state.destination.name : "Twoja lokalizacja")
+                endpoint(icon: "circle", color: Vela.tealLight, text: state.reversed ? state.destination.name : L.t("Twoja lokalizacja", "Ihr Standort", "Your location"))
                 ForEach(Array(state.stops.enumerated()), id: \.offset) { i, stop in
                     Divider().padding(.leading, 30)
                     HStack(spacing: 12) {
@@ -90,13 +90,13 @@ struct EndpointsCard: View {
                     .frame(height: 38)
                 }
                 Divider().padding(.leading, 30)
-                endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? "Twoja lokalizacja" : state.destination.name)
+                endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? L.t("Twoja lokalizacja", "Ihr Standort", "Your location") : state.destination.name)
                 if !state.transit && state.stops.count < 8 {
                     Divider().padding(.leading, 30)
                     Button { model.addingStop = true } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus").font(.system(size: 14, weight: .bold)).frame(width: 18)
-                            Text("Dodaj postój").font(.system(size: 15, weight: .semibold))
+                            Text(L.t("Dodaj postój", "Zwischenhalt", "Add stop")).font(.system(size: 15, weight: .semibold))
                             Spacer()
                         }
                         .foregroundColor(Vela.accentText(scheme))
@@ -206,7 +206,7 @@ struct TripHeader: View {
                     Button { model.startNavigation() } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "location.north.fill").font(.system(size: 19, weight: .bold))
-                            Text("Jedź").font(.system(size: 21, weight: .heavy))
+                            Text(L.t("Jedź", "Los", "Go")).font(.system(size: 21, weight: .heavy))
                         }
                         .foregroundColor(Vela.onAccent(scheme))
                         .frame(maxWidth: .infinity, minHeight: 50)
@@ -315,6 +315,7 @@ struct TripBody: View {
     @ObservedObject var model: AppModel
     @Environment(\.colorScheme) private var scheme
     @State private var pathNote: String?
+    @State private var sky: [String] = []
     @State private var findingParking = false
 
     var body: some View {
@@ -343,8 +344,10 @@ struct TripBody: View {
             }
             .sheetScroll()
             .task(id: d.route?.id) {
-                guard let r = model.directions?.route else { pathNote = nil; return }
+                guard let r = model.directions?.route else { pathNote = nil; sky = []; return }
                 pathNote = await TripExtras.pathNote(line: r.polyline, mode: r.mode)
+                let arrive = model.directions?.forecast?.arrive ?? Date().addingTimeInterval(r.durationSeconds)
+                sky = await RouteSky.lines(along: r.polyline, arrive: arrive)
             }
         }
     }
@@ -379,6 +382,28 @@ struct TripBody: View {
             if let pathNote {
                 Text(pathNote).font(.subheadline).foregroundColor(Vela.muted(scheme))
             }
+            ForEach(sky, id: \.self) { line in
+                Text(line).font(.subheadline).foregroundColor(Vela.muted(scheme))
+            }
+            if r.mode == .drive {
+                let gates = RouteMind.borderChoices(along: r.polyline)
+                if !gates.isEmpty {
+                    Text(L.t("Przejścia, typowy czas, nie pomiar na żywo", "Übergänge, übliche Wartezeit, nicht live", "Crossings, typical wait, not live"))
+                        .font(.caption).foregroundColor(Vela.muted(scheme))
+                    ForEach(gates, id: \.name) { gate in
+                        HStack {
+                            Text("\(gate.name) · \(gate.waitMin) min").font(.subheadline.weight(.semibold))
+                            Spacer()
+                            Button(L.t("Tędy", "Hierüber", "Via")) {
+                                var p = Place(id: "border:\(gate.name)", name: gate.name, location: gate.location, source: "border")
+                                p.category = L.t("Przejście graniczne", "Grenzübergang", "Border crossing")
+                                model.addStop(p)
+                            }
+                            .font(.subheadline.weight(.bold))
+                        }
+                    }
+                }
+            }
             if let usual = TripExtras.usual(id: d.destination.id) {
                 Text(usual).font(.subheadline).foregroundColor(Vela.muted(scheme))
             }
@@ -386,14 +411,18 @@ struct TripBody: View {
                 Button {
                     guard !findingParking else { return }
                     findingParking = true
-                    Task {
-                        let pins = await TripExtras.parking(near: d.destination.location)
+                    let whereTo = d.destination.location
+                    Task { @MainActor in
+                        let pins = await TripExtras.parking(near: whereTo)
                         findingParking = false
-                        if pins.isEmpty { model.notice = "Brak parkingu w danych mapy przy celu." }
-                        else { model.showStopsOnMap(pins) }
+                        if pins.isEmpty {
+                            model.notice = L.t("Nie znalazłem parkingu przy celu.", "Keinen Parkplatz am Ziel gefunden.", "No parking near the destination.")
+                        } else {
+                            model.showStopsOnMap(pins)
+                        }
                     }
                 } label: {
-                    Text(findingParking ? "Szukam parkingu…" : "Parking przy celu")
+                    Text(findingParking ? L.t("Szukam parkingu…", "Suche Parkplatz…", "Finding parking…") : L.t("Parking przy celu", "Parkplatz am Ziel", "Parking at the end"))
                         .font(.system(size: 15, weight: .bold))
                         .padding(.horizontal, 14).frame(height: 40)
                         .background(Capsule().fill(Vela.chip(scheme)))
@@ -401,7 +430,7 @@ struct TripBody: View {
                 .buttonStyle(.plain)
                 if let url = TripExtras.sms(arrive: Date().addingTimeInterval(r.durationSeconds), place: d.destination.name) {
                     Link(destination: url) {
-                        Text("Wyślij że dojadę")
+                        Text(L.t("Wyślij że dojadę", "Ankunft schicken", "Text my arrival"))
                             .font(.system(size: 15, weight: .bold))
                             .padding(.horizontal, 14).frame(height: 40)
                             .background(Capsule().fill(Vela.chip(scheme)))
@@ -409,6 +438,22 @@ struct TripBody: View {
                 }
             }
             .padding(.top, 4)
+            ForEach(model.parkingHits.prefix(6)) { spot in
+                Button {
+                    model.addStop(spot)
+                } label: {
+                    HStack {
+                        Image(systemName: "parkingsign")
+                        Text(spot.name).lineLimit(1)
+                        Spacer()
+                        if let meters = spot.distanceMeters {
+                            Text(Fmt.distance(meters)).foregroundColor(Vela.muted(scheme))
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

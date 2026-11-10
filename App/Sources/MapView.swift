@@ -920,7 +920,10 @@ struct VelaMapView: UIViewRepresentable {
                 var heads: [KiteAnnotation] = []
                 if let r = main, navigating, let n = model.nav, let m = n.nextManeuver,
                    m.type != .arrive, m.type != .depart, m.type != .straight,
-                   let p = n.progress, m.alongMeters - p.alongMeters < 600 {
+                   let p = n.progress {
+                    let slip: Set<ManeuverType> = [.rampLeft, .rampRight, .forkLeft, .forkRight, .merge]
+                    let window = slip.contains(m.type) ? 1_600.0 : 600.0
+                    if m.alongMeters - p.alongMeters < window {
                     let line = r.polyline
                     let cum = Geo.cumulative(line)
                     let total = cum.last ?? 0
@@ -930,18 +933,20 @@ struct VelaMapView: UIViewRepresentable {
                        out.alongMeters - m.alongMeters < 250 {
                         end = out.alongMeters + 22
                     }
-                    let a = max(m.alongMeters - 35, from), b = min(end, total)
+                    let a = max(m.alongMeters - (slip.contains(m.type) ? 80 : 35), from), b = min(end, total)
                     let shaft = Geo.routeSlice(line, from: a, to: b, cumulative: cum)
                     if shaft.count >= 2 {
                         let tip = shaft[shaft.count - 1]
                         let prev = Geo.point(along: line, meters: max(a, b - 4), cumulative: cum)
+                        let paint = slip.contains(m.type) ? UIColor(hex: 0xF59E0B) : UIColor(hex: 0x0F766E)
                         addMove(shaft, LineStyle(color: .black, width: 17, alpha: 0.35, relative: 0.85))
-                        addMove(shaft, LineStyle(color: UIColor(hex: 0x0F766E), width: 15, relative: 0.72))
+                        addMove(shaft, LineStyle(color: paint, width: 15, relative: 0.72))
                         addMove(shaft, LineStyle(color: .white, width: 9, relative: 0.42))
                         let head = KiteAnnotation(layer: .turnHead, id: "turn-head", coordinate: coord(tip))
                         head.icon = "turn-head"
                         head.bearing = Geo.bearing(prev, tip)
                         heads.append(head)
+                    }
                     }
                 }
                 arrowLines = moving

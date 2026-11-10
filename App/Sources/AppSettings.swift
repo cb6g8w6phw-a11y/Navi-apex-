@@ -48,6 +48,8 @@ final class AppSettings: ObservableObject {
     @Published var glassStyle: GlassStyle { didSet { d.set(glassStyle.rawValue, forKey: "glassStyle") } }
     @Published var units: UnitsMode { didSet { d.set(units.rawValue, forKey: "units") } }
     @Published var voice: Bool { didSet { d.set(voice, forKey: "voice") } }
+    /// pl, de or en. Drives the spoken maneuvers and the lock-screen words.
+    @Published var language: String { didSet { d.set(language, forKey: "appLanguage") } }
     @Published var traffic: Bool { didSet { d.set(traffic, forKey: "traffic") } }
     /** Live fuel prices (Tankerkönig): on or off, the person's own free key (kept on this phone), which fuel, and the size of a fill-up. */
     @Published var fuelOn: Bool { didSet { d.set(fuelOn, forKey: "fuelOn") } }
@@ -146,6 +148,7 @@ final class AppSettings: ObservableObject {
         glassStyle = GlassStyle(rawValue: d.string(forKey: "glassStyle") ?? "") ?? .liquid
         units = UnitsMode(rawValue: d.string(forKey: "units") ?? "") ?? .auto
         voice = d.object(forKey: "voice") as? Bool ?? true
+        language = d.string(forKey: "appLanguage") ?? "pl"
         traffic = d.object(forKey: "traffic") as? Bool ?? true
         fuelOn = d.object(forKey: "fuelOn") as? Bool ?? true
         fuelKey = d.string(forKey: "fuelKey") ?? ""
@@ -309,5 +312,15 @@ final class AppSettings: ObservableObject {
         var r = recents.filter { $0.caseInsensitiveCompare(q) != .orderedSame }
         r.insert(q, at: 0)
         recents = Array(r.prefix(12))
+    }
+}
+
+enum L {
+    static func t(_ pl: String, _ de: String, _ en: String) -> String {
+        switch AppSettings.shared.language {
+        case "de": return de
+        case "en": return en
+        default: return pl
+        }
     }
 }

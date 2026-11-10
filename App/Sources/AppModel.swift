@@ -139,6 +139,8 @@ final class AppModel: ObservableObject {
     @Published var addingStop = false
     /** Places from Add stop, drawn on the map without changing the route yet. */
     @Published var stopPreviews: [Place] = []
+    /** Parking found beside the destination, listed on the trip card and pinned on the map. */
+    @Published var parkingHits: [Place] = []
     @Published var showSaved = false
     /** The sheet for choosing home or work by searching for it. */
     @Published var picking: PickKind?
@@ -466,7 +468,7 @@ final class AppModel: ObservableObject {
     }
 
     /** Long press: a dropped pin with the address there. */
-    func dropPin(at point: LatLng, name: String = "Dropped pin") {
+    func dropPin(at point: LatLng, name: String = L.t("Pinezka", "Markierung", "Dropped pin")) {
         var pin = Place(id: "pin:\(point.lat),\(point.lng)", name: name, location: point, source: "osm")
         pin.category = String(format: "%.5f, %.5f", point.lat, point.lng)
         select(pin)
@@ -483,6 +485,7 @@ final class AppModel: ObservableObject {
     func openDirections(to place: Place) {
         autoStart = false
         directions = DirectionsState(destination: place, mode: settings.defaultMode)
+        parkingHits = []
         detent = .half
         loadAllModes()
     }
@@ -507,6 +510,7 @@ final class AppModel: ObservableObject {
     func closeDirections() {
         autoStart = false
         directions = nil
+        parkingHits = []
         showSteps = false
         if let p = selected { select(p) }
     }
@@ -540,8 +544,10 @@ final class AppModel: ObservableObject {
         let pins = Array(places.prefix(30))
         guard !pins.isEmpty else { return }
         stopPreviews = pins
+        parkingHits = pins
         addingStop = false
-        frame(pins.map(\.location), bottomFraction: 0.42, top: 80)
+        detent = .peek
+        frame(pins.map(\.location) + [directions?.destination.location].compactMap { $0 }, bottomFraction: 0.28, top: 80)
     }
 
     func removeStop(_ i: Int) {

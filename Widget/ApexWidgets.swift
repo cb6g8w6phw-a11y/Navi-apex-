@@ -137,7 +137,7 @@ private struct IslandCard: View {
                     .frame(width: roomy ? 44 : 36, height: roomy ? 44 : 36)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: 0x059669)))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(state.arrived ? "Jesteś na miejscu" : "Za \(state.distance)")
+                    Text(state.arrived ? state.distance : state.distance)
                         .font(.system(size: roomy ? 22 : 18, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)

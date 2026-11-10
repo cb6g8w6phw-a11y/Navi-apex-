@@ -402,8 +402,10 @@ struct InstructionBanner: View {
 
     /** "6th exit" for a roundabout (the picture says the rest), else the instruction. */
     static func headline(_ m: Maneuver?) -> String {
-        guard let m else { return "Follow the route" }
-        if m.type == .roundabout, let n = m.exit { return "\(ordinal(n)) exit" }
+        guard let m else { return L.t("Jedź za linią", "Der Linie folgen", "Follow the route") }
+        if m.type == .roundabout, let n = m.exit {
+            return L.t("Zjazd \(n)", "\(n). Ausfahrt", "Exit \(n)")
+        }
         return m.instruction
     }
 
@@ -805,7 +807,7 @@ struct RouteWazeSummary: View {
         VStack(alignment: .leading, spacing: 0) {
             if let counts {
                 if counts.isEmpty {
-                    Label("No road closures on this route", systemImage: "checkmark.shield.fill")
+                    Label(L.t("Brak zamknięć na tej trasie", "Keine Sperrungen auf der Route", "No road closures on this route"), systemImage: "checkmark.shield.fill")
                         .font(.system(size: 16, weight: .semibold)).foregroundColor(Vela.open)
                 } else {
                     WrapLayout(spacing: 8, lineSpacing: 8) {
