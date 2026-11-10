@@ -771,7 +771,7 @@ final class Navigator: ObservableObject {
     // MARK: Roadworks, closures and warnings (Autobahn API)
 
     /** The events that sit on [line], each with where its stretch starts and ends along it. */
-    private static func eventsAlong(_ line: [LatLng], _ events: [RoadEvent]) -> [(event: RoadEvent, start: Double, end: Double)] {
+    private static func eventsAlong(_ line: [LatLng], _ events: [RoadEvent], _ maneuvers: [Maneuver]) -> [(event: RoadEvent, start: Double, end: Double)] {
         let cum = Geo.cumulative(line)
         let lats = line.map(\.lat), lngs = line.map(\.lng)
         guard let minLat = lats.min(), let maxLat = lats.max(), let minLng = lngs.min(), let maxLng = lngs.max() else { return [] }
@@ -806,9 +806,30 @@ final class Navigator: ObservableObject {
                 while hi < line.count - 1 && inside(line[hi + 1]) { hi += 1 }
             }
             let top = cum.count - 1
-            found.append((event: e, start: cum[min(lo, top)], end: cum[min(hi, top)]))
+            let start = cum[min(lo, top)]
+            let end = cum[min(hi, top)]
+            // Autobahn works under a bridge are a few dozen metres from the road above.
+            // Keep them only when this route is actually on that motorway.
+            if !onMotorway(e.road, along: start, overlap: end - start, maneuvers: maneuvers) { continue }
+            found.append((event: e, start: start, end: end))
         }
         return found.sorted { $0.start < $1.start }
+    }
+
+    /// Autobahn events are only for that motorway. A bridge over it is not the same road.
+    private static func onMotorway(_ road: String, along: Double, overlap: Double, maneuvers: [Maneuver]) -> Bool {
+        let ref = road.uppercased().replacingOccurrences(of: " ", with: "")
+        guard ref.range(of: #"^A\d{1,3}$"#, options: .regularExpression) != nil else { return true }
+        let number = ref.dropFirst()
+        let forms = [ref, "A \(number)", "A\(number)"]
+        let window = maneuvers.filter { abs($0.alongMeters - along) < 1200 }
+        let named = window.filter { ($0.road ?? "").trimmingCharacters(in: .whitespaces).count > 1 }
+        let blob = (named.isEmpty ? window : named)
+            .map { "\($0.road ?? "") \($0.instruction)".uppercased() }
+            .joined(separator: " ")
+        if forms.contains(where: { blob.contains($0) }) { return true }
+        if !named.isEmpty { return false }
+        return overlap >= 250
     }
 
     private func roadWords(_ e: RoadEvent) -> String {
@@ -833,7 +854,7 @@ final class Navigator: ObservableObject {
         let key = "\(route.id)-\(events.count)-\(RoadEvents.shared.updatedAt.timeIntervalSince1970)-\(ClosureBoard.shared.revision)"
         if key != routeRoadKey {
             routeRoadKey = key
-            routeRoad = Self.eventsAlong(line, events)
+            routeRoad = Self.eventsAlong(line, events, route.maneuvers)
         }
         let here = p.alongMeters
 
