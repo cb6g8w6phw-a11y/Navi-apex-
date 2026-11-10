@@ -212,17 +212,3 @@ private struct TripHistoryRow: View {
         }
     }
 }
-
-    static let time: DateFormatter = {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
-        return f
-    }()
-    static let day: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        return f
-    }()
-}
