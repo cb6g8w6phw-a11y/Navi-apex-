@@ -703,7 +703,7 @@ struct StopPicker: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationBackground { StopSheetGlass() }
+        .modifier(StopSheetBackdrop())
     }
 
     private func row(_ p: Place, icon: String) -> some View {
@@ -755,6 +755,16 @@ struct StopPicker: View {
 }
 
 /** The sheet itself is glass, with no colour painted behind it. */
+private struct StopSheetBackdrop: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.presentationBackground { StopSheetGlass() }
+        } else {
+            content.background(StopSheetGlass().ignoresSafeArea())
+        }
+    }
+}
+
 private struct StopSheetGlass: View {
     var body: some View {
         if #available(iOS 26.0, *) {
