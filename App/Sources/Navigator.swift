@@ -159,6 +159,7 @@ final class Navigator: ObservableObject {
         speech.delegate = speechDone
         let first = route.maneuvers.first { $0.type != .depart } ?? route.maneuvers.first
         loadCameras()
+        loadSchools()
         loadWaze()
         loadRoundabouts()
         speak("Startuję trasę do \(destination.name). " + (first.map { "\($0.instruction)." } ?? ""))
@@ -268,6 +269,7 @@ final class Navigator: ObservableObject {
         checkZones(p)
         checkStops(p)
         checkLights(p)
+        checkZoneAndSchool(p)
         checkMind(p, loc)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
@@ -277,6 +279,34 @@ final class Navigator: ObservableObject {
 
     /** Next light on the route. The phase is an estimate from the junction, so the card is not empty. */
     private var spokenLightAt = -1.0
+    private var schoolAt: [Double] = []
+    private var toldSchool = false
+    private var toldZone30 = false
+    private var limitWas: Double?
+
+    private func loadSchools() {
+        let line = route.polyline
+        let id = route.id
+        Task {
+            let at = await TripExtras.schools(along: line)
+            guard !self.stopped, self.route.id == id else { return }
+            self.schoolAt = at
+        }
+    }
+
+    /// A drop into a 30 zone, and a school that actually sits on this road.
+    private func checkZoneAndSchool(_ p: RouteTracker.Progress) {
+        let lim = speedLimitKmh
+        if route.mode == .drive, let lim, lim <= 31, let was = limitWas, was >= 50, !toldZone30 {
+            toldZone30 = true
+            speak("Strefa 30.")
+        }
+        if (lim ?? 0) > 40 { toldZone30 = false }
+        limitWas = lim
+        guard !toldSchool, let next = schoolAt.first(where: { $0 > p.alongMeters - 20 && $0 - p.alongMeters < 160 }) else { return }
+        toldSchool = true
+        speak("Szkoła przy drodze, za \(Fmt.spokenDistance(max(next - p.alongMeters, 20))).")
+    }
 
     private func checkLights(_ p: RouteTracker.Progress) {
         guard route.mode == .drive || route.mode == .bike, MindSettings.shared.greenWave else {
@@ -1107,9 +1137,14 @@ final class Navigator: ObservableObject {
         tracker = RouteTracker(route: fresh)
         spokenStage = [:]
         toldContinue = []
+        toldSchool = false
+        toldZone30 = false
+        limitWas = nil
+        schoolAt = []
         trafficScale = 1
         trafficAt = Date()
         loadCameras()
+        loadSchools()
         loadRoundabouts()
         wazeAt = .distantPast
         routeWaze = []

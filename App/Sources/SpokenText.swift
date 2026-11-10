@@ -33,6 +33,15 @@ public enum SpokenText {
         for (d, w) in [("N", "north"), ("S", "south"), ("E", "east"), ("W", "west")] {
             s = s.replacingOccurrences(of: "(?<=\\d) \(d)(?![\\p{L}'])", with: " \(w)", options: .regularExpression)
         }
+        // The street stays in German. One Polish word after it says what kind of street it is.
+        let gloss: [(String, String)] = [
+            ("straße", "ulica"), ("strasse", "ulica"), ("platz", "plac"), ("allee", "aleja"),
+            ("gasse", "zaułek"), ("chaussee", "szosa"), ("weg", "droga"),
+        ]
+        let low = s.lowercased()
+        var said: [String] = []
+        for (de, pl) in gloss where low.contains(de) && !said.contains(pl) { said.append(pl) }
+        if !said.isEmpty { s += ". " + said.joined(separator: ", ") }
         return s
     }
 }

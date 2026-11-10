@@ -157,6 +157,14 @@ struct TripHeader: View {
                             Text("\(Fmt.distance(r.distanceMeters)) · przyjazd \(Fmt.arrival(r.durationSeconds))")
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Vela.muted(scheme))
                                 .lineLimit(1).minimumScaleFactor(0.8)
+                            if r.mode == .drive {
+                                let fact = TripExtras.costLine(meters: r.distanceMeters, consumption: settings.carConsumption,
+                                                               litresLeft: settings.fuelLeft, price: model.fuelBest?.price)
+                                Text(fact.text)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(fact.short ? Color(hex: 0xDC2626) : Vela.muted(scheme))
+                                    .lineLimit(2)
+                            }
                         }
                     } else if d.loading.contains(d.mode) {
                         HStack(spacing: 10) { ProgressView(); Text("Szukam tras…").font(.system(size: 19, weight: .semibold)) }
@@ -263,6 +271,8 @@ struct ModeTabs: View {
 struct TripBody: View {
     @ObservedObject var model: AppModel
     @Environment(\.colorScheme) private var scheme
+    @State private var pathNote: String?
+    @State private var findingParking = false
 
     var body: some View {
         if let d = model.directions {
@@ -289,6 +299,10 @@ struct TripBody: View {
                 .padding(.bottom, 80)
             }
             .sheetScroll()
+            .task(id: d.route?.id) {
+                guard let r = model.directions?.route else { pathNote = nil; return }
+                pathNote = await TripExtras.pathNote(line: r.polyline, mode: r.mode)
+            }
         }
     }
 
@@ -313,6 +327,45 @@ struct TripBody: View {
                     .font(.system(size: 17, weight: .semibold)).foregroundColor(delayColor(r))
             }
             if r.mode == .drive { RouteWazeSummary(route: r).padding(.top, 4) }
+            if r.mode == .drive {
+                let fact = TripExtras.costLine(meters: r.distanceMeters, consumption: AppSettings.shared.carConsumption,
+                                               litresLeft: AppSettings.shared.fuelLeft, price: model.fuelBest?.price)
+                Text(fact.text).font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(fact.short ? Color(hex: 0xDC2626) : Vela.muted(scheme))
+            }
+            if let pathNote {
+                Text(pathNote).font(.subheadline).foregroundColor(Vela.muted(scheme))
+            }
+            if let usual = TripExtras.usual(id: d.destination.id) {
+                Text(usual).font(.subheadline).foregroundColor(Vela.muted(scheme))
+            }
+            HStack(spacing: 8) {
+                Button {
+                    guard !findingParking else { return }
+                    findingParking = true
+                    Task {
+                        let pins = await TripExtras.parking(near: d.destination.location)
+                        findingParking = false
+                        if pins.isEmpty { model.notice = "Brak parkingu w danych mapy przy celu." }
+                        else { model.showStopsOnMap(pins) }
+                    }
+                } label: {
+                    Text(findingParking ? "Szukam parkingu…" : "Parking przy celu")
+                        .font(.system(size: 15, weight: .bold))
+                        .padding(.horizontal, 14).frame(height: 40)
+                        .background(Capsule().fill(Vela.chip(scheme)))
+                }
+                .buttonStyle(.plain)
+                if let url = TripExtras.sms(arrive: Date().addingTimeInterval(r.durationSeconds), place: d.destination.name) {
+                    Link(destination: url) {
+                        Text("Wyślij że dojadę")
+                            .font(.system(size: 15, weight: .bold))
+                            .padding(.horizontal, 14).frame(height: 40)
+                            .background(Capsule().fill(Vela.chip(scheme)))
+                    }
+                }
+            }
+            .padding(.top, 4)
         }
     }
 

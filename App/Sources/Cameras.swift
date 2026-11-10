@@ -270,25 +270,50 @@ public enum Overpass {
     public static func speedLimits(_ ways: [LimitWay], on line: [LatLng]) -> [SpeedLimit] {
         guard line.count >= 2 else { return [] }
         let cum = Geo.cumulative(line)
-        var spans: [(from: Double, to: Double, kmh: Double?)] = []
+        var spans: [(from: Double, to: Double, kmh: Double?, offset: Double)] = []
         for w in ways {
-            let hits = w.line.map { Geo.project($0, on: line, cumulative: cum) }.filter { $0.offset < 12 }.map(\.along)
-            guard let lo = hits.min(), let hi = hits.max(), hi - lo > 20 else { continue }
-            // Roads remembered from earlier drives may still hold the unit-less reading.
-            spans.append((lo, hi, britishLimit(w.kmh, at: w.line[0])))
+            var alongs: [Double] = []
+            var offsets: [Double] = []
+            for (i, pt) in w.line.enumerated() {
+                let hit = Geo.project(pt, on: line, cumulative: cum)
+                guard hit.offset < 18 else { continue }
+                // A motorway under a bridge is close on the map but points another way.
+                if !sameDirection(way: w.line, index: i, route: line, along: hit.along, cumulative: cum) { continue }
+                alongs.append(hit.along)
+                offsets.append(hit.offset)
+            }
+            guard let lo = alongs.min(), let hi = alongs.max(), hi - lo > 20 else { continue }
+            let mid = offsets.sorted()[offsets.count / 2]
+            spans.append((lo, hi, britishLimit(w.kmh, at: w.line[0]), mid))
         }
         guard !spans.isEmpty else { return [] }
-        // Sample every 25 m; where roads overlap, the shorter (more specific) one wins.
+        // Every 25 m. Where two limits overlap, the road closest to the car wins, not the one below.
         var out: [SpeedLimit] = []
         let total = cum.last ?? 0
         var m = 0.0
         while m <= total {
-            let here = spans.filter { $0.from - 15 <= m && m <= $0.to + 15 }.min { ($0.to - $0.from) < ($1.to - $1.from) }
+            let here = spans.filter { $0.from - 15 <= m && m <= $0.to + 15 }.min { a, b in
+                if abs(a.offset - b.offset) > 3 { return a.offset < b.offset }
+                return (a.to - a.from) < (b.to - b.from)
+            }
             let kmh = here?.kmh
             if out.last.map({ $0.kmh != kmh }) ?? true { out.append(SpeedLimit(startMeters: m, kmh: kmh)) }
             m += 25
         }
         return out
+    }
+
+    /// True when the mapped road runs with the route, not across it.
+    private static func sameDirection(way: [LatLng], index: Int, route: [LatLng], along: Double, cumulative cum: [Double]) -> Bool {
+        let j = min(index, way.count - 2)
+        guard j >= 0, way.count >= 2 else { return true }
+        let wayBearing = Geo.bearing(way[j], way[j + 1])
+        let a = Geo.point(along: route, meters: max(0, along - 12), cumulative: cum)
+        let b = Geo.point(along: route, meters: along + 12, cumulative: cum)
+        guard a.distance(to: b) > 6 else { return true }
+        var delta = abs(wayBearing - Geo.bearing(a, b))
+        if delta > 180 { delta = 360 - delta }
+        return delta < 38 || delta > 142
     }
 
     public static func query(filter: String, speed: Bool, plate: Bool, watch: Bool = false) -> String {

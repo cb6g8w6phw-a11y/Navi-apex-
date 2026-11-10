@@ -345,8 +345,18 @@ struct BrowseOverlay: View {
                             MapFab(icon: "square.3.layers.3d", size: 56) { model.showLayers = true }
                                 .accessibilityLabel("Map layers")
                             if settings.parkingButton || settings.parking != nil {
-                                MapFab(icon: "parkingsign", tint: settings.parking != nil ? Vela.routeBlue : .primary, size: 56) {
-                                    if let p = settings.parking { model.select(p) } else { model.saveParking() }
+                                Menu {
+                                    Button { model.saveParking() } label: { Label("Tu stoję", systemImage: "parkingsign") }
+                                    if settings.parking != nil {
+                                        Button { model.walkToCar() } label: { Label("Prowadź pieszo do auta", systemImage: "figure.walk") }
+                                        Button(role: .destructive) { model.clearParking() } label: { Label("Zapomnij miejsce", systemImage: "trash") }
+                                    }
+                                } label: {
+                                    Image(systemName: "parkingsign")
+                                        .font(.system(size: 22, weight: .semibold))
+                                        .foregroundColor(settings.parking != nil ? Vela.routeBlue : .primary)
+                                        .frame(width: 56, height: 56)
+                                        .glassButton(Circle())
                                 }
                             }
                             if model.mapHeading > 1 && model.mapHeading < 359 {
@@ -386,7 +396,7 @@ struct BrowseOverlay: View {
                                         }
                                     }
                                     Button { showClosure = true } label: { Label("Zgłoś zamknięcie", systemImage: "nosign") }
-                                    Button { model.saveParking() } label: { Label("I parked here", systemImage: "parkingsign") }
+                                    Button { model.saveParking() } label: { Label("Tu stoję", systemImage: "parkingsign") }
                                 }
                             }
                         }
@@ -706,11 +716,11 @@ struct Shortcuts: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            PlaceTile(model: model, icon: "house.fill", color: Vela.routeBlue, title: "Home", place: settings.home) {
+            PlaceTile(model: model, icon: "house.fill", color: Vela.routeBlue, title: "Dom", place: settings.home) {
                 done()
                 model.picking = .home
             } go: { done() }
-            PlaceTile(model: model, icon: "briefcase.fill", color: Color(hex: 0x8B5CF6), title: "Work", place: settings.work) {
+            PlaceTile(model: model, icon: "briefcase.fill", color: Color(hex: 0x8B5CF6), title: "Praca", place: settings.work) {
                 done()
                 model.picking = .work
             } go: { done() }
@@ -731,6 +741,12 @@ struct PlaceTile: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let subtitle: String = {
+            guard let p = place else { return "Stuknij, aby ustawić" }
+            let usual = TripExtras.usual(id: p.id)
+            let dist = model.userLatLng.map { Fmt.distance($0.distance(to: p.location)) }
+            return [dist, usual].compactMap { $0 }.joined(separator: " · ")
+        }()
         Button {
             if let p = place { go(); model.openDirections(to: p) } else { unset() }
         } label: {
@@ -741,7 +757,7 @@ struct PlaceTile: View {
                     .background(Circle().fill(place == nil ? Color.gray : color))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 15, weight: .bold)).lineLimit(1)
-                    Text(place.flatMap { p in model.userLatLng.map { $0.distance(to: p.location) } }.map(Fmt.distance) ?? (place == nil ? "Tap to set" : "Tap to go"))
+                    Text(subtitle)
                         .font(.system(size: 12, weight: .medium)).foregroundColor(Vela.muted(scheme)).lineLimit(1)
                 }
                 Spacer(minLength: 0)
@@ -754,8 +770,8 @@ struct PlaceTile: View {
         .buttonStyle(.plain)
         .foregroundColor(.primary)
         .contextMenu {
-            if place != nil, title == "Home" || title == "Work" {
-                Button { model.picking = title == "Home" ? .home : .work } label: { Label("Change \(title.lowercased())", systemImage: "pencil") }
+            if place != nil, title == "Dom" || title == "Praca" {
+                Button { model.picking = title == "Dom" ? .home : .work } label: { Label("Zmień", systemImage: "pencil") }
             }
         }
         .accessibilityLabel(place == nil ? "\(title), not set" : "Go to \(title)")

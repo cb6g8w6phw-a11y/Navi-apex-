@@ -432,18 +432,27 @@ final class AppModel: ObservableObject {
             notice = location.denied ? "Location is off for Navapp. Turn it on in Settings to save where you parked." : "Still finding your location. Try again in a moment."
             return
         }
-        var p = Place(id: "parking:\(Int(Date().timeIntervalSince1970))", name: "Parked car", location: me, source: "osm")
+        var p = Place(id: "parking:\(Int(Date().timeIntervalSince1970))", name: "Zaparkowane auto", location: me, source: "osm")
         let f = DateFormatter()
         f.timeStyle = .short
         f.dateStyle = .none
-        p.category = "Parked at \(f.string(from: Date()))"
+        p.category = "Zapisane o \(f.string(from: Date()))"
         settings.parking = p
-        notice = "Parking spot saved. Tap the P button to find your car."
+        notice = "Tu stoisz. Przycisk P prowadzi z powrotem pieszo."
         let pid = p.id
         Task {
             guard let found = await Photon.reverse(me), settings.parking?.id == pid else { return }
             settings.parking?.address = [found.name, found.address].compactMap { $0 }.joined(separator: ", ")
         }
+    }
+
+    /** Walking route back to the saved car. Does not change the usual mode. */
+    func walkToCar() {
+        guard let p = settings.parking else { return }
+        autoStart = false
+        directions = DirectionsState(destination: p, mode: .walk)
+        detent = .half
+        loadAllModes()
     }
 
     func clearParking() {
@@ -687,6 +696,7 @@ final class AppModel: ObservableObject {
     func startNavigation() {
         guard let d = directions, let route = d.route, !d.reversed else { return }
         let n = Navigator(route: route, destination: d.destination, stops: d.stops, settings: settings)
+        TripExtras.remember(id: d.destination.id, minutes: route.durationSeconds / 60)
         nav = n
         navSub = n.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
         n.onFinished = { [weak self, weak n] in
