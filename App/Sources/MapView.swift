@@ -453,23 +453,22 @@ struct VelaMapView: UIViewRepresentable {
             rebuildRail()
         }
 
-        /** One Apple map for driving, walking and cycling. Raster tiles rebuilt themselves on every pinch. */
+        /** One Apple map. Switching to walking or cycling must not rebuild it. */
         private func configure(_ map: MKMapView, navigating: Bool) {
             let s = model.settings
-            let driving = Self.surfaceMode(model) == .drive
-            let key = "\(s.satellite)\(navigating)\(s.traffic)\(driving)"
+            let key = "\(s.satellite)\(navigating)\(s.traffic)"
             guard key != lastConfigKey else { return }
             lastConfigKey = key
             map.selectableMapFeatures = [.pointsOfInterest]
             let poi: MKPointOfInterestFilter = navigating ? .excludingAll : .includingAll
             if s.satellite {
                 let c = MKHybridMapConfiguration(elevationStyle: .realistic)
-                c.showsTraffic = s.traffic && !navigating && driving
+                c.showsTraffic = s.traffic && !navigating
                 c.pointOfInterestFilter = poi
                 map.preferredConfiguration = c
             } else {
                 let c = MKStandardMapConfiguration(elevationStyle: .realistic, emphasisStyle: .default)
-                c.showsTraffic = s.traffic && !navigating && driving
+                c.showsTraffic = s.traffic && !navigating
                 c.pointOfInterestFilter = poi
                 map.preferredConfiguration = c
             }

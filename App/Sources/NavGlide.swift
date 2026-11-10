@@ -168,7 +168,9 @@ final class NavGlide: NSObject {
             let shiftPx = Self.carY(h) - h / 2
             let ahead = Double(shiftPx / h) * dist * 0.5
             let look = moved(coordNow, by: ahead, bearing: shownBearing)
-            let cam = MKMapCamera(lookingAtCenter: look, fromDistance: dist, pitch: 50, heading: shownBearing)
+            // Walking and cycling stay flat. A tilted camera shears a second map over the real one.
+            let pitch: CGFloat = n.route.mode == .drive ? 50 : 0
+            let cam = MKMapCamera(lookingAtCenter: look, fromDistance: dist, pitch: pitch, heading: shownBearing)
             map.setCamera(cam, animated: false)
         }
     }
