@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 struct TripStop: Codable, Equatable {
     var name: String
