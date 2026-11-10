@@ -175,13 +175,22 @@ struct NavLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    EmptyView()
+                    Image(systemName: context.state.symbol)
+                        .font(.system(size: 26, weight: .heavy))
+                        .foregroundStyle(.white)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    EmptyView()
+                    Text(context.state.arrived ? "OK" : context.state.distance)
+                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    EmptyView()
+                    Text(context.state.street)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     IslandCard(state: context.state)
@@ -189,15 +198,16 @@ struct NavLiveActivity: Widget {
                 }
             } compactLeading: {
                 Image(systemName: context.state.symbol)
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundColor(Color.navMint)
+                    .font(.system(size: 15, weight: .heavy))
+                    .foregroundStyle(.white)
             } compactTrailing: {
                 Text(context.state.arrived ? "OK" : context.state.distance)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .frame(maxWidth: 52)
+                    .frame(maxWidth: 56)
             } minimal: {
                 Image(systemName: context.state.alertKind == "camera" ? "camera.fill" : context.state.symbol)
                     .font(.system(size: 13, weight: .heavy))

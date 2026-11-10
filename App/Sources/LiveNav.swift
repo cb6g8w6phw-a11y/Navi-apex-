@@ -72,10 +72,10 @@ final class LiveNav {
     }
 
     private static func state(from nav: Navigator) -> NavActivityAttributes.ContentState {
-        let m = nav.nextManeuver
+        let m = Self.turn(nav)
         let p = nav.progress
-        let headline = InstructionBanner.headline(m)
-        let street = m?.road ?? InstructionBanner.split(headline)?.1 ?? headline
+        let headline = InstructionBanner.headline(m.maneuver)
+        let street = m.maneuver?.road ?? InstructionBanner.split(headline)?.1 ?? headline
         let left = p?.remainingSeconds ?? nav.route.durationSeconds
         let leftMeters = p?.remainingMeters ?? nav.route.distanceMeters
 
@@ -105,9 +105,9 @@ final class LiveNav {
         let place = nav.destination.name.split(separator: ",").first.map(String.init) ?? nav.destination.name
 
         return NavActivityAttributes.ContentState(
-            symbol: nav.arrived ? "mappin.circle.fill" : maneuverSymbol(m?.type ?? .straight),
-            distance: nav.arrived ? "0 m" : Fmt.distance(p?.distanceToNext ?? 0),
-            street: nav.arrived ? nav.destination.name : (m?.instruction ?? street),
+            symbol: nav.arrived ? "mappin.circle.fill" : maneuverSymbol(m.maneuver?.type ?? .straight),
+            distance: nav.arrived ? "0 m" : Fmt.distance(m.meters),
+            street: nav.arrived ? nav.destination.name : (m.maneuver?.instruction ?? street),
             arrival: Fmt.arrival(left),
             remaining: Fmt.duration(left),
             remainingDistance: Fmt.distance(leftMeters),
@@ -121,6 +121,24 @@ final class LiveNav {
             routeLine: "→ \(place)",
             muted: nav.muted
         )
+    }
+
+    /** The next real turn, not a "keep going". Distance is how far that turn is. */
+    private static func turn(_ nav: Navigator) -> (maneuver: Maneuver?, meters: Double) {
+        let along = nav.progress?.alongMeters ?? 0
+        let list = nav.route.maneuvers
+        let start = nav.progress?.nextIndex ?? 0
+        if start < list.count, let m = list[start...].first(where: { isTurn($0.type) }) {
+            return (m, max(0, m.alongMeters - along))
+        }
+        return (nav.nextManeuver, nav.progress?.distanceToNext ?? 0)
+    }
+
+    private static func isTurn(_ t: ManeuverType) -> Bool {
+        switch t {
+        case .straight, .depart, .unknown, .arrive: return false
+        default: return true
+        }
     }
 
     /** A2, E30, DK92 — the numbers worth putting in the island title. */

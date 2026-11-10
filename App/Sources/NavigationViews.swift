@@ -36,7 +36,16 @@ struct NavigationOverlay: View {
     }
 
     /** A chip above the speed badge sits where the road name goes, so the name steps aside for it. */
-    private var chipShowing: Bool { showRiskChip || (nav.aircraftNear != nil && !nav.arrived && aircraftAsChip) || (nav.fuelAhead != nil && !nav.arrived) }
+    private var chipShowing: Bool { showRiskChip || (nav.aircraftNear != nil && !nav.arrived && aircraftAsChip) }
+
+    /** Price in the top-right on every drive, the station ahead or the cheapest one we know. */
+    private var fuelCorner: FuelAhead? {
+        guard !nav.arrived else { return nil }
+        if let f = nav.fuelAhead { return f }
+        guard model.settings.fuelOn, let best = model.fuelBest else { return nil }
+        let meters = model.userLatLng.map { $0.distance(to: best.location) } ?? 0
+        return FuelAhead(station: best, meters: meters, offRoute: meters, saving: nil)
+    }
 
     /** With a camera and a Waze report both up, the average check waits its turn: there's only so much screen. */
     private var showAverage: Bool { !(nav.cameraAhead != nil && nav.wazeAhead != nil) }
@@ -44,6 +53,13 @@ struct NavigationOverlay: View {
     var body: some View {
         // One column, so however many warnings are up, they push the map buttons down rather than cover them.
         VStack(spacing: 10) {
+            if let f = fuelCorner {
+                HStack {
+                    Spacer(minLength: 0)
+                    FuelAheadChip(ahead: f) { withAnimation { nav.dismissFuel() } }
+                }
+                .padding(.horizontal, 12)
+            }
             if nav.isCouch {
                 HStack(spacing: 10) {
                     Text("Symulacja · \(nav.couchTitle)")
@@ -71,6 +87,10 @@ struct NavigationOverlay: View {
                 } else {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let light = nav.signalAhead {
+                        SignalCard(ahead: light)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if nav.isCouch, !nav.arrived {
                     ForEach(Array(nav.couchNotes.enumerated()), id: \.offset) { _, note in
@@ -139,7 +159,6 @@ struct NavigationOverlay: View {
                     // A Waze police card already says it louder; the chip comes back when it's gone.
                     // Only worth a look while driving when it isn't low; it would otherwise sit by the road name.
                     if showRiskChip, let risk = nav.policeRisk { PoliceRiskChip(score: risk) }
-                    if let f = nav.fuelAhead, !nav.arrived { FuelAheadChip(ahead: f) { withAnimation { nav.dismissFuel() } } }
                     MusicPip(music: music) {
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                     }

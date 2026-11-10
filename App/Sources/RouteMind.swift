@@ -44,6 +44,39 @@ struct GuidanceNote: Equatable {
     var tone: String
 }
 
+/** The next traffic light, with an estimated red/green phase. */
+struct SignalAhead: Equatable {
+    var meters: Double
+    var green: Bool
+    var seconds: Int
+    var adviseKmh: Int?
+}
+
+/// A stable cycle for one junction, derived from its position. Not a live city feed.
+struct LightPhase {
+    let cycle: Double
+    let greenFor: Double
+    let offset: Double
+
+    init(at p: LatLng) {
+        let h = abs(Int(p.lat * 8000) &* 31 &+ Int(p.lng * 8000))
+        cycle = Double(72 + (h % 24))
+        greenFor = (cycle * 0.46).rounded()
+        offset = Double(h % Int(cycle))
+    }
+
+    func isGreen(at time: TimeInterval) -> Bool {
+        let phase = (time + offset).truncatingRemainder(dividingBy: cycle)
+        return phase < greenFor
+    }
+
+    func snapshot(at date: Date = Date()) -> (green: Bool, left: Int) {
+        let phase = (date.timeIntervalSince1970 + offset).truncatingRemainder(dividingBy: cycle)
+        if phase < greenFor { return (true, max(1, Int((greenFor - phase).rounded()))) }
+        return (false, max(1, Int((cycle - phase).rounded())))
+    }
+}
+
 /// The Umwelt sticker shown during a couch simulation.
 struct CouchChip: Equatable {
     var name: String
@@ -156,6 +189,20 @@ enum RouteMind {
         let need = distanceMeters / max(4, secondsToGreen) * 3.6
         if need < 25 || need > limit + 3 { return nil }
         return (need / 5).rounded() * 5
+    }
+
+    /// Highest legal speed that still arrives while this light is green. An estimate, not the city's clock.
+    static func lightSpeed(meters: Double, phase: LightPhase, limit: Double) -> Int? {
+        guard meters > 40, meters < 900 else { return nil }
+        let now = Date().timeIntervalSince1970
+        let cap = min(max(limit, 30), 80)
+        var kmh = (cap / 5).rounded(.down) * 5
+        while kmh >= 30 {
+            let travel = meters / (kmh / 3.6)
+            if phase.isGreen(at: now + travel + 1.2) { return Int(kmh) }
+            kmh -= 5
+        }
+        return nil
     }
 
     /// Real low-emission outline, not a rectangle around the city.

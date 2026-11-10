@@ -41,6 +41,8 @@ final class Navigator: ObservableObject {
     @Published private(set) var averageCheck: AverageCheck?
     /** Traffic lights on the route, one per junction, drawn on the map like Waze. */
     @Published private(set) var routeSignals: [LatLng] = []
+    /** The next light ahead, with an estimated red or green and a speed that meets it. */
+    @Published private(set) var signalAhead: SignalAhead?
     /** A quiet note from the driving mind: fuel, border, green wave, tunnel. */
     @Published private(set) var guidance: GuidanceNote?
     /** Set while GPS is being carried by the sensors. */
@@ -265,10 +267,43 @@ final class Navigator: ObservableObject {
         checkAircraft(loc)
         checkZones(p)
         checkStops(p)
+        checkLights(p)
         checkMind(p, loc)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
             speak("Przekraczasz dozwoloną prędkość.")
+        }
+    }
+
+    /** Next light on the route. The phase is an estimate from the junction, so the card is not empty. */
+    private var spokenLightAt = -1.0
+
+    private func checkLights(_ p: RouteTracker.Progress) {
+        guard route.mode == .drive || route.mode == .bike, MindSettings.shared.greenWave else {
+            if signalAhead != nil { signalAhead = nil }
+            return
+        }
+        let along = p.alongMeters
+        let next = routeSignals
+            .map { (pt: $0, at: Geo.project($0, on: route.polyline).along) }
+            .filter { $0.at > along + 25 && $0.at - along < 850 }
+            .min { $0.at < $1.at }
+        guard let next else {
+            if signalAhead != nil { signalAhead = nil }
+            return
+        }
+        let meters = next.at - along
+        let phase = LightPhase(at: next.pt)
+        let snap = phase.snapshot()
+        let kmh = RouteMind.lightSpeed(meters: meters, phase: phase, limit: speedLimitKmh ?? 50)
+        let ahead = SignalAhead(meters: meters, green: snap.green, seconds: snap.left, adviseKmh: kmh)
+        if ahead != signalAhead { signalAhead = ahead }
+        if meters < 420, abs(spokenLightAt - next.at) > 40, !muted, AppSettings.shared.voice {
+            spokenLightAt = next.at
+            let color = snap.green ? "Zielone" : "Czerwone"
+            var line = "Światła za \(Fmt.distance(meters)). \(color) jeszcze około \(snap.left) sekund."
+            if let kmh { line += " Jedź \(kmh) kilometrów na godzinę." }
+            speak(line)
         }
     }
 
@@ -293,10 +328,6 @@ final class Navigator: ObservableObject {
             next = note
         } else if mind.umwelt, let z = RouteMind.umwelt(at: here) {
             next = GuidanceNote(title: "Umweltzone \(z.name)", body: z.body, tone: "info")
-        } else if mind.greenWave, let sig = routeSignals.first,
-                  let kmh = RouteMind.greenWaveKmh(distanceMeters: Geo.project(sig, on: route.polyline).along - p.alongMeters,
-                                                   secondsToGreen: 16, limit: speedLimitKmh ?? 50) {
-            next = GuidanceNote(title: "Zielona fala \(Int(kmh)) km/h", body: "Tyle, żeby wjechać na światła na zielonym.", tone: "good")
         } else if let note = RouteMind.borderFuelNote(
             here: here, destination: destination.location, tripMeters: route.distanceMeters,
             fuelLeft: AppSettings.shared.fuelLeft, fuelTank: AppSettings.shared.fuelTank,
@@ -1067,7 +1098,7 @@ final class Navigator: ObservableObject {
         roadAhead = nil
         detourOffer = nil
         fuelAhead = nil
-        fuelCheckedAt = .distantPast
+        signalAhead = nil
         FuelPrices.shared.resetAhead()
         loadWaze()
         if let fix = lastFix { handle(fix) }
