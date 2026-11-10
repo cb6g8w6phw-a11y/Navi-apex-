@@ -316,6 +316,7 @@ struct TripBody: View {
     @Environment(\.colorScheme) private var scheme
     @State private var pathNote: String?
     @State private var sky: [String] = []
+    @State private var lightsOnRoute: Int?
     @State private var findingParking = false
 
     var body: some View {
@@ -344,10 +345,11 @@ struct TripBody: View {
             }
             .sheetScroll()
             .task(id: d.route?.id) {
-                guard let r = model.directions?.route else { pathNote = nil; sky = []; return }
+                guard let r = model.directions?.route else { pathNote = nil; sky = []; lightsOnRoute = nil; return }
                 pathNote = await TripExtras.pathNote(line: r.polyline, mode: r.mode)
                 let arrive = model.directions?.forecast?.arrive ?? Date().addingTimeInterval(r.durationSeconds)
                 sky = await RouteSky.lines(along: r.polyline, arrive: arrive)
+                lightsOnRoute = r.mode == .drive || r.mode == .bike ? await Overpass.signals(along: r.polyline)?.count : nil
             }
         }
     }
@@ -384,6 +386,10 @@ struct TripBody: View {
             }
             ForEach(sky, id: \.self) { line in
                 Text(line).font(.subheadline).foregroundColor(Vela.muted(scheme))
+            }
+            if let n = lightsOnRoute {
+                Text(n == 0 ? "Na tej trasie nie ma świateł w mapie." : "Na trasie \(n) świateł. Pokażą się w trakcie jazdy.")
+                    .font(.subheadline).foregroundColor(Vela.muted(scheme))
             }
             if r.mode == .drive {
                 let gates = RouteMind.borderChoices(along: r.polyline)

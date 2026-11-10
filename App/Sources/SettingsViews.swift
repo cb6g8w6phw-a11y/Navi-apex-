@@ -228,11 +228,11 @@ struct SettingsView: View {
                     SettingLabel("Unikaj autostrad", detail: "Prowadzi bez autostrad, bocznymi drogami.", icon: "road.lanes", color: 0x1D4ED8)
                 }
                 Toggle(isOn: $mind.avoidHardJunctions) { SettingLabel("Unikaj trudnych skrzyżowań", icon: "arrow.triangle.turn.up.right.circle.fill", color: 0x0F766E) }
-                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", detail: "Objazd tylko wtedy, gdy boczna droga naprawdę jedzie.", icon: "clock.fill", color: 0x2563EB) }
+                Toggle(isOn: $mind.trueTime) { SettingLabel("Prawdziwy czas objazdu", detail: "Nie zjeżdża w boczną, jeśli ta stoi tak samo jak główna. Nie mierzy każdej uliczki.", icon: "clock.fill", color: 0x2563EB) }
                 Toggle(isOn: $mind.deadReckoning) { SettingLabel("Czujniki w tunelu", detail: "Gdy GPS zniknie, pozycja jedzie z czujników po osi drogi.", icon: "location.slash.fill", color: 0x0F766E) }
-                Toggle(isOn: $mind.greenWave) { SettingLabel("Zielona fala", detail: "Podpowiada prędkość, żeby trafić na światła na zielonym.", icon: "lightbulb.fill", color: 0x16A34A) }
+                Toggle(isOn: $mind.greenWave) { SettingLabel("Światła na trasie", detail: "Pokazuje najbliższe światła z mapy. Miasta nie podają, kiedy jest zielone.", icon: "lightbulb.fill", color: 0x16A34A) }
                 Toggle(isOn: $mind.haptics) { SettingLabel("Wibracja przed skrętem", icon: "iphone.radiowaves.left.and.right", color: 0x7C3AED) }
-                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", detail: "Przy granicy DE–PL pokazuje przejście z krótszą kolejką.", icon: "flag.fill", color: 0xDC2626) }
+                Toggle(isOn: $mind.borderAssist) { SettingLabel("Kolejka na granicy", detail: "Typowy czas przejść DE–PL, nie kolejka na żywo.", icon: "flag.fill", color: 0xDC2626) }
                 Toggle(isOn: $mind.umwelt) { SettingLabel("Strefa Umwelt", detail: "Rysuje prawdziwy obrys zielonej strefy.", icon: "leaf.fill", color: 0x16A34A) }
             }
             Section {

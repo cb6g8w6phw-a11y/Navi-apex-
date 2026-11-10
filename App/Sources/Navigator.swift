@@ -334,10 +334,7 @@ final class Navigator: ObservableObject {
         if ahead != signalAhead { signalAhead = ahead }
         if meters < 420, abs(spokenLightAt - next.at) > 40, !muted, AppSettings.shared.voice {
             spokenLightAt = next.at
-            let color = snap.green ? "Zielone" : "Czerwone"
-            var line = "Światła za \(Fmt.distance(meters)). \(color) jeszcze około \(snap.left) sekund."
-            if let kmh { line += " Jedź \(kmh) kilometrów na godzinę." }
-            speak(line)
+            speak("Światła za \(Fmt.spokenDistance(meters)).")
         }
     }
 
@@ -463,8 +460,13 @@ final class Navigator: ObservableObject {
         averageCheck = nil
         routeSignals = []
         let s = AppSettings.shared
-        guard route.mode == .drive else { return }
+        guard route.mode == .drive || route.mode == .bike else { return }
         let line = route.polyline, id = route.id
+        Task {
+            guard let lights = await Overpass.signals(along: line), self.route.id == id, !lights.isEmpty else { return }
+            self.routeSignals = lights
+        }
+        guard route.mode == .drive else { return }
         let speed = s.speedCameras, plate = s.plateCameras
         fullRoadData = false
         matchedLimits = false
@@ -526,7 +528,7 @@ final class Navigator: ObservableObject {
             self.routeCameras = self.onOurSide(CameraAlerts.project(found.cameras, on: line))
             if !self.matchedLimits { self.route.speedLimits = Overpass.speedLimits(found.ways, on: line) }
             self.zones = CameraAlerts.merge(found.zones, CameraAlerts.averageZones(self.routeCameras))
-            self.routeSignals = found.signals
+            if !found.signals.isEmpty { self.routeSignals = found.signals }
         }
     }
 

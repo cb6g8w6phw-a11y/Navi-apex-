@@ -381,7 +381,7 @@ struct FuelAhead: Equatable {
     var saving: Double?
 }
 
-/** The next light: estimated red or green, and a speed that meets the green. */
+/** The next mapped light on this road. Distance is real. The city does not publish the colour. */
 struct SignalCard: View {
     let ahead: SignalAhead
 
@@ -389,17 +389,17 @@ struct SignalCard: View {
         HStack(spacing: 10) {
             Image(systemName: "light.beacon.max.fill")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundColor(ahead.green ? Color(hex: 0x16A34A) : Color(hex: 0xDC2626))
+                .foregroundColor(Color(hex: 0xF59E0B))
                 .frame(width: 36, height: 36)
-                .background(Circle().fill((ahead.green ? Color(hex: 0x16A34A) : Color(hex: 0xDC2626)).opacity(0.16)))
+                .background(Circle().fill(Color(hex: 0xF59E0B).opacity(0.16)))
             VStack(alignment: .leading, spacing: 1) {
-                Text(ahead.green ? "Zielone jeszcze około \(ahead.seconds) s" : "Czerwone jeszcze około \(ahead.seconds) s")
+                Text("Światła za \(Fmt.distance(ahead.meters))")
                     .font(.system(size: 15, weight: .bold))
                     .lineLimit(1)
-                Text(advice)
+                Text("Na mapie tej drogi. Koloru świateł miasto nie podaje.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             Spacer(minLength: 4)
             Text(Fmt.distance(ahead.meters))
@@ -409,11 +409,6 @@ struct SignalCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var advice: String {
-        if let k = ahead.adviseKmh { return "Światła za \(Fmt.distance(ahead.meters)) · jedź \(k) km/h" }
-        return "Światła za \(Fmt.distance(ahead.meters)) · czas przybliżony"
     }
 }
 

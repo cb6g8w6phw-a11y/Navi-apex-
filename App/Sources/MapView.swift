@@ -650,7 +650,7 @@ struct VelaMapView: UIViewRepresentable {
         }
 
         private func renderSignals(_ map: MKMapView) {
-            let lights = gates[1] ? (model.nav?.routeSignals ?? []) : []
+            let lights = (model.nav != nil || gates[1]) ? (model.nav?.routeSignals ?? []) : []
             let key = "\(lights.count)\(lights.first?.lat ?? 0)"
             guard key != lastSignalsKey else { return }
             lastSignalsKey = key

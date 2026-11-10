@@ -27,6 +27,7 @@ public struct AverageSpeedZone: Hashable, Sendable {
  */
 public enum Overpass {
     public static let endpoints = [
+        "https://overpass.openstreetmap.fr/api/interpreter",
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
@@ -208,11 +209,35 @@ public enum Overpass {
         guard line.count >= 2 else { return [] }
         let cum = Geo.cumulative(line)
         let on = signals.map { ($0, Geo.project($0, on: line, cumulative: cum)) }
-            .filter { $0.1.offset < 20 }
+            .filter { $0.1.offset < 45 }
             .sorted { $0.1.along < $1.1.along }
         var out: [(LatLng, Double)] = []
         for (p, at) in on where out.last.map({ at.along - $0.1 >= 40 }) ?? true { out.append((p, at.along)) }
         return out.map(\.0)
+    }
+
+    /// Traffic lights only. A short question, so it comes back while the camera query is still waiting.
+    public static func signals(along line: [LatLng]) async -> [LatLng]? {
+        guard line.count >= 2 else { return [] }
+        var all: [LatLng] = []
+        var answered = false
+        for piece in pieces(line, meters: 18_000) {
+            let maxPts = 90
+            let pts = piece.count <= maxPts ? piece : (0..<maxPts).map {
+                piece[min(piece.count - 1, Int((Double($0) * Double(piece.count - 1) / Double(maxPts - 1)).rounded()))]
+            }
+            let coords = pts.map { String(format: "%.5f,%.5f", $0.lat, $0.lng) }.joined(separator: ",")
+            let q = "[out:json][timeout:15];node[\"highway\"=\"traffic_signals\"](around:60,\(coords));out body 500;"
+            guard let data = await firstAnswer(q, stagger: 4, valid: { jsonHasElements($0) }) else { continue }
+            answered = true
+            all += parseSignalNodes(data).map(\.at)
+        }
+        guard answered else { return nil }
+        return signalsOnRoute(all, line: line)
+    }
+
+    private static func jsonHasElements(_ data: Data) -> Bool {
+        ((try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["elements"] as? [Any]) != nil
     }
 
     static func parseWays(_ data: Data) -> [LimitWay] {
