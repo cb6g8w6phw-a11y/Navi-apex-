@@ -53,8 +53,12 @@ final class Navigator: ObservableObject {
     @Published private(set) var couchNotes: [GuidanceNote] = []
     @Published private(set) var couchChip: CouchChip?
     var isCouch: Bool { couch }
+    /// A real trip, not a couch test or a screenshot run.
+    var countsForHistory: Bool { !couch && !demoAlerts }
 
     let destination: Place
+    /// When this trip started, for the history.
+    let began = Date()
     /** Stops still ahead, in trip order; each is dropped once reached. */
     @Published private(set) var stops: [Place]
     private var tracker: RouteTracker

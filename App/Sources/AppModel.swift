@@ -79,6 +79,11 @@ struct DirectionsState {
     var transitTime: Date?
     var arriveBy = false
     var trip = 0
+    /// 0 leave now, 1 leave at [planWhen], 2 be there by [planWhen].
+    var planKind = 0
+    var planWhen = Date()
+    var forecast: DriveForecast?
+    var forecastBusy = false
     /// One line under the route title when the drive still has to enter a low-emission zone.
     var stickerNote: String?
 
@@ -482,6 +487,23 @@ final class AppModel: ObservableObject {
         loadAllModes()
     }
 
+    func rideAgain(_ trip: TripRecord) {
+        var place = Place(id: trip.placeId, name: trip.name, location: LatLng(trip.lat, trip.lng), source: "history")
+        place.distanceMeters = userLatLng?.distance(to: place.location)
+        tab = .map
+        openDirections(to: place)
+        if let mode = TravelMode(rawValue: trip.mode) {
+            directions?.transit = false
+            directions?.mode = mode
+        }
+        if !trip.stops.isEmpty {
+            directions?.stops = trip.stops.map {
+                Place(id: "stop:\($0.lat),\($0.lng)", name: $0.name, location: LatLng($0.lat, $0.lng), source: "history")
+            }
+            reloadRoutes()
+        }
+    }
+
     func closeDirections() {
         autoStart = false
         directions = nil
@@ -609,6 +631,7 @@ final class AppModel: ObservableObject {
             }
         }
         loadTransit()
+        loadForecast()
     }
 
     /// The green line under the route title. Says the zone is on the trip; it does not pretend the route avoids it.
@@ -671,6 +694,34 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Time-of-day traffic for "I'll leave at" and "I have to be there at". The roads stay as they are.
+    func setDrivePlan(kind: Int, at date: Date) {
+        directions?.planKind = kind
+        directions?.planWhen = date
+        directions?.forecast = nil
+        loadForecast()
+    }
+
+    private func loadForecast() {
+        guard let d = directions, d.mode == .drive, d.planKind != 0, let me = userLatLng else {
+            directions?.forecast = nil
+            directions?.forecastBusy = false
+            return
+        }
+        let (from, to) = d.reversed ? (d.destination.location, me) : (me, d.destination.location)
+        let via = (d.reversed ? d.stops.reversed() : d.stops).map(\.location)
+        let kind = d.planKind, when = d.planWhen, dest = d.destination.id
+        let hw = settings.avoidHighways, tolls = settings.avoidTolls
+        directions?.forecastBusy = true
+        Task {
+            let found = await TripLog.forecast(from: from, to: to, via: via, kind: kind, when: when,
+                                               avoidHighways: hw, avoidTolls: tolls)
+            guard directions?.destination.id == dest, directions?.planKind == kind else { return }
+            directions?.forecast = found
+            directions?.forecastBusy = false
+        }
+    }
+
     func frameRoute() {
         if let t = directions?.pickedTrip {
             if t.path.count >= 2 { frame(t.path, bottomFraction: 0.42) }
@@ -710,6 +761,18 @@ final class AppModel: ObservableObject {
     }
 
     func endNavigation() {
+        if let n = nav, n.countsForHistory {
+            let driven = n.progress?.alongMeters ?? 0
+            let seconds = Date().timeIntervalSince(n.began)
+            if driven > 250, seconds > 20 {
+                TripLog.shared.add(TripRecord(
+                    id: UUID(), when: n.began, name: n.destination.name, placeId: n.destination.id,
+                    lat: n.destination.location.lat, lng: n.destination.location.lng,
+                    mode: n.route.mode.rawValue, drivenMeters: driven, seconds: seconds, arrived: n.arrived,
+                    stops: n.stops.map { TripStop(name: $0.name, lat: $0.location.lat, lng: $0.location.lng) }
+                ))
+            }
+        }
         nav?.stop()
         glide.stop()
         nav = nil

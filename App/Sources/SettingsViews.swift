@@ -76,6 +76,7 @@ struct SettingsView: View {
     var calibrate: (() -> Void)? = nil
     /** Opens a real route on the map. The string comes back only when the route could not be fetched. */
     var simulate: ((CouchScene, @escaping (String?) -> Void) -> Void)? = nil
+    var rideAgain: ((TripRecord) -> Void)? = nil
     let onChange: () -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -120,6 +121,10 @@ struct SettingsView: View {
                     menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
                             value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48) { musicPage }
                     menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
+                    menuRow("Historia jazd", detail: "Kilometry, czas i trasy do powtórzenia",
+                            icon: "clock.arrow.circlepath", color: 0x0F766E) {
+                        TripHistoryPage { rideAgain?($0) }
+                    }
                     menuRow("Prywatność", detail: "Navapp bez Google", value: settings.noGoogle ? "Włączone" : nil,
                             icon: "lock.fill", color: 0x475569) { privacyPage }
                     menuRow("O aplikacji", detail: "Wersja " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }

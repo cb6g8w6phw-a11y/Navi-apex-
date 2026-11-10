@@ -150,13 +150,14 @@ struct TripHeader: View {
                         }
                     } else if let r = d.route {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(Fmt.duration(r.durationSeconds))
+                            let seconds = (d.planKind != 0 ? d.forecast?.seconds : nil) ?? r.durationSeconds
+                            Text(Fmt.duration(seconds))
                                 .font(.system(size: 32, weight: .heavy))
                                 .foregroundColor(TripBody.delayColor(r, scheme))
                                 .lineLimit(1).minimumScaleFactor(0.7)
-                            Text("\(Fmt.distance(r.distanceMeters)) · przyjazd \(Fmt.arrival(r.durationSeconds))")
+                            Text(planLine(d, r, seconds))
                                 .font(.system(size: 14, weight: .medium)).foregroundColor(Vela.muted(scheme))
-                                .lineLimit(1).minimumScaleFactor(0.8)
+                                .lineLimit(2).minimumScaleFactor(0.8)
                             if r.mode == .drive {
                                 let fact = TripExtras.costLine(meters: r.distanceMeters, consumption: settings.carConsumption,
                                                                litresLeft: settings.fuelLeft, price: model.fuelBest?.price)
@@ -200,6 +201,7 @@ struct TripHeader: View {
                     }
                 }
                 ModeTabs(model: model, state: d)
+                if !d.transit, d.mode == .drive { DrivePlanBar(model: model) }
                 if !d.transit, !d.reversed, d.route != nil {
                     Button { model.startNavigation() } label: {
                         HStack(spacing: 10) {
@@ -218,6 +220,47 @@ struct TripHeader: View {
             .padding(.horizontal, 18)
             .padding(.bottom, 10)
         }
+    }
+
+    private func planLine(_ d: DirectionsState, _ r: Route, _ seconds: Double) -> String {
+        let dist = Fmt.distance(r.distanceMeters)
+        guard d.planKind != 0 else { return "\(dist) · przyjazd \(Fmt.arrival(seconds))" }
+        if d.forecastBusy, d.forecast == nil { return "\(dist) · liczę ruch na tę godzinę…" }
+        guard let f = d.forecast else { return "\(dist) · brak prognozy na tę godzinę" }
+        if d.planKind == 2 {
+            return "Wyjedź o \(TripClock.time.string(from: f.depart)) · bądź o \(TripClock.time.string(from: f.arrive))"
+        }
+        return "\(dist) · na miejscu o \(TripClock.time.string(from: f.arrive))"
+    }
+}
+
+struct DrivePlanBar: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.colorScheme) private var scheme
+    @State private var kind = 0
+    @State private var when = Date()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Kiedy", selection: $kind) {
+                Text("Teraz").tag(0)
+                Text("Wyjadę o").tag(1)
+                Text("Muszę być o").tag(2)
+            }
+            .pickerStyle(.segmented)
+            if kind != 0 {
+                DatePicker("Godzina", selection: $when, in: Date()..., displayedComponents: [.date, .hourAndMinute])
+                    .font(.subheadline)
+                Text("Prognoza typowego ruchu na tę godzinę, nie korek na żywo.")
+                    .font(.caption).foregroundColor(Vela.muted(scheme))
+            }
+        }
+        .onAppear {
+            kind = model.directions?.planKind ?? 0
+            when = model.directions?.planWhen ?? Date()
+        }
+        .onChange(of: kind) { k in model.setDrivePlan(kind: k, at: when) }
+        .onChange(of: when) { w in if kind != 0 { model.setDrivePlan(kind: kind, at: w) } }
     }
 }
 
