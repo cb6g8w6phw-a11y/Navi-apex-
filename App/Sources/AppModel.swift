@@ -132,6 +132,8 @@ final class AppModel: ObservableObject {
     private var pumpInside: String?
     /** The "Add stop" search sheet. */
     @Published var addingStop = false
+    /** Places from Add stop, drawn on the map without changing the route yet. */
+    @Published var stopPreviews: [Place] = []
     @Published var showSaved = false
     /** The sheet for choosing home or work by searching for it. */
     @Published var picking: PickKind?
@@ -497,8 +499,18 @@ final class AppModel: ObservableObject {
 
     func addStop(_ p: Place) {
         guard directions != nil, (directions?.stops.count ?? 0) < 8 else { return }
+        stopPreviews = []
         directions?.stops.append(p)
         reloadRoutes()
+    }
+
+    /** Leave the sheet and drop these places on the map so the stop can be seen before it is added. */
+    func showStopsOnMap(_ places: [Place]) {
+        let pins = Array(places.prefix(30))
+        guard !pins.isEmpty else { return }
+        stopPreviews = pins
+        addingStop = false
+        frame(pins.map(\.location), bottomFraction: 0.42, top: 80)
     }
 
     func removeStop(_ i: Int) {

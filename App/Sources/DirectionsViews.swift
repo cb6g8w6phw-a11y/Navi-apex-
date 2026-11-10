@@ -655,52 +655,83 @@ struct StopPicker: View {
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
 
+    private let along: [(String, String)] = [
+        ("Stacje benzynowe", "stacja benzynowa"),
+        ("Kawa", "kawa"),
+        ("Restauracje", "restauracja"),
+        ("Ładowanie auta", "ładowarka samochodowa"),
+    ]
+
     var body: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 if !found.isEmpty {
-                    Section("Results") { ForEach(found) { row($0, icon: "mappin.circle.fill") } }
+                    Section {
+                        Button { model.showStopsOnMap(found) } label: {
+                            Label("Pokaż na mapie", systemImage: "map")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        ForEach(found) { row($0, icon: "mappin.circle.fill") }
+                    } header: {
+                        Text("Wyniki")
+                    }
                 } else if searching {
                     HStack { ProgressView(); Text("Szukam…").foregroundColor(.secondary) }
                 }
                 let mine = [settings.home.map { ($0, "house.fill") }, settings.work.map { ($0, "briefcase.fill") }].compactMap { $0 }
                     + settings.saved.prefix(12).map { ($0, "bookmark.fill") }
                 if !mine.isEmpty && found.isEmpty {
-                    Section("Your places") { ForEach(mine, id: \.0.id) { row($0.0, icon: $0.1) } }
+                    Section("Twoje miejsca") { ForEach(mine, id: \.0.id) { row($0.0, icon: $0.1) } }
                 }
                 if found.isEmpty && !searching {
-                    Section("Along the way") {
-                        ForEach([Fmt.yards ? "Petrol stations" : "Gas stations", "Coffee", "Restaurants", "EV charging"], id: \.self) { c in
-                            Button { query = c; run() } label: { Label(c, systemImage: "magnifyingglass") }
+                    Section("Po drodze") {
+                        ForEach(along, id: \.0) { item in
+                            Button { query = item.1; run() } label: { Label(item.0, systemImage: "magnifyingglass") }
                         }
                     }
                 }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search for a stop")
+            .scrollContentBackground(.hidden)
+            .listRowSeparator(.hidden)
+            .listRowBackground(StopGlassRow())
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Szukaj przystanku")
             .onSubmit(of: .search) { run() }
-            .kiteList()
-            .navigationTitle("Add stop")
+            .navigationTitle("Dodaj przystanek")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Anuluj") { dismiss() } } }
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground { StopSheetGlass() }
     }
 
     private func row(_ p: Place, icon: String) -> some View {
-        Button {
-            model.addStop(p)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon).foregroundColor(.secondary).frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(p.name).foregroundColor(.primary).lineLimit(1)
-                    if let a = p.address { Text(a).font(.caption).foregroundColor(.secondary).lineLimit(1) }
-                }
-                Spacer()
-                if let d = model.userLatLng?.distance(to: p.location) {
-                    Text(Fmt.distance(d)).font(.caption).foregroundColor(.secondary)
+        HStack(spacing: 10) {
+            Button {
+                model.addStop(p)
+                dismiss()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: icon).foregroundColor(.secondary).frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(p.name).foregroundColor(.primary).lineLimit(1)
+                        if let a = p.address { Text(a).font(.caption).foregroundColor(.secondary).lineLimit(1) }
+                    }
+                    Spacer(minLength: 0)
+                    if let d = model.userLatLng?.distance(to: p.location) {
+                        Text(Fmt.distance(d)).font(.caption).foregroundColor(.secondary)
+                    }
                 }
             }
+            .buttonStyle(.plain)
+            Button { model.showStopsOnMap([p]) } label: {
+                Image(systemName: "map")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Pokaż na mapie")
         }
     }
 
@@ -719,6 +750,35 @@ struct StopPicker: View {
             let r = await PlaceSearch.search(q, center: mid, spanMeters: span, useGoogle: useGoogle)
             found = Array(r.places.prefix(30))
             searching = false
+        }
+    }
+}
+
+/** The sheet itself is glass, with no colour painted behind it. */
+private struct StopSheetGlass: View {
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            Rectangle().fill(.clear).glassEffect(.regular, in: Rectangle())
+        } else {
+            Rectangle().fill(.ultraThinMaterial)
+        }
+    }
+}
+
+/** One stop row, glass only, not a tinted card. */
+private struct StopGlassRow: View {
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.clear)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.vertical, 3)
+                .padding(.horizontal, 2)
+        } else {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .padding(.vertical, 3)
+                .padding(.horizontal, 2)
         }
     }
 }

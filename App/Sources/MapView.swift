@@ -798,15 +798,17 @@ struct VelaMapView: UIViewRepresentable {
         private func renderResults(_ map: MKMapView) {
             let showList = model.directions == nil && model.nav == nil
             let list = showList ? model.visibleResults : []
+            let previews = model.stopPreviews
             let target = model.nav?.destination ?? model.directions?.destination ?? model.selected
             let stops: [Place] = model.nav?.stops ?? model.directions?.stops ?? []
             let ids: String = list.map(\.id).joined(separator: ",")
+            let previewIds: String = previews.map(\.id).joined(separator: ",")
             let stopIds: String = stops.map(\.id).joined(separator: ",")
-            let key = "\(ids)|\(target?.id ?? "")|\(model.directions?.reversed ?? false)|\(model.nav == nil)|\(stopIds)|\(dark)"
+            let key = "\(ids)|\(previewIds)|\(target?.id ?? "")|\(model.directions?.reversed ?? false)|\(model.nav == nil)|\(stopIds)|\(dark)"
             guard key != lastResultsKey else { return }
             lastResultsKey = key
 
-            let pins: [KiteAnnotation] = list.enumerated().compactMap { i, p in
+            let pins: [KiteAnnotation] = (list + previews).enumerated().compactMap { i, p in
                 guard p.id != target?.id else { return nil }
                 let a = KiteAnnotation(layer: .result, id: p.id, coordinate: coord(p.location))
                 a.icon = MapIcons.iconName(for: p)
