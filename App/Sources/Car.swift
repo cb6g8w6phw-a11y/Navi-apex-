@@ -132,6 +132,26 @@ struct CarStatus {
         guard let b = best else { return nil }
         return (b.text, b.urgency)
     }
+
+    /// What the settings card says. Only "w porządku" when a real date or service is saved.
+    var headline: String {
+        guard let u = mostUrgent else { return "Uzupełnij przegląd, OC i olej" }
+        return u.urgency == .ok ? "Wszystko w porządku" : u.text
+    }
+
+    /// How much life the nearest saved thing still has, 0…1. Nil when nothing is filled in.
+    var healthPercent: Double? {
+        var ratios: [Double] = []
+        for item in [insurance, inspection] {
+            guard let d = item.days else { continue }
+            ratios.append(min(1, max(0, Double(d) / 365)))
+        }
+        for p in parts {
+            guard let left = p.kmLeft else { continue }
+            ratios.append(min(1, max(0, Double(left) / Double(max(p.part.intervalKm, 1)))))
+        }
+        return ratios.min()
+    }
 }
 
 // MARK: The capsule counter

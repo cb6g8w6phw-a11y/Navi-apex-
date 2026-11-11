@@ -656,37 +656,37 @@ struct CameraCard: View {
     @State private var pulse = false
 
     var body: some View {
-        let over = alert.limitKmh.map { speedKmh > $0 + 3 } ?? false
+        let over = alert.limitKmh.map { speedKmh > $0 + Double(AppSettings.shared.speedSlack) } ?? false
         let left = min(max(alert.meters / alert.startMeters, 0), 1)
-        let fill: Color = over ? Vela.closed : (alert.kind == .speed ? Vela.camera : Color(hex: 0x8E44AD))
-        // Compact, Waze-style: about half the old card's height and only as wide as it needs,
-        // so the road ahead stays in view; the bright color and pulses keep it hard to miss.
-        VStack(spacing: 7) {
-            HStack(spacing: 10) {
+        let title = alert.kind == .speed ? "Fotoradar za \(Fmt.distance(alert.meters))" : "Kamera tablic za \(Fmt.distance(alert.meters))"
+        let limitLine = alert.limitKmh.map { "Limit \(Int($0.rounded())) km/h" } ?? (alert.kind == .speed ? "Fotoradar" : "Kamera tablic")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
                 CameraBadge(kind: alert.kind, size: 42)
-                VStack(alignment: .leading, spacing: -2) {
-                    Text(Fmt.distance(alert.meters)).font(.system(size: 30, weight: .heavy)).monospacedDigit()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(over ? "Zwolnij" : title)
+                        .font(.system(size: 18, weight: .heavy))
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(over ? "Slow down" : alert.kind == .speed ? "Speed camera" : "Plate camera")
-                        .font(.system(size: 15, weight: .bold))
-                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Text(limitLine)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.82))
                 }
-                if let limit = alert.limitKmh { SpeedLimitSign(kmh: limit, size: 50).padding(.leading, 4) }
+                Spacer(minLength: 8)
+                if let limit = alert.limitKmh { SpeedLimitSign(kmh: limit, size: 46) }
             }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.3))
+                    Capsule().fill(Color.white.opacity(0.22))
                     Capsule().fill(Color.white).frame(width: g.size.width * left)
                 }
             }
-            .frame(height: 5)
+            .frame(height: 4)
         }
         .foregroundColor(.white)
-        .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 10)
-        .fixedSize()
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(fill))
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(pulse ? 0.9 : 0), lineWidth: 3))
-        .shadow(color: fill.opacity(0.55), radius: pulse ? 18 : 8, y: 3)
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(maxWidth: 340, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(over ? Vela.closed : Color(hex: 0x1A2744).opacity(0.92)))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color.white.opacity(pulse ? 0.7 : 0.12), lineWidth: 1))
         .scaleEffect(pulse ? 1.04 : 1)
         .animation(.easeOut(duration: 0.3), value: over)
         .frame(maxWidth: .infinity, alignment: .leading)

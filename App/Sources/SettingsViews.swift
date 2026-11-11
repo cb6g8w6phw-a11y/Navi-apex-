@@ -98,43 +98,62 @@ struct SettingsView: View {
     private var main: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 12) {
-                    menuRow("Głos i jazda", detail: "Polski lektor i domyślny tryb podróży",
-                            icon: "speaker.wave.2.fill", color: 0x0F766E) { drivingPage }
-                    menuRow("Trasy", detail: "Objazd, tunel, granica i kalibracja",
-                            icon: "signpost.right.fill", color: 0x0891B2) { routesPage }
-                    menuRow("Kamery i prędkość", detail: "Ostrzeżenia o fotoradarach, alarm prędkości",
-                            icon: "camera.fill", color: 0xDC2626) { camerasPage }
-                    menuRow("Ostrzeżenia drogowe", detail: Waze.shares.contains(.police) ? "Policja, wypadki, zamknięcia" : "Zamknięcia, samoloty policji",
-                            value: settings.wazeOn ? "Włączone" : "Wyłączone", icon: "exclamationmark.triangle.fill", color: 0x7C3AED) {
-                        WazeSettingsView(settings: settings)
+                VStack(spacing: 14) {
+                    carHero
+                    settingsGroup {
+                        menuRow("Głos i jazda", detail: "Polski lektor i tryb podróży",
+                                icon: "speaker.wave.2.fill", color: 0x0F766E, grouped: true) { drivingPage }
+                        groupLine
+                        menuRow("Trasy", detail: "Objazd, tunel, granica",
+                                icon: "signpost.right.fill", color: 0x0891B2, grouped: true) { routesPage }
+                        groupLine
+                        menuRow("Kamery i prędkość", detail: "Fotoradary, alarm prędkości",
+                                icon: "camera.fill", color: 0xDC2626, grouped: true) { camerasPage }
+                        groupLine
+                        menuRow("Kamery na żywo", detail: "Zdjęcia z autostrad w Niemczech",
+                                icon: "video.fill", color: 0x2563EB, grouped: true) { LiveCamerasPage() }
                     }
-                    menuRow("Ceny paliw", detail: "Najtańsze paliwo w pobliżu i na trasie",
-                            value: settings.fuelOn && !settings.fuelKey.isEmpty ? "Włączone" : nil, icon: "fuelpump.fill", color: 0x2563EB) {
-                        FuelSettingsView(settings: settings)
+                    settingsGroup {
+                        menuRow("Ostrzeżenia drogowe", detail: "Policja, wypadki, zamknięcia",
+                                icon: "exclamationmark.triangle.fill", color: 0x7C3AED, grouped: true,
+                                switchOn: $settings.waze) { WazeSettingsView(settings: settings) }
+                        groupLine
+                        menuRow("Ceny paliw", detail: "Najtańsze w pobliżu i na trasie",
+                                icon: "fuelpump.fill", color: 0x2563EB, grouped: true,
+                                switchOn: $settings.fuelOn) { FuelSettingsView(settings: settings) }
                     }
-                    menuRow("Moje auto", detail: "Ubezpieczenie, przegląd, olej i filtry",
-                            value: CarStatus(settings: settings).mostUrgent?.text, icon: "car.fill", color: 0x16A34A) {
-                        CarPage(settings: settings)
+                    settingsGroup {
+                        menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, parking",
+                                icon: "circle.lefthalf.filled", color: 0x334155, grouped: true) { mapPage }
+                        groupLine
+                        menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
+                                value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48, grouped: true) { musicPage }
+                        groupLine
+                        menuRow("Moje miejsca", detail: "Dom i praca",
+                                icon: "house.fill", color: 0x16A34A, grouped: true) { placesPage }
+                        groupLine
+                        menuRow("Historia jazd", detail: "Kilometry, czas i trasy do powtórzenia",
+                                icon: "clock.arrow.circlepath", color: 0x0F766E, grouped: true) {
+                            TripHistoryPage { rideAgain?($0) }
+                        }
                     }
-                    menuRow("Mapa i wyświetlanie", detail: "Motyw, jednostki, przycisk parkowania", icon: "circle.lefthalf.filled", color: 0x334155) { mapPage }
-                    menuRow("Muzyka", detail: "Apple Music, Spotify i własne linki",
-                            value: MusicCatalog.active(settings).name, icon: "music.note", color: 0xFA2D48) { musicPage }
-                    menuRow("Moje miejsca", detail: "Dom i praca", icon: "house.fill", color: 0x16A34A) { placesPage }
-                    menuRow("Historia jazd", detail: "Kilometry, czas i trasy do powtórzenia",
-                            icon: "clock.arrow.circlepath", color: 0x0F766E) {
-                        TripHistoryPage { rideAgain?($0) }
-                    }
-                    menuRow("Prywatność", detail: "Navapp bez Google", value: settings.noGoogle ? "Włączone" : nil,
-                            icon: "lock.fill", color: 0x475569) { privacyPage }
-                    menuRow("O aplikacji", detail: "Wersja " + version, icon: "info.circle.fill", color: 0x64748B) { aboutPage }
-                    if mind.simUnlocked {
-                        menuRow("Tryb symulacji", detail: "Test Mode · tunel, granica i Umwelt z kanapy",
-                                icon: "play.rectangle.fill", color: 0x0F766E) { simPage }
+                    settingsGroup {
+                        menuRow("Prywatność", detail: "Navapp bez Google",
+                                icon: "lock.fill", color: 0x475569, grouped: true,
+                                switchOn: $settings.noGoogle) { privacyPage }
+                        groupLine
+                        menuRow("O aplikacji", detail: "Wersja " + version,
+                                icon: "info.circle.fill", color: 0x64748B, grouped: true) { aboutPage }
+                        if mind.simUnlocked {
+                            groupLine
+                            menuRow("Tryb symulacji", detail: "Tunel, granica i Umwelt z kanapy",
+                                    icon: "play.rectangle.fill", color: 0x0F766E, grouped: true) { simPage }
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.top, 8)
+                .padding(.bottom, 150)
             }
             .background(PageBackdrop())
             .navigationTitle("Ustawienia")
@@ -160,42 +179,113 @@ struct SettingsView: View {
         return build.isEmpty || build == "1" ? short : "\(short) · \(build)"
     }
 
-    /** One big row of the menu: an icon, the name, what's inside in small, and the page it opens. */
     private func menuRow<Page: View>(_ title: String, detail: String, value: String? = nil, icon: String, color: UInt32,
+                                     grouped: Bool = false, switchOn: Binding<Bool>? = nil,
                                      @ViewBuilder page: @escaping () -> Page) -> some View {
-        NavigationLink {
-            page()
-        } label: {
-            HStack(alignment: .center, spacing: 14) {
-                IconBadge(icon: icon, color: Color(hex: color), size: 38, radius: 11)
-                    .frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .center, spacing: 12) {
+            NavigationLink { page() } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    IconBadge(icon: icon, color: Color(hex: color), size: 36, radius: 12)
+                        .frame(width: 36, height: 36)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        Text(detail)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if let value, switchOn == nil {
+                        Text(value)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    if switchOn == nil {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.secondary.opacity(0.7))
+                    }
                 }
-                if let value {
-                    Text(value)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            if let switchOn {
+                Toggle("", isOn: switchOn).labelsHidden()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, grouped ? 10 : 14)
+        .modifier(OptionalGlass(on: !grouped))
+    }
+
+    private var groupLine: some View {
+        Divider().padding(.leading, 60)
+    }
+
+    private func settingsGroup<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0) { content() }
+            .glassCard(22)
+    }
+
+    /// The car, from the dates and kilometres already saved. Nothing here is invented.
+    private var carHero: some View {
+        let status = CarStatus(settings: settings)
+        let oil = status.parts.first { $0.part.name.localizedCaseInsensitiveContains("olej") } ?? status.parts.first
+        return NavigationLink { CarPage(settings: settings) } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    IconBadge(icon: "car.fill", color: Color(hex: 0x16A34A), size: 44, radius: 14)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Moje auto").font(.system(size: 18, weight: .bold))
+                        Text(status.headline).font(.subheadline).foregroundColor(.secondary).lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    if let pct = status.healthPercent {
+                        ZStack {
+                            Circle().stroke(Color.white.opacity(0.15), lineWidth: 5)
+                            Circle().trim(from: 0, to: pct)
+                                .stroke(Color(hex: 0x2DD4BF), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                            Text("\(Int((pct * 100).rounded()))%")
+                                .font(.system(size: 12, weight: .bold)).monospacedDigit()
+                        }
+                        .frame(width: 52, height: 52)
+                    }
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.7))
-                    .frame(width: 14, alignment: .center)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if let d = status.inspection.days {
+                            carChip(icon: "wrench.and.screwdriver", text: d < 0 ? "Przegląd \(-d) dni po" : "Przegląd za \(d) dni")
+                        }
+                        if let d = status.insurance.days {
+                            carChip(icon: "checkmark.shield", text: d < 0 ? "OC \(-d) dni po" : (d > 0 ? "OC aktywne" : "OC dziś"))
+                        }
+                        if let left = oil?.kmLeft {
+                            carChip(icon: "drop", text: left < 0 ? "Olej \(Fmt.thousand(-left)) km po" : "Olej za \(Fmt.thousand(left)) km")
+                        }
+                        if status.inspection.days == nil && status.insurance.days == nil && oil?.kmLeft == nil {
+                            carChip(icon: "plus", text: "Dodaj przegląd, OC i olej")
+                        }
+                    }
+                }
             }
             .padding(14)
-            .glassCard(18)
+            .glassCard(22)
         }
+        .buttonStyle(.plain)
+    }
+
+    private func carChip(icon: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 12, weight: .bold))
+            Text(text).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+        }
+        .padding(.horizontal, 10).frame(height: 32)
+        .background(Capsule().fill(Color.white.opacity(0.12)))
     }
 
     private var drivingPage: some View {
@@ -265,6 +355,19 @@ struct SettingsView: View {
             Section("Ostrzeżenia") {
                 Toggle(isOn: $settings.cameraWarnings) { SettingLabel("Powiadom, gdy zbliża się fotoradar", icon: "speaker.wave.3.fill", color: 0xDC2626) }
                 Toggle(isOn: $settings.speedingAlert) { SettingLabel("Powiadom, gdy przekraczam prędkość", icon: "gauge.with.dots.needle.67percent", color: 0xEA580C) }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Alarm prędkości").font(.body)
+                        Spacer()
+                        Text("+\(settings.speedSlack) km/h").font(.body.weight(.bold)).monospacedDigit()
+                    }
+                    Slider(value: Binding(
+                        get: { Double(settings.speedSlack) },
+                        set: { settings.speedSlack = Int($0.rounded()) }
+                    ), in: 0...20, step: 1)
+                    Text("Mówi dopiero tyle ponad limit, i dopiero gdy trwa to kilka sekund. Nie piszczy od jednego skoku GPS.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
             }
             Section {
                 Toggle(isOn: $settings.speedCameras) { SettingLabel("Fotoradary", icon: "camera.fill", color: 0xDC2626) }
@@ -287,9 +390,13 @@ struct SettingsView: View {
     private var mapPage: some View {
         Form {
             Section {
-                Picker(selection: $settings.theme) {
-                    ForEach(ThemeMode.allCases) { Text($0.label).tag($0) }
-                } label: { SettingLabel("Motyw", icon: "circle.lefthalf.filled", color: 0x334155) }
+                Picker("Motyw mapy", selection: $settings.theme) {
+                    Text("Jasny").tag(ThemeMode.light)
+                    Text("Auto").tag(ThemeMode.system)
+                    Text("Ciemny").tag(ThemeMode.dark)
+                    Text("Czarny").tag(ThemeMode.black)
+                }
+                .pickerStyle(.segmented)
                 Picker(selection: $settings.glassStyle) {
                     ForEach(GlassStyle.allCases) { Text($0.label).tag($0) }
                 } label: { SettingLabel("Szkło", icon: "rectangle.on.rectangle", color: 0x6366F1) }
@@ -425,7 +532,7 @@ struct SettingsView: View {
                 Link("Navapp na GitHubie", destination: URL(string: "https://github.com/matteofx1/kite-maps")!)
                 Link("Na bazie Vela Maps dla Androida", destination: URL(string: "https://github.com/PimpinPumpkin/Vela")!)
                 Link("Raporty Waze na żywo jak w SABRE Plus (MIT)", destination: URL(string: "https://github.com/nicglazkov/highway-radar-sabre-plus")!)
-                Text("Wolne oprogramowanie na licencji GPL-3.0. Mapy © Apple. Trasy © FOSSGIS OSRM, współtwórcy OpenStreetMap. Cieniowanie © Esri. Ceny paliw: Tankerkönig / MTS-K (CC BY 4.0). Roboty i zamknięcia: Autobahn GmbH. Pogoda: Open-Meteo.com (CC BY 4.0). Radar opadów: Deutscher Wetterdienst (DWD). Obrysy stref: Tyremap (CC BY 4.0) i OpenStreetMap (ODbL).")
+                Text("Wolne oprogramowanie na licencji GPL-3.0. Mapy © Apple. Trasy © FOSSGIS OSRM, współtwórcy OpenStreetMap. Cieniowanie © Esri. Ceny paliw: Tankerkönig / MTS-K (CC BY 4.0). Roboty, zamknięcia i zdjęcia z autostrad: Autobahn GmbH. Pogoda: Open-Meteo.com (CC BY 4.0). Radar opadów: Deutscher Wetterdienst (DWD). Obrysy stref: Tyremap (CC BY 4.0) i OpenStreetMap (ODbL).")
                     .font(.caption).foregroundColor(.secondary)
             }
         }
@@ -648,6 +755,14 @@ struct WazeSettingsView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/** A glass card around a lone row, and nothing when the row already sits in a group. */
+private struct OptionalGlass: ViewModifier {
+    var on: Bool
+    func body(content: Content) -> some View {
+        if on { content.glassCard(18) } else { content }
     }
 }
 

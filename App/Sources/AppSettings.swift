@@ -81,6 +81,8 @@ final class AppSettings: ObservableObject {
     @Published var cameraWarnings: Bool { didSet { d.set(cameraWarnings, forKey: "cameraWarnings") } }
     /** Say so when driving over the posted limit. Off by default, like Vela. */
     @Published var speedingAlert: Bool { didSet { d.set(speedingAlert, forKey: "speedingAlert") } }
+    /** How many km/h over the posted limit before that warning can speak. */
+    @Published var speedSlack: Int { didSet { d.set(speedSlack, forKey: "speedSlack") } }
     /** Live reports from Waze drivers (police, crashes, hazards…): on the map, and warned about while driving. */
     @Published var waze: Bool { didSet { d.set(waze, forKey: "waze") } }
     /** The "Waze alerts (beta)" question has been answered, on first launch or after updating. */
@@ -171,6 +173,7 @@ final class AppSettings: ObservableObject {
         // On for new users, except where warning of cameras is against the law.
         cameraWarnings = d.object(forKey: "cameraWarnings") as? Bool ?? !Self.camerasRestricted
         speedingAlert = d.bool(forKey: "speedingAlert")
+        speedSlack = min(20, max(0, d.object(forKey: "speedSlack") as? Int ?? 5))
         parkingButton = d.object(forKey: "parkingButton") as? Bool ?? true
         hapticLevel = Haptics.Level(rawValue: d.string(forKey: "hapticLevel") ?? "") ?? .medium
         // Off until the person says yes on the Waze screen.

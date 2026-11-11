@@ -277,6 +277,7 @@ final class Navigator: ObservableObject {
         checkLights(p)
         checkZoneAndSchool(p)
         checkMind(p, loc)
+        speeding.toleranceKmh = Double(AppSettings.shared.speedSlack)
         if route.mode == .drive, AppSettings.shared.speedingAlert,
            speeding.update(speedKmh: loc.speed >= 0 ? loc.speed * 3.6 : nil, limitKmh: speedLimitKmh, now: loc.timestamp.timeIntervalSince1970) {
             speak("Przekraczasz dozwoloną prędkość.")

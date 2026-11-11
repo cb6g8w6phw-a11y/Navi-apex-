@@ -295,7 +295,7 @@ struct SettingsPage: View {
                              simulate: { scene, done in model.startCouch(scene, done: done) },
                              rideAgain: { model.rideAgain($0) },
                              onChange: { model.reloadRoutes() })
-                    .safeAreaInset(edge: .bottom) { Color.clear.frame(height: KiteDock.height + 10) }
+                    .safeAreaInset(edge: .bottom) { Color.clear.frame(height: KiteDock.height + geo.safeAreaInsets.bottom + 48) }
                 KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
                     .ignoresSafeArea(edges: .bottom)
                     .offset(y: geo.safeAreaInsets.bottom)
