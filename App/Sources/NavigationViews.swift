@@ -133,21 +133,20 @@ struct NavigationOverlay: View {
                     // A Waze police card already says it louder; the chip comes back when it's gone.
                     // Only worth a look while driving when it isn't low; it would otherwise sit by the road name.
                     if showRiskChip, let risk = nav.policeRisk { PoliceRiskChip(score: risk) }
-                    MusicPip(music: music) {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
-                    }
                     SpeedBadge(mps: nav.speedMps, limitKmh: nav.speedLimitKmh)
                 }
-                Spacer()
+                Spacer(minLength: 8)
+                if nav.following, !nav.arrived, !chipShowing, let road = nav.currentRoad {
+                    Text(road)
+                        .font(.system(size: 16, weight: .bold))
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                        .padding(.horizontal, 14).frame(height: 36)
+                        .foregroundColor(.white)
+                        .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.92)))
+                        .overlay(Capsule().strokeBorder(Color(hex: 0x2DD4BF).opacity(0.8), lineWidth: 1.5))
+                }
+                Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 8) {
-                    if tripAside, !nav.arrived, !confirmEnd {
-                        TripSide(nav: nav, onEnd: {
-                            if nav.arrived { model.endNavigation() } else {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = true }
-                            }
-                        })
-                        .matchedGeometryEffect(id: "trip", in: tripMorph)
-                    }
                     MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 36) { showClosure = true }
                         .accessibilityLabel("Zgłoś zamknięcie")
                     MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 36) {
@@ -156,6 +155,14 @@ struct NavigationOverlay: View {
                     .accessibilityLabel("Centre on me")
                     MapFab(icon: nav.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", size: 36) { nav.muted.toggle() }
                         .accessibilityLabel(nav.muted ? "Turn voice on" : "Mute voice")
+                    if tripAside, !nav.arrived, !confirmEnd {
+                        TripSide(nav: nav, onEnd: {
+                            if nav.arrived { model.endNavigation() } else {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = true }
+                            }
+                        })
+                        .matchedGeometryEffect(id: "trip", in: tripMorph)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -192,24 +199,6 @@ struct NavigationOverlay: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .background(
-            // The road you're on, just under the arrow (the map keeps the arrow at this height while following).
-            GeometryReader { g in
-                if nav.following, !nav.arrived, !chipShowing, let road = nav.currentRoad {
-                    Text(road)
-                        .font(.system(size: 17, weight: .bold))
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                        .padding(.horizontal, 14).frame(height: 36)
-                        .foregroundColor(.white)
-                        .background(Capsule().fill(Color(hex: 0x0F172A).opacity(0.92)))
-                        .overlay(Capsule().strokeBorder(Color(hex: 0x2DD4BF).opacity(0.8), lineWidth: 1.5))
-                        // Between the speed sign and the mute button, which sit level with it now the car is lower.
-                        .frame(maxWidth: panel > 0 ? g.size.width - panel - 80 : g.size.width - 240)
-                        .position(x: panel + (g.size.width - panel) / 2, y: NavGlide.carY(g.size.height) + 50)
-                }
-            }
-            .ignoresSafeArea()
-        )
         .onAppear {
             guard !nav.arrived else { return }
             withAnimation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.15)) { tripAside = true }
@@ -623,24 +612,24 @@ struct TripSide: View {
         VStack(spacing: 5) {
             Button(action: onEnd) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundColor(.white)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 28, height: 28)
                     .background(Circle().fill(Color(hex: 0xDC2626)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Zakończ trasę")
             Text(Fmt.duration(remaining))
-                .font(.system(size: 13, weight: .heavy))
+                .font(.system(size: 17, weight: .heavy))
                 .lineLimit(1).minimumScaleFactor(0.55)
             Text(Fmt.distance(meters))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.secondary)
                 .lineLimit(1).minimumScaleFactor(0.55)
         }
         .foregroundColor(.primary)
-        .padding(.vertical, 8)
-        .frame(width: 58)
+        .padding(.vertical, 10)
+        .frame(width: 76)
         .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }

@@ -99,9 +99,6 @@ struct ContentView: View {
                                 if showFuelChip, let best = model.fuelBest {
                                     FuelMini(station: best) { withAnimation { model.fuelInfo = best } }
                                 }
-                                MusicPip(music: music) {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
-                                }
                             }
                             .padding(.top, 8)
                             Spacer()
@@ -110,12 +107,6 @@ struct ContentView: View {
                         .padding(.top, 8)
                     } else {
                         HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                MusicPip(music: music) {
-                                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
-                                }
-                            }
-                            .padding(.top, 8)
                             Spacer()
                             if showWeatherBall { WeatherBall { showWeather = true } }
                         }
@@ -439,6 +430,7 @@ struct BrowseOverlay: View {
                         }
                     }
                     .padding(.bottom, keyboard > 0 ? keyboard : 0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                     .ignoresSafeArea(edges: keyboard > 0 ? [] : .bottom)
                     .inSidePanel(panel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -678,9 +670,8 @@ struct SuggestionsPanel: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial).opacity(0.72)
                 .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 0.75))
         )
-        .padding(.trailing, 12)
-        .padding(.leading, (settings.weatherOn || settings.fuelOn) ? 70 : 12)
-        .frame(maxHeight: 300)
+        .padding(.horizontal, 12)
+        .frame(maxHeight: 260)
         .task {
             // Only checks whether the clipboard looks like a link; it doesn't read it.
             guard UIPasteboard.general.hasStrings || UIPasteboard.general.hasURLs else { return }
