@@ -196,10 +196,98 @@ final class DWDRadarOverlay: MKTileOverlay {
     }
 }
 
-/** The German road map (FOSSGIS), the same roads the router uses. Replaces Apple's picture. */
+/** The road map. Tiles are kept on disk, so a stretch you already drove does not download again. */
+enum RoadTiles {
+    private static let dir: URL = {
+        let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("road-tiles", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }()
+
+    private static let session: URLSession = {
+        let c = URLSessionConfiguration.default
+        c.timeoutIntervalForRequest = 8
+        c.httpMaximumConnectionsPerHost = 6
+        c.urlCache = URLCache(memoryCapacity: 20_000_000, diskCapacity: 200_000_000)
+        c.requestCachePolicy = .returnCacheDataElseLoad
+        return URLSession(configuration: c)
+    }()
+
+    private static func file(_ z: Int, _ x: Int, _ y: Int) -> URL {
+        dir.appendingPathComponent("\(z)-\(x)-\(y).png")
+    }
+
+    private static func png(_ data: Data) -> Bool {
+        data.count > 400 && data.starts(with: [0x89, 0x50, 0x4E, 0x47])
+    }
+
+    /// The tile, from disk if it was fetched before. Nil only when every server refused.
+    static func data(z: Int, x: Int, y: Int) async -> Data? {
+        let f = file(z, x, y)
+        if let cached = try? Data(contentsOf: f), png(cached) { return cached }
+        let n = abs(x &+ y) % 3
+        let sub = ["a", "b", "c"][n]
+        let urls = [
+            "https://\(sub).basemaps.cartocdn.com/rastertiles/voyager/\(z)/\(x)/\(y)@2x.png",
+            "https://tile.openstreetmap.de/\(z)/\(x)/\(y).png",
+        ]
+        for s in urls {
+            guard let url = URL(string: s) else { continue }
+            var req = URLRequest(url: url)
+            req.setValue("Apex-iOS", forHTTPHeaderField: "User-Agent")
+            guard let (data, resp) = try? await session.data(for: req),
+                  (resp as? HTTPURLResponse)?.statusCode == 200, png(data) else { continue }
+            try? data.write(to: f, options: .atomic)
+            return data
+        }
+        return nil
+    }
+
+    private static func tile(_ p: LatLng, _ z: Int) -> (Int, Int) {
+        let n = Double(1 << z)
+        let x = Int((p.lng + 180) / 360 * n)
+        let lat = p.lat * .pi / 180
+        let y = Int((1 - log(tan(lat) + 1 / cos(lat)) / .pi) / 2 * n)
+        return (min(max(x, 0), Int(n) - 1), min(max(y, 0), Int(n) - 1))
+    }
+
+    /// Fetches the tiles along a route before the drive reaches them. Skips what is already saved.
+    static func warm(along line: [LatLng]) {
+        guard line.count >= 2 else { return }
+        Task.detached(priority: .utility) {
+            let cum = Geo.cumulative(line)
+            let total = cum.last ?? 0
+            var keys: [(Int, Int, Int)] = []
+            var seen = Set<String>()
+            var at = 0.0
+            while at <= total && keys.count < 700 {
+                let p = Geo.point(along: line, meters: at, cumulative: cum)
+                for z in [17, 18] {
+                    let (x, y) = tile(p, z)
+                    for dx in -1...1 {
+                        let key = "\(z)/\(x + dx)/\(y)"
+                        if seen.insert(key).inserted { keys.append((z, x + dx, y)) }
+                    }
+                }
+                at += 90
+            }
+            await withTaskGroup(of: Void.self) { group in
+                var n = 0
+                for k in keys {
+                    if n >= 6 { await group.next(); n -= 1 }
+                    n += 1
+                    group.addTask { _ = await data(z: k.0, x: k.1, y: k.2) }
+                }
+            }
+        }
+    }
+}
+
+/** Draws the cached road map in place of Apple's. */
 final class GermanRoadsOverlay: MKTileOverlay {
     init() {
-        super.init(urlTemplate: "https://tile.openstreetmap.de/{z}/{x}/{y}.png")
+        super.init(urlTemplate: nil)
         canReplaceMapContent = true
         tileSize = CGSize(width: 256, height: 256)
         minimumZ = 0
@@ -207,11 +295,13 @@ final class GermanRoadsOverlay: MKTileOverlay {
     }
 
     override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        var req = URLRequest(url: url(forTilePath: path), timeoutInterval: 15)
-        req.setValue("Apex-iOS", forHTTPHeaderField: "User-Agent")
-        URLSession.shared.dataTask(with: req) { data, _, error in
-            result(data, error)
-        }.resume()
+        Task {
+            if let data = await RoadTiles.data(z: path.z, x: path.x, y: path.y) {
+                result(data, nil)
+            } else {
+                result(nil, URLError(.cannotLoadFromNetwork))
+            }
+        }
     }
 }
 

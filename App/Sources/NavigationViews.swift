@@ -372,7 +372,7 @@ struct InstructionBanner: View {
     private var thenView: some View {
         if let then = nav.thenManeuver {
             HStack(spacing: 6) {
-                Text("Then").font(.system(size: 16, weight: .bold)).opacity(0.85)
+                Text("Potem").font(.system(size: 16, weight: .bold)).opacity(0.85)
                 Image(systemName: maneuverSymbol(then.type)).font(.system(size: 20, weight: .heavy))
                 if then.type == .roundabout, let n = then.exit {
                     // Which exit, so the next roundabout is known before the banner changes.
@@ -592,8 +592,9 @@ struct TripBar: View {
             Button(action: onSteps) {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Vela.chip(scheme)))
+                    .background(Circle().fill(Color.white.opacity(0.14)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Kroki trasy")
@@ -1003,7 +1004,7 @@ struct CameraBadge: View {
     }
 }
 
-/// Green at the start of a drive, easing toward light blue. A pale stripe across the top reads as glass.
+/// A deep card, the same on the turn and on the time bar. Not the washed mint.
 struct TripSheen: View {
     var progress: Double
     var capsule: Bool
@@ -1012,17 +1013,17 @@ struct TripSheen: View {
     var body: some View {
         let shape = Capsule()
         let round = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let gloss = LinearGradient(colors: [Color.white.opacity(0.42), Color.white.opacity(0.08), .clear],
+        let gloss = LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.03), .clear],
                                    startPoint: .top, endPoint: .center)
         Group {
             if capsule {
                 shape.fill(tripTint(progress))
                     .overlay(shape.fill(gloss))
-                    .overlay(shape.strokeBorder(Color.white.opacity(0.34), lineWidth: 1))
+                    .overlay(shape.strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
             } else {
                 round.fill(tripTint(progress))
                     .overlay(round.fill(gloss))
-                    .overlay(round.strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+                    .overlay(round.strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             }
         }
     }
@@ -1037,11 +1038,11 @@ func tripProgress(_ nav: Navigator) -> Double {
 func tripTint(_ t: Double) -> Color {
     let u = min(1, max(0, t))
     func channel(_ hex: UInt32, _ shift: Int) -> Double { Double((hex >> shift) & 0xFF) / 255 }
-    let green: UInt32 = 0x14B8A6
-    let blue: UInt32 = 0x60A5FA
-    return Color(red: channel(green, 16) * (1 - u) + channel(blue, 16) * u,
-                 green: channel(green, 8) * (1 - u) + channel(blue, 8) * u,
-                 blue: channel(green, 0) * (1 - u) + channel(blue, 0) * u)
+    let start: UInt32 = 0x12312C
+    let end: UInt32 = 0x1A2740
+    return Color(red: channel(start, 16) * (1 - u) + channel(end, 16) * u,
+                 green: channel(start, 8) * (1 - u) + channel(end, 8) * u,
+                 blue: channel(start, 0) * (1 - u) + channel(end, 0) * u)
 }
 
 /** Find a stop ahead without leaving navigation: gas, food, coffee… near the road still to drive. */

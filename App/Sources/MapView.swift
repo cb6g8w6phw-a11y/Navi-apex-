@@ -413,6 +413,7 @@ struct VelaMapView: UIViewRepresentable {
         private var terrainOverlay: MKTileOverlay?
         private var radarOverlay: DWDRadarOverlay?
         private var roadBase: GermanRoadsOverlay?
+        private var warmedRoute: UUID?
         private var cityOverlay: CityRingOverlay?
         private var zoneOverlay: CityRingOverlay?
         private var atlasRev = -1
@@ -929,6 +930,10 @@ struct VelaMapView: UIViewRepresentable {
                     let best = (alts + [route]).map(\.durationSeconds).min() ?? route.durationSeconds
                     drawn.good = route.durationSeconds <= best + 45
                     return drawn
+                }
+                if let route = main, route.id != warmedRoute {
+                    warmedRoute = route.id
+                    RoadTiles.warm(along: route.polyline)
                 }
                 routeLines = lockedLines
                 lastRouteKey = ""

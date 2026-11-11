@@ -13,7 +13,7 @@ enum Vela {
     static let routeBlue = Color(hex: 0x2F7BFF)
     /** The driving banner: deep teal, with a darker band for the lanes. */
     static let navGreen = Color(hex: 0x0F766E)
-    static let navBand = Color(hex: 0x0B4F49)
+    static let navBand = Color(hex: 0x0A1F1C)
     static let open = Color(hex: 0x16A34A)
     static let openDark = Color(hex: 0x4ADE80)
     static let closed = Color(hex: 0xDC2626)
