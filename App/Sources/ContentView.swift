@@ -375,18 +375,6 @@ struct BrowseOverlay: View {
                     // With a side panel the search box isn't above them: they go to the top right.
                     .padding(.top, panel > 0 ? 10 : idle ? 176 : 86)
                     Spacer()
-                    if !settings.satellite {
-                        HStack {
-                            Text("© OpenStreetMap")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(.primary.opacity(0.7))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.white.opacity(0.82)))
-                            Spacer()
-                        }
-                        .padding(.bottom, 6)
-                    }
                     if sheetH < full * 0.6 || panel > 0 {
                         HStack(alignment: .bottom) {
                             if idle { WazeMapChips(model: model) }

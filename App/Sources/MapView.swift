@@ -412,8 +412,6 @@ struct VelaMapView: UIViewRepresentable {
         private var heatOverlay: HeatOverlay?
         private var terrainOverlay: MKTileOverlay?
         private var radarOverlay: DWDRadarOverlay?
-        private var roadBase: GermanRoadsOverlay?
-        private var warmedRoute: UUID?
         private var cityOverlay: CityRingOverlay?
         private var zoneOverlay: CityRingOverlay?
         private var atlasRev = -1
@@ -509,11 +507,6 @@ struct VelaMapView: UIViewRepresentable {
                 radarOverlay = s.radarOn ? DWDRadarOverlay() : nil
                 overlaysDirty = true
             }
-            let wantRoads = !s.satellite
-            if wantRoads != (roadBase != nil) {
-                roadBase = wantRoads ? GermanRoadsOverlay() : nil
-                overlaysDirty = true
-            }
 
             let atlas = CityAtlas.shared
             if atlas.revision != atlasRev {
@@ -552,7 +545,6 @@ struct VelaMapView: UIViewRepresentable {
             overlaysDirty = false
             var ordered: [MKOverlay] = []
             var styles: [ObjectIdentifier: LineStyle] = [:]
-            if let b = roadBase { ordered.append(b) }
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
             if let h = heatOverlay { ordered.append(h) }
@@ -930,10 +922,6 @@ struct VelaMapView: UIViewRepresentable {
                     let best = (alts + [route]).map(\.durationSeconds).min() ?? route.durationSeconds
                     drawn.good = route.durationSeconds <= best + 45
                     return drawn
-                }
-                if let route = main, route.id != warmedRoute {
-                    warmedRoute = route.id
-                    RoadTiles.warm(along: route.polyline)
                 }
                 routeLines = lockedLines
                 lastRouteKey = ""
@@ -1369,9 +1357,7 @@ struct VelaMapView: UIViewRepresentable {
             }
             if let tiles = overlay as? MKTileOverlay {
                 let r = MKTileOverlayRenderer(tileOverlay: tiles)
-                if tiles is GermanRoadsOverlay { r.alpha = 1 }
-                else if tiles is DWDRadarOverlay { r.alpha = 0.75 }
-                else { r.alpha = dark ? 0.22 : 0.32 }
+                r.alpha = tiles is DWDRadarOverlay ? 0.75 : (dark ? 0.22 : 0.32)
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)

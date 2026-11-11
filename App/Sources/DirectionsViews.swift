@@ -39,19 +39,6 @@ struct DirectionsOverlay: View {
                                 .onChange(of: g.size.height) { cardHeight = $0 }
                         })
                 }
-                if !settings.satellite {
-                    HStack {
-                        Text("© OpenStreetMap")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(.primary.opacity(0.75))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(Color.white.opacity(0.82)))
-                        Spacer()
-                    }
-                    .padding(.leading, 16)
-                    .padding(.top, cardHeight + 10)
-                    .allowsHitTesting(false)
-                }
                 if let zone {
                     // Upper left, under the from/to card: the sheet must not cover it.
                     VStack {
