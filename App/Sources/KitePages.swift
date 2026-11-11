@@ -98,33 +98,27 @@ struct WazeMapChips: View {
 
     var body: some View {
         if settings.wazeOn {
-            let level = model.areaRisk.map { PoliceRisk.level($0) }
-            let live = (settings.wazeOnMap || settings.wazeHeatmap) ? model.wazeLiveCount : nil
-            let heat = settings.wazeHeatmap && settings.wazePolice
-            if heat || (settings.policeRisk && level != nil) || live != nil {
+            let level = model.areaRisk.map { PoliceRisk.level($0) } ?? .low
+            let live = model.wazeLiveCount ?? 0
             HStack(spacing: 8) {
-                if heat {
-                    Image(systemName: "flame.fill").font(.system(size: 12, weight: .bold)).foregroundColor(Color(hex: 0xE91E63))
-                    LinearGradient(colors: [Color(hex: 0x4285F4), Color(hex: 0xE91E63), Color(hex: 0xD50000)],
-                                   startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 36, height: 6).clipShape(Capsule())
-                }
-                if settings.policeRisk, let level {
-                    Image(systemName: "shield.lefthalf.filled").font(.system(size: 13, weight: .bold))
-                        .foregroundColor(PoliceRiskChip.color(level))
-                    Text(level.rawValue.capitalized).font(.system(size: 14, weight: .bold))
-                }
-                if let live {
-                    Circle().fill(Color(hex: 0x22C55E)).frame(width: 8, height: 8)
-                    Text("\(live)").font(.system(size: 14, weight: .bold)).monospacedDigit()
-                }
+                Image(systemName: "flame.fill").font(.system(size: 13, weight: .bold)).foregroundColor(Color(hex: 0xE91E63))
+                LinearGradient(colors: [Color(hex: 0x4285F4), Color(hex: 0xE91E63), Color(hex: 0xD50000)],
+                               startPoint: .leading, endPoint: .trailing)
+                    .frame(width: 40, height: 6).clipShape(Capsule())
+                Capsule().fill(Color.primary.opacity(0.2)).frame(width: 1, height: 16)
+                Image(systemName: "shield.lefthalf.filled").font(.system(size: 13, weight: .bold))
+                    .foregroundColor(PoliceRiskChip.color(level))
+                Text(level.rawValue.capitalized).font(.system(size: 14, weight: .bold))
+                Capsule().fill(Color.primary.opacity(0.2)).frame(width: 1, height: 16)
+                Circle().fill(Color(hex: 0x22C55E)).frame(width: 8, height: 8)
+                Text("\(live)").font(.system(size: 14, weight: .bold)).monospacedDigit()
             }
             .foregroundColor(.primary)
             .padding(.horizontal, 12)
-            .frame(height: 36)
+            .frame(height: 40)
             .glass(Capsule())
             .accessibilityElement(children: .combine)
-            }
+            .accessibilityLabel("Policja, ryzyko \(level.rawValue), \(live) zgłoszeń na żywo")
         }
     }
 }
