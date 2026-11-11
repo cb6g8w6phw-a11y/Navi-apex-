@@ -406,11 +406,15 @@ struct BrowseOverlay: View {
                 }
 
                 if idle || searchFocused || voice.listening {
+                    // Sit on the bottom, just above the keyboard, clear of the weather and fuel chips.
+                    let lift = searchFocused || voice.listening
+                        ? min(max(keyboard, 300), geo.size.height * 0.55)
+                        : 0
                     VStack(spacing: 8) {
                         Spacer(minLength: 0)
                         if searchFocused {
                             SuggestionsPanel(model: model) { searchFocused = false }
-                                .frame(maxHeight: min(geo.size.height * 0.42, 300))
+                                .frame(maxHeight: max(160, geo.size.height - lift - 170))
                         }
                         if voice.listening { ListeningCard(voice: voice) }
                         if !searchFocused && !voice.listening && !hasSheet {
@@ -429,9 +433,9 @@ struct BrowseOverlay: View {
                             KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
                         }
                     }
-                    .padding(.bottom, keyboard > 0 ? keyboard : 0)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .ignoresSafeArea(edges: keyboard > 0 ? [] : .bottom)
+                    .padding(.bottom, lift)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+                    .ignoresSafeArea(edges: lift > 0 ? [] : .bottom)
                     .inSidePanel(panel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
