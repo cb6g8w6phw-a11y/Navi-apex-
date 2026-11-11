@@ -196,6 +196,25 @@ final class DWDRadarOverlay: MKTileOverlay {
     }
 }
 
+/** The German road map (FOSSGIS), the same roads the router uses. Replaces Apple's picture. */
+final class GermanRoadsOverlay: MKTileOverlay {
+    init() {
+        super.init(urlTemplate: "https://tile.openstreetmap.de/{z}/{x}/{y}.png")
+        canReplaceMapContent = true
+        tileSize = CGSize(width: 256, height: 256)
+        minimumZ = 0
+        maximumZ = 19
+    }
+
+    override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
+        var req = URLRequest(url: url(forTilePath: path), timeoutInterval: 15)
+        req.setValue("Apex-iOS", forHTTPHeaderField: "User-Agent")
+        URLSession.shared.dataTask(with: req) { data, _, error in
+            result(data, error)
+        }.resume()
+    }
+}
+
 /** A small map for the weather sheet: the rain radar over where you are. */
 /** Weather at the hour you will be there, not the weather right now. Open-Meteo, one point at a time. */
 enum RouteSky {

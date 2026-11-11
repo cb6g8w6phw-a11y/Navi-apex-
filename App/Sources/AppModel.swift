@@ -486,7 +486,7 @@ final class AppModel: ObservableObject {
         autoStart = false
         directions = DirectionsState(destination: place, mode: settings.defaultMode)
         parkingHits = []
-        detent = .half
+        detent = .peek
         loadAllModes()
     }
 
@@ -735,7 +735,8 @@ final class AppModel: ObservableObject {
             return
         }
         guard let r = directions?.route else { mapTick += 1; return }
-        frame(r.polyline, bottomFraction: 0.42, top: 170 + CGFloat(directions?.stops.count ?? 0) * 42)
+        let lines = (directions?.current ?? [r]).flatMap(\.polyline)
+        frame(lines.isEmpty ? r.polyline : lines, bottomFraction: 0.32, top: 150 + CGFloat(directions?.stops.count ?? 0) * 42)
     }
 
     /** Police risk within about a kilometre of you, from remembered and live Waze police reports. */

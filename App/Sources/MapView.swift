@@ -412,6 +412,7 @@ struct VelaMapView: UIViewRepresentable {
         private var heatOverlay: HeatOverlay?
         private var terrainOverlay: MKTileOverlay?
         private var radarOverlay: DWDRadarOverlay?
+        private var roadBase: GermanRoadsOverlay?
         private var cityOverlay: CityRingOverlay?
         private var zoneOverlay: CityRingOverlay?
         private var atlasRev = -1
@@ -507,6 +508,11 @@ struct VelaMapView: UIViewRepresentable {
                 radarOverlay = s.radarOn ? DWDRadarOverlay() : nil
                 overlaysDirty = true
             }
+            let wantRoads = !s.satellite
+            if wantRoads != (roadBase != nil) {
+                roadBase = wantRoads ? GermanRoadsOverlay() : nil
+                overlaysDirty = true
+            }
 
             let atlas = CityAtlas.shared
             if atlas.revision != atlasRev {
@@ -545,18 +551,23 @@ struct VelaMapView: UIViewRepresentable {
             overlaysDirty = false
             var ordered: [MKOverlay] = []
             var styles: [ObjectIdentifier: LineStyle] = [:]
+            if let b = roadBase { ordered.append(b) }
             if let t = terrainOverlay { ordered.append(t) }
             if let r = radarOverlay { ordered.append(r) }
             if let h = heatOverlay { ordered.append(h) }
             if let c = cityOverlay { ordered.append(c) }
             if let z = zoneOverlay { ordered.append(z) }
-            for group in [trafficLines, railLines, routeLines] {
+            for group in [railLines, routeLines] {
                 for item in group {
                     styles[ObjectIdentifier(item.line)] = item.style
                     ordered.append(item.line)
                 }
             }
             if let ribbon { ordered.append(ribbon) }
+            for item in trafficLines {
+                styles[ObjectIdentifier(item.line)] = item.style
+                ordered.append(item.line)
+            }
             for item in arrowLines {
                 styles[ObjectIdentifier(item.line)] = item.style
                 ordered.append(item.line)
@@ -895,8 +906,14 @@ struct VelaMapView: UIViewRepresentable {
                     if let l = makeLine(dense, style) { lockedLines.append(l) }
                 }
                 // Other routes stay put. The driven line is the ribbon, not a polyline rebuilt as you move.
-                for r in alts { bake(r.polyline, LineStyle(color: UIColor(hex: 0x115E59), width: 12, alpha: 0.55, relative: 0.9)) }
-                for r in alts { bake(r.polyline, LineStyle(color: UIColor(hex: 0x5EEAD4), width: 7, alpha: 0.55, relative: 0.55)) }
+                let pool = alts + (main.map { [$0] } ?? [])
+                let best = pool.map(\.durationSeconds).min() ?? 0
+                func quicker(_ r: Route) -> Bool { r.durationSeconds <= best + 45 }
+                for r in alts {
+                    let paint = quicker(r) ? UIColor(hex: 0x16A34A) : UIColor(hex: 0xF87171)
+                    bake(r.polyline, LineStyle(color: UIColor.black, width: 8, alpha: 0.28, relative: 0.85))
+                    bake(r.polyline, LineStyle(color: paint, width: 5, alpha: 0.9, relative: 0.5))
+                }
                 if let t = trip {
                     let legs = t.legs.filter { $0.path.count >= 2 }
                     for leg in legs where leg.isWalk {
@@ -907,7 +924,12 @@ struct VelaMapView: UIViewRepresentable {
                         bake(leg.path, LineStyle(color: UIColor(hex: UInt32(leg.color ?? 0x1F6FEB)), width: 7))
                     }
                 }
-                ribbon = main.map { RouteRibbon(route: $0) }
+                ribbon = main.map { route in
+                    let drawn = RouteRibbon(route: route)
+                    let best = (alts + [route]).map(\.durationSeconds).min() ?? route.durationSeconds
+                    drawn.good = route.durationSeconds <= best + 45
+                    return drawn
+                }
                 routeLines = lockedLines
                 lastRouteKey = ""
                 overlaysDirty = true
@@ -1342,7 +1364,9 @@ struct VelaMapView: UIViewRepresentable {
             }
             if let tiles = overlay as? MKTileOverlay {
                 let r = MKTileOverlayRenderer(tileOverlay: tiles)
-                r.alpha = tiles is DWDRadarOverlay ? 0.75 : (dark ? 0.22 : 0.32)
+                if tiles is GermanRoadsOverlay { r.alpha = 1 }
+                else if tiles is DWDRadarOverlay { r.alpha = 0.75 }
+                else { r.alpha = dark ? 0.22 : 0.32 }
                 return r
             }
             return MKOverlayRenderer(overlay: overlay)

@@ -22,6 +22,8 @@ final class RouteRibbon: NSObject, MKOverlay {
     var live = false
     var spans: [(a: Double, b: Double, level: Int)] = []
     var phase: CGFloat = 0
+    /// The picked route is one of the quicker ones. A slower pick is drawn light red.
+    var good = true
     let boundingMapRect: MKMapRect
     let coordinate: CLLocationCoordinate2D
 
@@ -75,10 +77,12 @@ final class RouteRibbonRenderer: MKOverlayRenderer {
         guard total > 1 else { return }
 
         // Casing, then the full colour, then grey only behind the car. The colour runs to the pin.
-        stroke(ribbon, 0, total, UIColor(hex: 0x0F766E), 22, 1, zoomScale, context)
-        stroke(ribbon, 0, total, UIColor(hex: 0x2DD4BF), 14, 1, zoomScale, context)
+        let casing = ribbon.good ? UIColor(hex: 0x14532D) : UIColor(hex: 0x7F1D1D)
+        let fill = ribbon.good ? UIColor(hex: 0x22C55E) : UIColor(hex: 0xF87171)
+        stroke(ribbon, 0, total, casing, 16, 1, zoomScale, context)
+        stroke(ribbon, 0, total, fill, 9, 1, zoomScale, context)
         if ribbon.traveled > 40 {
-            stroke(ribbon, 0, max(0, ribbon.traveled - 70), UIColor(hex: 0x64748B), 14, 0.9, zoomScale, context)
+            stroke(ribbon, 0, max(0, ribbon.traveled - 70), UIColor(hex: 0x64748B), 9, 0.9, zoomScale, context)
         }
 
         let colors: [Int: UIColor] = [1: UIColor(hex: 0xF59E0B), 2: UIColor(hex: 0xEF4444), 3: UIColor(hex: 0xB91C1C)]

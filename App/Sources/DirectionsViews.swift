@@ -22,7 +22,7 @@ struct DirectionsOverlay: View {
             ZStack(alignment: .top) {
                 VStack {
                     Spacer()
-                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: model.directions?.transit == true ? 170 : 215,
+                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: model.directions?.transit == true ? 170 : 286,
                                 topClearance: cardHeight + 16) {
                         TripHeader(model: model)
                     } content: {
@@ -38,6 +38,19 @@ struct DirectionsOverlay: View {
                                 .onAppear { cardHeight = g.size.height }
                                 .onChange(of: g.size.height) { cardHeight = $0 }
                         })
+                }
+                if !settings.satellite {
+                    HStack {
+                        Text("© OpenStreetMap")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.primary.opacity(0.75))
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.white.opacity(0.82)))
+                        Spacer()
+                    }
+                    .padding(.leading, 16)
+                    .padding(.top, cardHeight + 10)
+                    .allowsHitTesting(false)
                 }
                 if let zone {
                     // Upper left, under the from/to card: the sheet must not cover it.
@@ -201,7 +214,9 @@ struct TripHeader: View {
                     }
                 }
                 ModeTabs(model: model, state: d)
-                if !d.transit, d.mode == .drive { DrivePlanBar(model: model) }
+                if !d.transit, d.current.count > 1, let picked = d.route {
+                    RouteChips(model: model, state: d, picked: picked)
+                }
                 if !d.transit, !d.reversed, d.route != nil {
                     Button { model.startNavigation() } label: {
                         HStack(spacing: 10) {
@@ -311,6 +326,46 @@ struct ModeTabs: View {
     }
 }
 
+/** The other ways, in the part of the sheet that is always on screen. Green is quicker, light red is slower. */
+struct RouteChips: View {
+    @ObservedObject var model: AppModel
+    let state: DirectionsState
+    let picked: Route
+
+    var body: some View {
+        let best = state.current.map(\.durationSeconds).min() ?? picked.durationSeconds
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(state.current.enumerated()), id: \.element.id) { i, r in
+                    let on = r.id == picked.id
+                    let good = r.durationSeconds <= best + 45
+                    let fill = on ? (good ? Color(hex: 0x16A34A) : Color(hex: 0xDC2626))
+                        : (good ? Color(hex: 0x16A34A).opacity(0.16) : Color(hex: 0xDC2626).opacity(0.14))
+                    let ink = on ? Color.white : (good ? Color(hex: 0x166534) : Color(hex: 0xB91C1C))
+                    Button { model.selectRoute(i) } label: {
+                        Text(label(r))
+                            .font(.system(size: 13, weight: .bold))
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(height: 32)
+                            .foregroundColor(ink)
+                            .background(Capsule().fill(fill))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func label(_ r: Route) -> String {
+        let via = r.summary.map { " · \($0)" } ?? ""
+        if r.id == picked.id { return "\(Fmt.shortDuration(r.durationSeconds))\(via)" }
+        let diff = r.durationSeconds - picked.durationSeconds
+        let mark = abs(diff) < 30 ? "tyle samo" : diff > 0 ? "+\(Fmt.shortDuration(diff))" : "−\(Fmt.shortDuration(-diff))"
+        return "\(mark)\(via)"
+    }
+}
+
 struct TripBody: View {
     @ObservedObject var model: AppModel
     @Environment(\.colorScheme) private var scheme
@@ -327,6 +382,7 @@ struct TripBody: View {
                     if d.transit {
                         TransitBody(model: model, state: d)
                     } else if let r = d.route {
+                        if !d.transit, d.mode == .drive { DrivePlanBar(model: model) }
                         summary(r, d)
                         if let url = d.destination.shareURL { shareButton(url) }
                         if d.current.count > 1 { alternates(d, picked: r) }
