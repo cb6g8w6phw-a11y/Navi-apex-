@@ -308,6 +308,7 @@ struct BrowseOverlay: View {
     @Environment(\.sidePanel) private var panel
     @State private var showClosure = false
     @State private var keyboard: CGFloat = 0
+    @State private var fuelPeek = false
 
     private var hasSheet: Bool { model.selected != nil || !model.results.isEmpty }
     /** Room on the left of the notice for the weather and fuel pills, when they stand there. */
