@@ -90,7 +90,7 @@ struct ContentView: View {
                 }
             }
             // Fuel, the tiny music square and weather share the row under the search bar.
-            if plainMap {
+            if plainMap && !model.searchActive {
                 VStack {
                     if columnMode {
                         HStack {
@@ -406,38 +406,36 @@ struct BrowseOverlay: View {
                 }
 
                 if idle || searchFocused || voice.listening {
-                    // Sit on the bottom, just above the keyboard, clear of the weather and fuel chips.
-                    let lift = searchFocused || voice.listening
-                        ? min(max(keyboard, 300), geo.size.height * 0.55)
-                        : 0
-                    VStack(spacing: 8) {
-                        Spacer(minLength: 0)
-                        if searchFocused {
-                            SuggestionsPanel(model: model) { searchFocused = false }
-                                .frame(maxHeight: max(160, geo.size.height - lift - 170))
-                        }
-                        if voice.listening { ListeningCard(voice: voice) }
-                        if !searchFocused && !voice.listening && !hasSheet {
-                            HStack(spacing: 6) {
-                                ModeMapSwitch(settings: settings)
-                                if settings.fuelOn, let best = model.fuelBest, model.fuelInfo == nil, model.roadInfo == nil {
-                                    FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
-                                        withAnimation { model.fuelInfo = best }
+                    Color.clear
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .overlay(alignment: .bottom) {
+                            VStack(spacing: 8) {
+                                if searchFocused {
+                                    SuggestionsPanel(model: model) { searchFocused = false }
+                                        .frame(maxHeight: 280)
+                                }
+                                if voice.listening { ListeningCard(voice: voice) }
+                                if !searchFocused && !voice.listening && !hasSheet {
+                                    HStack(spacing: 6) {
+                                        ModeMapSwitch(settings: settings)
+                                        if settings.fuelOn, let best = model.fuelBest, model.fuelInfo == nil, model.roadInfo == nil {
+                                            FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
+                                                withAnimation { model.fuelInfo = best }
+                                            }
+                                        }
                                     }
+                                    .padding(.horizontal, 12)
+                                }
+                                SearchBar(model: model, voice: voice, focused: $searchFocused)
+                                if idle && keyboard == 0 {
+                                    KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
                                 }
                             }
-                            .padding(.horizontal, 12)
+                            .padding(.bottom, searchFocused || voice.listening ? 8 : 0)
                         }
-                        SearchBar(model: model, voice: voice, focused: $searchFocused)
-                        if idle && keyboard == 0 {
-                            KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
-                        }
-                    }
-                    .padding(.bottom, lift)
-                    .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
-                    .ignoresSafeArea(edges: lift > 0 ? [] : .bottom)
-                    .inSidePanel(panel)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .ignoresSafeArea(edges: searchFocused ? [] : .bottom)
+                        .inSidePanel(panel)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 VStack(spacing: 12) {
