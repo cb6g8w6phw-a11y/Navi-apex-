@@ -58,6 +58,11 @@ final class AppSettings: ObservableObject {
     @Published var fuelTank: Int { didSet { d.set(fuelTank, forKey: "fuelTank") } }
     /** Litres in the tank right now, so a cheap station is priced on what still fits, not a drive to Poland. */
     @Published var fuelLeft: Int { didSet { d.set(fuelLeft, forKey: "fuelLeft") } }
+    /// The reserve light: about a fifth of the tank, or 8 litres, whichever comes first.
+    var fuelOnReserve: Bool {
+        let tank = max(fuelTank, 1)
+        return fuelLeft <= 8 || fuelLeft * 5 <= tank
+    }
     /** How many of the cheapest stations the map shows at a time. */
     @Published var fuelCount: Int { didSet { d.set(fuelCount, forKey: "fuelCount") } }
     /** The small weather badge on the map screen. */

@@ -40,11 +40,11 @@ struct NavigationOverlay: View {
     /** A chip above the speed badge sits where the road name goes, so the name steps aside for it. */
     private var chipShowing: Bool { showRiskChip || (nav.aircraftNear != nil && !nav.arrived && aircraftAsChip) }
 
-    /** Price in the top-right on every drive, the station ahead or the cheapest one we know. */
+    /** Price only when it matters: the tank is on reserve, or a cheaper station is coming up. */
     private var fuelCorner: FuelAhead? {
-        guard !nav.arrived else { return nil }
-        if let f = nav.fuelAhead { return f }
-        guard model.settings.fuelOn, let best = model.fuelBest else { return nil }
+        guard !nav.arrived, model.settings.fuelOn else { return nil }
+        if let f = nav.fuelAhead, model.settings.fuelOnReserve || (f.saving != nil && f.meters < 20_000) { return f }
+        guard model.settings.fuelOnReserve, let best = model.fuelBest else { return nil }
         let meters = model.userLatLng.map { $0.distance(to: best.location) } ?? 0
         return FuelAhead(station: best, meters: meters, offRoute: meters, saving: nil)
     }
@@ -147,8 +147,10 @@ struct NavigationOverlay: View {
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 8) {
-                    MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 36) { showClosure = true }
-                        .accessibilityLabel("Zgłoś zamknięcie")
+                    if nav.speedMps < 2 {
+                        MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 36) { showClosure = true }
+                            .accessibilityLabel("Zgłoś zamknięcie")
+                    }
                     MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 36) {
                         model.recenterNav()
                     }

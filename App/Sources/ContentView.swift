@@ -22,6 +22,7 @@ struct ContentView: View {
 
     @State private var showWeather = false
     @State private var showPlayer = false
+    @State private var fuelPeek = false
     @ObservedObject private var music = NowPlay.shared
 
     /** The pieces on the row under the search bar: only on the plain map, with nothing picked or being planned. */
@@ -30,6 +31,7 @@ struct ContentView: View {
     }
     private var showFuelChip: Bool {
         plainMap && settings.fuelOn && model.fuelBest != nil && model.fuelInfo == nil && model.roadInfo == nil
+            && (settings.fuelOnReserve || fuelPeek)
     }
     private var showWeatherBall: Bool { plainMap && settings.weatherOn }
     /** Weather and fuel stand in a column on the left while the search is open or a notice or card is showing. */
@@ -425,8 +427,20 @@ struct BrowseOverlay: View {
                                     HStack(spacing: 6) {
                                         ModeMapSwitch(settings: settings)
                                         if settings.fuelOn, let best = model.fuelBest, model.fuelInfo == nil, model.roadInfo == nil {
-                                            FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
-                                                withAnimation { model.fuelInfo = best }
+                                            if settings.fuelOnReserve || fuelPeek {
+                                                FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
+                                                    withAnimation { model.fuelInfo = best }
+                                                }
+                                            } else {
+                                                Button { withAnimation { fuelPeek = true } } label: {
+                                                    Image(systemName: "fuelpump.fill")
+                                                        .font(.system(size: 13, weight: .semibold))
+                                                        .foregroundColor(Color(hex: 0x16A34A))
+                                                        .frame(width: 34, height: 28)
+                                                        .glassButton(Capsule())
+                                                }
+                                                .buttonStyle(.plain)
+                                                .accessibilityLabel("Pokaż ceny paliw")
                                             }
                                         }
                                     }
