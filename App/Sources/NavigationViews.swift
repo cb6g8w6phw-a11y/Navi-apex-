@@ -9,6 +9,9 @@ struct NavigationOverlay: View {
     @State private var confirmEnd = false
     @State private var showPlayer = false
     @State private var showClosure = false
+    @State private var tripAside = false
+    @State private var asideWait = 0
+    @Namespace private var tripMorph
     @ObservedObject private var music = NowPlay.shared
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
@@ -138,6 +141,14 @@ struct NavigationOverlay: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 8) {
+                    if tripAside, !nav.arrived, !confirmEnd {
+                        TripSide(nav: nav, onEnd: {
+                            if nav.arrived { model.endNavigation() } else {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = true }
+                            }
+                        })
+                        .matchedGeometryEffect(id: "trip", in: tripMorph)
+                    }
                     MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 36) { showClosure = true }
                         .accessibilityLabel("Zgłoś zamknięcie")
                     MapFab(icon: "location.fill", tint: Vela.accentText(scheme), size: 36) {
@@ -171,12 +182,13 @@ struct NavigationOverlay: View {
                             onEnd: { model.endNavigation() })
                     .inSidePanel(panel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
+            } else if !tripAside {
                 TripBar(nav: nav, onEnd: {
                     if nav.arrived { model.endNavigation() } else {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { confirmEnd = true }
                     }
                 }, onSteps: { showSteps = true })
+                .matchedGeometryEffect(id: "trip", in: tripMorph)
                 .inSidePanel(panel)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -199,6 +211,19 @@ struct NavigationOverlay: View {
             }
             .ignoresSafeArea()
         )
+        .onChange(of: nav.speedMps) { v in
+            if v > 2, !tripAside, !nav.arrived {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { tripAside = true }
+            } else if v < 0.6, tripAside {
+                asideWait += 1
+                let token = asideWait
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_400_000_000)
+                    guard token == asideWait, nav.speedMps < 0.8 else { return }
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.84)) { tripAside = false }
+                }
+            }
+        }
         .task {
             NowPlay.shared.attach()
             // Screenshot run: the end trip question.
@@ -571,19 +596,19 @@ struct TripBar: View {
             .accessibilityLabel("Zakończ trasę")
             VStack(spacing: 1) {
                 Text(Fmt.duration(remaining)).font(.system(size: 22, weight: .heavy))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 Text("\(Fmt.distance(meters)) · \(Fmt.arrival(remaining))").font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.82))
+                    .foregroundColor(.secondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity)
             Button(action: onSteps) {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.white.opacity(0.14)))
+                    .background(Circle().fill(Color.primary.opacity(0.08)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Kroki trasy")
@@ -591,10 +616,55 @@ struct TripBar: View {
         .foregroundColor(.primary)
         .padding(.horizontal, 10)
         .frame(height: 58)
-        .background(TripSheen(progress: tripProgress(nav), capsule: false, radius: 22).opacity(0.92))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(MatteGlass(radius: 22))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
+    }
+}
+
+/** Kilometry i czas w pionie, po prawej, kiedy auto już jedzie. */
+struct TripSide: View {
+    @ObservedObject var nav: Navigator
+    let onEnd: () -> Void
+
+    var body: some View {
+        let remaining = nav.progress?.remainingSeconds ?? nav.route.durationSeconds
+        let meters = nav.progress?.remainingMeters ?? nav.route.distanceMeters
+        VStack(spacing: 5) {
+            Button(action: onEnd) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Color(hex: 0xDC2626)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Zakończ trasę")
+            Text(Fmt.duration(remaining))
+                .font(.system(size: 13, weight: .heavy))
+                .lineLimit(1).minimumScaleFactor(0.55)
+            Text(Fmt.distance(meters))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.secondary)
+                .lineLimit(1).minimumScaleFactor(0.55)
+        }
+        .foregroundColor(.primary)
+        .padding(.vertical, 8)
+        .frame(width: 58)
+        .background(MatteGlass(radius: 18))
+    }
+}
+
+/** Frosted glass you can still read: a blur, a matte tint, a thin light edge. */
+struct MatteGlass: View {
+    var radius: CGFloat
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        shape.fill(.ultraThinMaterial)
+            .overlay(shape.fill(Color.black.opacity(scheme == .dark ? 0.42 : 0.08)))
+            .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.22 : 0.55), lineWidth: 1))
     }
 }
 
