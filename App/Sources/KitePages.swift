@@ -91,37 +91,39 @@ struct KiteDock: View {
     }
 }
 
-/** Bottom left of the map, with Waze on: the heat map's key, the police risk here and how many live reports are in view. */
+/** One medium pill at the top of the map: police heat, the risk here, and how many live reports are in view. */
 struct WazeMapChips: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         if settings.wazeOn {
-            VStack(alignment: .leading, spacing: 8) {
-                if settings.wazeHeatmap, settings.wazePolice { HeatLegend() }
-                if settings.policeRisk, let risk = model.areaRisk {
-                    let level = PoliceRisk.level(risk)
-                    HStack(spacing: 8) {
-                        Image(systemName: "shield.lefthalf.filled").font(.system(size: 17, weight: .bold))
-                        Text("Ryzyko kontroli tutaj: \(level.rawValue.capitalized)").font(.system(size: 16, weight: .bold))
-                    }
-                    .foregroundColor(level == .medium ? Color(hex: 0x1F1300) : .white)
-                    .padding(.horizontal, 14).frame(height: 44)
-                    .background(Capsule().fill(PoliceRiskChip.color(level)))
-                    .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-                    .accessibilityElement(children: .combine)
+            let level = model.areaRisk.map { PoliceRisk.level($0) }
+            let live = (settings.wazeOnMap || settings.wazeHeatmap) ? model.wazeLiveCount : nil
+            let heat = settings.wazeHeatmap && settings.wazePolice
+            if heat || (settings.policeRisk && level != nil) || live != nil {
+            HStack(spacing: 8) {
+                if heat {
+                    Image(systemName: "flame.fill").font(.system(size: 12, weight: .bold)).foregroundColor(Color(hex: 0xE91E63))
+                    LinearGradient(colors: [Color(hex: 0x4285F4), Color(hex: 0xE91E63), Color(hex: 0xD50000)],
+                                   startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 36, height: 6).clipShape(Capsule())
                 }
-                if let n = model.wazeLiveCount, settings.wazeOnMap || settings.wazeHeatmap {
-                    HStack(spacing: 8) {
-                        Circle().fill(Color(hex: 0x22C55E)).frame(width: 10, height: 10)
-                        Text("Na żywo z Waze · \(n) zgłoszeń").font(.system(size: 14, weight: .semibold))
-                    }
-                    .padding(.horizontal, 12).frame(height: 34)
-                    .glass(Capsule())
-                    .accessibilityElement(children: .combine)
+                if settings.policeRisk, let level {
+                    Image(systemName: "shield.lefthalf.filled").font(.system(size: 13, weight: .bold))
+                        .foregroundColor(PoliceRiskChip.color(level))
+                    Text(level.rawValue.capitalized).font(.system(size: 14, weight: .bold))
                 }
+                if let live {
+                    Circle().fill(Color(hex: 0x22C55E)).frame(width: 8, height: 8)
+                    Text("\(live)").font(.system(size: 14, weight: .bold)).monospacedDigit()
+                }
+            }
+            .foregroundColor(.primary)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .glass(Capsule())
+            .accessibilityElement(children: .combine)
             }
         }
     }

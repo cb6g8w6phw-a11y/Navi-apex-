@@ -327,6 +327,7 @@ struct BrowseOverlay: View {
                 // Map buttons: layers and the compass on the right, under the top cards.
                 VStack {
                     HStack(alignment: .top) {
+                        if idle { WazeMapChips(model: model).padding(.top, 4) }
                         Spacer()
                         VStack(spacing: 12) {
                             MapFab(icon: "square.3.layers.3d", size: 56) { model.showLayers = true }
@@ -364,7 +365,6 @@ struct BrowseOverlay: View {
                     Spacer()
                     if sheetH < full * 0.6 || panel > 0 {
                         HStack(alignment: .bottom) {
-                            if idle { WazeMapChips(model: model) }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 10) {
                                 MapFab(icon: "nosign", tint: Color(hex: 0xDC2626), size: 56) { showClosure = true }
