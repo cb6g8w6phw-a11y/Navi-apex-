@@ -73,8 +73,56 @@ public struct WazeAlert: Hashable, Sendable, Identifiable {
         }
     }
 
+    /** A short Polish name for the window while driving. */
+    public var plTitle: String {
+        switch subtype {
+        case "POLICE_HIDING": return "Policja w ukryciu"
+        case "POLICE_WITH_MOBILE_CAMERA", "POLICE_MOBILE_CAMERA": return "Radar z radiowozu"
+        case "POLICE_VISIBLE": return "Policja"
+        case "ACCIDENT_MAJOR": return "Poważny wypadek"
+        case "ACCIDENT_MINOR": return "Wypadek"
+        case "HAZARD_ON_ROAD_POT_HOLE": return "Dziura w jezdni"
+        case "HAZARD_ON_ROAD_CAR_STOPPED": return "Auto na jezdni"
+        case "HAZARD_ON_SHOULDER_CAR_STOPPED": return "Auto na poboczu"
+        case "HAZARD_ON_ROAD_ROAD_KILL", "HAZARD_ON_SHOULDER_ANIMALS": return "Zwierzę na drodze"
+        case "HAZARD_ON_ROAD_OBJECT": return "Przedmiot na jezdni"
+        case "HAZARD_ON_ROAD_TRAFFIC_LIGHT_FAULT": return "Światła nie działają"
+        case "HAZARD_ON_ROAD_LANE_CLOSED": return "Pas zamknięty"
+        case "HAZARD_ON_ROAD_OIL": return "Plama na jezdni"
+        case "HAZARD_ON_ROAD_ICE", "HAZARD_WEATHER_FREEZING_RAIN": return "Gołoledź"
+        case "HAZARD_WEATHER_FOG": return "Mgła"
+        case "HAZARD_WEATHER_HAIL": return "Grad"
+        case "HAZARD_WEATHER_FLOOD", "HAZARD_WEATHER_HEAVY_RAIN": return "Zalana droga"
+        case "HAZARD_WEATHER_HEAVY_SNOW": return "Śnieg"
+        case "JAM_STAND_STILL_TRAFFIC": return "Korek, stoisz"
+        case "JAM_HEAVY_TRAFFIC": return "Duży korek"
+        case "JAM_MODERATE_TRAFFIC": return "Wolny ruch"
+        case "HAZARD_ON_ROAD_CONSTRUCTION": return "Roboty drogowe"
+        case "HAZARD_ON_ROAD_EMERGENCY_VEHICLE": return "Pojazd służb"
+        default: break
+        }
+        switch kind {
+        case .police: return "Policja"
+        case .accident: return "Wypadek"
+        case .hazard: return "Zagrożenie"
+        case .weather: return "Trudna pogoda"
+        case .roadworks: return "Roboty drogowe"
+        case .closure: return "Droga zamknięta"
+        case .jam: return "Korek"
+        }
+    }
+
     /** „Policja przed tobą.” i podobne, dla lektora. */
     public var spoken: String {
+        switch subtype {
+        case "HAZARD_ON_SHOULDER_CAR_STOPPED": return "Auto na poboczu przed tobą."
+        case "HAZARD_ON_ROAD_CAR_STOPPED": return "Auto na jezdni przed tobą."
+        case "ACCIDENT_MAJOR": return "Poważny wypadek przed tobą."
+        case "ACCIDENT_MINOR": return "Wypadek przed tobą."
+        case "HAZARD_ON_ROAD_LANE_CLOSED": return "Zamknięty pas przed tobą."
+        case "JAM_STAND_STILL_TRAFFIC", "JAM_HEAVY_TRAFFIC": return "Korek przed tobą."
+        default: break
+        }
         switch kind {
         case .closure: return "Zamknięta droga przed tobą."
         case .jam: return "Korek przed tobą."

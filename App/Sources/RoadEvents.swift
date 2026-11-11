@@ -16,6 +16,14 @@ struct RoadEvent: Identifiable, Equatable {
     let blocked: Bool
     /** The box the event covers (west, south, east, north), when the API gives one. */
     let extent: (w: Double, s: Double, e: Double, n: Double)?
+    /** The stretch itself, thinned, so the map can draw where it runs. */
+    let line: [LatLng] = []
+    /** How long the stretch is, from the authority's text or from the line. */
+    let lengthMeters: Double? = nil
+    /** Extra minutes the authority quotes for a jam, when it gives a number. */
+    let delayMinutes: Int? = nil
+    /** Where it runs, in the authority's own words ("zwischen …"). */
+    let stretch: String = ""
 
     static func == (a: RoadEvent, b: RoadEvent) -> Bool { a.id == b.id }
 
@@ -54,9 +62,9 @@ struct RoadEvent: Identifiable, Equatable {
 
     var kindName: String {
         switch kind {
-        case .roadworks: return blocked ? "Roadworks, road blocked" : "Roadworks"
-        case .closure: return "Closure"
-        case .warning: return "Traffic warning"
+        case .roadworks: return blocked ? "Roboty, droga zamknięta" : "Roboty drogowe"
+        case .closure: return "Zamknięcie"
+        case .warning: return (delayMinutes ?? 0) > 0 ? "Korek" : "Ostrzeżenie"
         }
     }
 }
@@ -166,6 +174,7 @@ final class RoadEvents {
         if let d = v as? Double { return d }
         if let s = v as? String { return Double(s) }
         if let i = v as? Int { return Double(i) }
+        if let n = v as? NSNumber { return n.doubleValue }
         return nil
     }
 
@@ -181,6 +190,54 @@ final class RoadEvents {
         let p = text.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
         guard p.count == 4 else { return nil }
         return (min(p[0], p[2]), min(p[1], p[3]), max(p[0], p[2]), max(p[1], p[3]))
+    }
+
+    /** A GeoJSON line, thinned so a 50 km worksite is not hundreds of points. */
+    private nonisolated static func line(_ v: Any?) -> [LatLng] {
+        guard let g = v as? [String: Any], (g["type"] as? String) == "LineString" else { return [] }
+        let coords = g["coordinates"] as? [Any] ?? []
+        var pts: [LatLng] = []
+        for c in coords {
+            let pair = c as? [Any] ?? []
+            guard pair.count >= 2, let lng = number(pair[0]), let lat = number(pair[1]) else { continue }
+            pts.append(LatLng(lat, lng))
+        }
+        guard pts.count > 90 else { return pts }
+        return (0..<90).map { i in
+            pts[min(pts.count - 1, Int((Double(i) * Double(pts.count - 1) / 89).rounded()))]
+        }
+    }
+
+    private nonisolated static func lengthMeters(_ details: [String], line: [LatLng]) -> Double? {
+        for raw in details {
+            guard let r = raw.range(of: "Länge:") else { continue }
+            let bit = raw[r.upperBound...].split(separator: "|").first.map(String.init) ?? ""
+            let parts = bit.replacingOccurrences(of: ",", with: ".").split(separator: " ").map(String.init)
+            guard let n = parts.first.flatMap(Double.init), parts.count >= 2 else { continue }
+            if parts[1].lowercased().hasPrefix("km"), n > 0, n < 400 { return n * 1000 }
+            if parts[1].lowercased() == "m", n > 20 { return n }
+        }
+        guard line.count >= 2 else { return nil }
+        var n = 0.0
+        for i in 1..<line.count { n += line[i - 1].distance(to: line[i]) }
+        return n > 80 ? n : nil
+    }
+
+    private nonisolated static func delayMinutes(_ details: [String]) -> Int? {
+        for raw in details {
+            guard let r = raw.range(of: "Reisezeitverlust:") else { continue }
+            let bit = raw[r.upperBound...].trimmingCharacters(in: .whitespaces)
+            let n = Int(bit.split(separator: " ").first.map(String.init) ?? "")
+            if let n, n > 0, n < 300 { return n }
+        }
+        return nil
+    }
+
+    private nonisolated static func stretch(_ details: [String]) -> String {
+        guard let line = details.first(where: { $0.lowercased().contains("zwischen") }) else { return "" }
+        guard let r = line.range(of: "zwischen", options: .caseInsensitive) else { return "" }
+        let text = line[r.lowerBound...].trimmingCharacters(in: .whitespaces)
+        return text.count > 90 ? String(text.prefix(90)) + "…" : text
     }
 
     /** nil when the request failed; an empty list when the motorway just has nothing listed. */
@@ -200,13 +257,18 @@ final class RoadEvents {
                   let c = item["coordinate"] as? [String: Any],
                   let lat = number(c["lat"]), let lng = number(c["long"]) else { return nil }
             let details = (item["description"] as? [String] ?? []).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            let line = Self.line(item["geometry"])
             return RoadEvent(id: id, kind: kind, road: road,
                              title: item["title"] as? String ?? road,
                              subtitle: item["subtitle"] as? String ?? "",
                              details: details,
                              location: LatLng(lat, lng),
                              blocked: flag(item["isBlocked"]) || kind == .closure,
-                             extent: extent(item["extent"]))
+                             extent: extent(item["extent"]),
+                             line: line,
+                             lengthMeters: Self.lengthMeters(details, line: line),
+                             delayMinutes: Self.delayMinutes(details),
+                             stretch: Self.stretch(details))
         }
     }
 }
@@ -302,18 +364,16 @@ struct RoadAheadCard: View {
     @State private var shown = false
 
     private var headline: String {
-        if let left = ahead.left { return "\(Fmt.distance(left)) left" }
-        return Fmt.distance(ahead.meters)
+        if let left = ahead.left { return "Jeszcze \(Fmt.distance(left))" }
+        if ahead.meters < 50 { return "Już" }
+        return "Za \(Fmt.distance(ahead.meters))"
     }
 
     private var name: String {
-        var text: String
-        switch ahead.event.kind {
-        case .roadworks: text = ahead.event.blocked ? "Roadworks, blocked" : "Roadworks"
-        case .closure: text = "Road closed"
-        case .warning: text = "Warning"
-        }
-        if ahead.left == nil, ahead.length >= 150 { text += " · \(Fmt.distance(ahead.length)) long" }
+        var text = ahead.event.kindName
+        let len = max(ahead.length, ahead.event.lengthMeters ?? 0)
+        if ahead.left == nil, len >= 200 { text += " · \(Fmt.distance(len))" }
+        if let d = ahead.event.delayMinutes, d > 0 { text += " · +\(d) min" }
         return text
     }
 
@@ -337,9 +397,15 @@ struct RoadAheadCard: View {
                         .monospacedDigit()
                         .lineLimit(1)
                     Text(name)
-                        .font(.system(size: 12, weight: .semibold))
-                        .opacity(0.92)
+                        .font(.system(size: 13, weight: .semibold))
+                        .opacity(0.95)
                         .lineLimit(1)
+                    if !ahead.event.stretch.isEmpty {
+                        Text(ahead.event.stretch)
+                            .font(.system(size: 11, weight: .medium))
+                            .opacity(0.85)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer(minLength: 0)
                 Button(action: hide) {
@@ -361,7 +427,7 @@ struct RoadAheadCard: View {
                 let minutes = Int((abs(offer.extraSeconds) / 60).rounded())
                 let cost = offer.extraSeconds >= 60 ? "+\(minutes) min" : offer.extraSeconds <= -60 ? "−\(minutes) min" : "same time"
                 Button(action: take) {
-                    Label("Detour · \(cost)", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                    Label("Objazd · \(cost)", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                         .font(.system(size: 14, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 30)
                         .background(Capsule().fill(Color.white))

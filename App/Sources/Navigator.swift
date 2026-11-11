@@ -124,6 +124,8 @@ final class Navigator: ObservableObject {
     /** Reports already warned about, by Waze's id, so a refresh doesn't warn again. */
     private var spokenWaze: Set<String> = []
     /** Road events on this route, in order, with where each starts and ends along it. */
+    /** Traffic painted on the driven line: 1 slow, 2 heavy, 3 stopped or closed. */
+    @Published private(set) var jamSpans: [TrafficSpan] = []
     private var routeRoad: [(event: RoadEvent, start: Double, end: Double)] = []
     private var routeRoadKey = ""
     private var spokenRoad: Set<String> = []
@@ -814,8 +816,33 @@ final class Navigator: ObservableObject {
         let pad = 0.0004
         var found: [(event: RoadEvent, start: Double, end: Double)] = []
         for e in events {
-            guard e.location.lat > minLat - 0.01, e.location.lat < maxLat + 0.01,
-                  e.location.lng > minLng - 0.01, e.location.lng < maxLng + 0.01 else { continue }
+            let boxHit = e.location.lat > minLat - 0.02 && e.location.lat < maxLat + 0.02
+                && e.location.lng > minLng - 0.02 && e.location.lng < maxLng + 0.02
+            let lineHit = e.line.contains {
+                $0.lat > minLat - 0.02 && $0.lat < maxLat + 0.02 && $0.lng > minLng - 0.02 && $0.lng < maxLng + 0.02
+            }
+            guard boxHit || lineHit else { continue }
+            if e.line.count >= 2 {
+                var alongs: [Double] = []
+                let step = max(1, e.line.count / 40)
+                var i = 0
+                while i < e.line.count {
+                    let hit = Geo.project(e.line[i], on: line, cumulative: cum)
+                    if hit.offset < 70 { alongs.append(hit.along) }
+                    i += step
+                }
+                if let last = e.line.last {
+                    let hit = Geo.project(last, on: line, cumulative: cum)
+                    if hit.offset < 70 { alongs.append(hit.along) }
+                }
+                if let start = alongs.min(), let end = alongs.max() {
+                    let span = max(end, start + 40)
+                    if Self.onMotorway(e.road, along: start, overlap: span - start, maneuvers: maneuvers) {
+                        found.append((event: e, start: start, end: span))
+                    }
+                    continue
+                }
+            }
             if e.id.hasPrefix("user-") {
                 let hit = Geo.project(e.location, on: line, cumulative: cum)
                 guard hit.offset < 80 else { continue }
@@ -868,11 +895,21 @@ final class Navigator: ObservableObject {
         return overlap >= 250
     }
 
+    /// An alternative only counts if it stays off the closed or slow stretch, not just off its first pin.
+    private static func misses(_ event: RoadEvent, _ line: [LatLng]) -> Bool {
+        var pts = event.line
+        if pts.count > 8 {
+            pts = (0..<8).map { i in pts[min(pts.count - 1, Int((Double(i) * Double(pts.count - 1) / 7).rounded()))] }
+        }
+        if pts.isEmpty { pts = [event.location] }
+        return pts.allSatisfy { Geo.project($0, on: line).offset >= 180 }
+    }
+
     private func roadWords(_ e: RoadEvent) -> String {
         switch e.kind {
         case .closure: return e.id.hasPrefix("user-") && e.road == "Rower" ? "zamknięta ścieżka" : "zamknięcie drogi"
         case .roadworks: return e.blocked ? "roboty drogowe, droga zablokowana" : "roboty drogowe"
-        case .warning: return "ostrzeżenie na drodze"
+        case .warning: return (e.delayMinutes ?? 0) > 0 ? "korek" : "ostrzeżenie na drodze"
         }
     }
 
@@ -883,6 +920,7 @@ final class Navigator: ObservableObject {
         guard (route.mode == .drive || route.mode == .bike), !events.isEmpty else {
             if roadAhead != nil { roadAhead = nil }
             if detourOffer != nil { detourOffer = nil }
+            if !jamSpans.isEmpty { jamSpans = [] }
             return
         }
         let line = route.polyline
@@ -891,6 +929,14 @@ final class Navigator: ObservableObject {
         if key != routeRoadKey {
             routeRoadKey = key
             routeRoad = Self.eventsAlong(line, events, route.maneuvers)
+            jamSpans = routeRoad.map { item in
+                let level: Int
+                if item.event.kind == .closure || item.event.blocked { level = 3 }
+                else if item.event.kind == .warning { level = (item.event.delayMinutes ?? 0) >= 10 ? 3 : 2 }
+                else { level = 1 }
+                let len = max(item.end - item.start, 40)
+                return TrafficSpan(level: level, startMeters: item.start, lengthMeters: len)
+            }
         }
         let here = p.alongMeters
 
@@ -912,14 +958,15 @@ final class Navigator: ObservableObject {
             if let next = routeRoad.first(where: { !spokenRoad.contains($0.event.id) && $0.end > here && $0.start - here <= lead }) {
                 spokenRoad.insert(next.event.id)
                 let meters = max(next.start - here, 0)
-                let length = next.end - next.start
+                let length = max(next.end - next.start, next.event.lengthMeters ?? 0)
                 roadAhead = RoadAhead(event: next.event, meters: meters, startMeters: max(meters, 1), length: length,
                                       left: here >= next.start ? max(next.end - here, 0) : nil)
                 UINotificationFeedbackGenerator().notificationOccurred(.warning)
                 chime()
                 var words = "\(roadWords(next.event)) przed tobą"
-                if meters > 100 { words += ", za \(Fmt.spokenDistance(meters))" }
+                if meters > 80 { words += ", za \(Fmt.spokenDistance(meters))" }
                 if length >= 300 { words += ", przez \(Fmt.spokenDistance(length))" }
+                if let d = next.event.delayMinutes, d > 0 { words += ", około \(d) minut dłużej" }
                 speak(words + ".")
             }
         }
@@ -931,7 +978,8 @@ final class Navigator: ObservableObject {
     private func offerDetour(_ here: Double, _ loc: CLLocation) {
         guard !rerouting, !detourLoading, detourOffer == nil,
               let blocked = routeRoad.first(where: {
-                  ($0.event.kind == .closure || $0.event.blocked) && !detourTried.contains($0.event.id)
+                  let heavy = ($0.event.delayMinutes ?? 0) >= 8
+                  return ($0.event.kind == .closure || $0.event.blocked || heavy) && !detourTried.contains($0.event.id)
                       && $0.end > here && $0.start - here < 15_000
               }) else { return }
         detourTried.insert(blocked.event.id)
@@ -947,14 +995,15 @@ final class Navigator: ObservableObject {
             self.detourLoading = false
             guard !self.stopped, self.route.id == id, let now = self.progress else { return }
             let clear = r.routes.filter { alt in
-                alt.polyline.count >= 2 && Geo.project(ev.location, on: alt.polyline).offset >= 250
+                alt.polyline.count >= 2 && Self.misses(ev, alt.polyline)
             }
             guard let best = clear.min(by: { $0.durationSeconds < $1.durationSeconds }) else { return }
             let extra = best.durationSeconds - now.remainingSeconds
             self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: ev.id)
             let minutes = Int((abs(extra) / 60).rounded())
             let cost = extra >= 60 ? "dokłada \(minutes) minut" : extra <= -60 ? "oszczędza \(minutes) minut" : "zajmuje mniej więcej tyle samo"
-            self.speak("Jest objazd zamknięcia, \(cost). Stuknij, żeby go wybrać.")
+            let what = ev.kind == .warning ? "korka" : "zamknięcia"
+            self.speak("Jest objazd \(what), \(cost). Stuknij, żeby go wybrać.")
         }
     }
 

@@ -717,7 +717,7 @@ struct WazeCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Fmt.distance(ahead.meters)).font(.system(size: 38, weight: .heavy)).monospacedDigit()
                         .lineLimit(1).minimumScaleFactor(0.7)
-                    Text(a.title).font(.system(size: 21, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                    Text(a.plTitle).font(.system(size: 21, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
                     Text(detail).font(.system(size: 15, weight: .medium)).opacity(0.9).lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -743,8 +743,8 @@ extension WazeAlert {
     /** "Reported 12 min ago". */
     var reportedText: String {
         let mins = max(Int(Date().timeIntervalSince(reportedAt) / 60), 0)
-        let when = mins < 1 ? "just now" : mins < 60 ? "\(mins) min ago" : mins < 1440 ? "\(mins / 60) h ago" : "\(mins / 1440) d ago"
-        return "Reported \(when)"
+        let when = mins < 1 ? "przed chwilą" : mins < 60 ? "\(mins) min temu" : mins < 1440 ? "\(mins / 60) godz. temu" : "\(mins / 1440) dni temu"
+        return "zgłoszone \(when)"
     }
 }
 
@@ -758,7 +758,7 @@ struct WazeInfoCard: View {
         HStack(alignment: .top, spacing: 12) {
             WazeBadge(kind: alert.kind, size: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(alert.title).font(.headline)
+                Text(alert.plTitle).font(.headline)
                 Text([alert.street, alert.reportedText].compactMap { $0 }.joined(separator: " · "))
                     .font(.subheadline).foregroundColor(.secondary)
                 HStack(spacing: 10) {

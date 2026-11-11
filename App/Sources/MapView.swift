@@ -417,6 +417,7 @@ struct VelaMapView: UIViewRepresentable {
         private var atlasRev = -1
         private var railLines: [StyledLine] = []
         private var routeLines: [StyledLine] = []
+        private var trafficLines: [StyledLine] = []
         private var arrowLines: [StyledLine] = []
         private var lineStyles: [ObjectIdentifier: LineStyle] = [:]
         private var overlaysDirty = false
@@ -549,7 +550,7 @@ struct VelaMapView: UIViewRepresentable {
             if let h = heatOverlay { ordered.append(h) }
             if let c = cityOverlay { ordered.append(c) }
             if let z = zoneOverlay { ordered.append(z) }
-            for group in [railLines, routeLines] {
+            for group in [trafficLines, railLines, routeLines] {
                 for item in group {
                     styles[ObjectIdentifier(item.line)] = item.style
                     ordered.append(item.line)
@@ -698,31 +699,60 @@ struct VelaMapView: UIViewRepresentable {
             }
         }
 
-        /** Roadworks, closures and warnings from the Autobahn API, for what's on screen. */
+        /** Roadworks, closures and jams from the motorway authority, drawn as the stretch itself. */
         private func renderRoadEvents(_ map: MKMapView) {
-            let on = model.settings.traffic && gates[2] && RoadEvents.covers(map.centerCoordinate)
+            let layer = model.settings.traffic && RoadEvents.covers(map.centerCoordinate)
             let b = map.visibleCoordinateBounds
             let q = { (v: Double) in Int((v * 10).rounded()) }
             let line = model.nav?.route.polyline ?? model.directions?.route?.polyline ?? []
-            let key = "\(on)\(RoadEvents.shared.updatedAt.timeIntervalSince1970)\(q(b.sw.latitude)),\(q(b.sw.longitude)),\(q(b.ne.latitude)),\(q(b.ne.longitude))\(line.count)\(line.first?.lat ?? 0)"
+            let key = "\(layer)\(map.zoomLevel >= 8)\(map.zoomLevel >= 10)\(RoadEvents.shared.updatedAt.timeIntervalSince1970)\(q(b.sw.latitude)),\(q(b.sw.longitude)),\(q(b.ne.latitude)),\(q(b.ne.longitude))\(line.count)\(line.first?.lat ?? 0)"
             guard key != lastRoadKey else { return }
             lastRoadKey = key
-            guard on else { replaceAnnotations(&roadAnns, [], map); return }
+            guard layer, map.zoomLevel >= 8 else {
+                replaceAnnotations(&roadAnns, [], map)
+                if !trafficLines.isEmpty { trafficLines = []; overlaysDirty = true }
+                return
+            }
             let dLat = (b.ne.latitude - b.sw.latitude) * 0.25, dLng = (b.ne.longitude - b.sw.longitude) * 0.25
+            func inBox(_ p: LatLng) -> Bool {
+                p.lat > b.sw.latitude - dLat && p.lat < b.ne.latitude + dLat
+                    && p.lng > b.sw.longitude - dLng && p.lng < b.ne.longitude + dLng
+            }
             let centre = LatLng(map.centerCoordinate.latitude, map.centerCoordinate.longitude)
-            let inView = RoadEvents.shared.events.filter {
-                $0.location.lat > b.sw.latitude - dLat && $0.location.lat < b.ne.latitude + dLat
-                    && $0.location.lng > b.sw.longitude - dLng && $0.location.lng < b.ne.longitude + dLng
+            let inView = RoadEvents.shared.events.filter { e in
+                inBox(e.location) || e.line.contains(where: inBox)
             }
-            let nearest = inView.sorted { $0.location.distance(to: centre) < $1.location.distance(to: centre) }.prefix(250)
-            let cum = line.count >= 2 ? Geo.cumulative(line) : []
-            let anns: [KiteAnnotation] = nearest.map { e in
-                let a = KiteAnnotation(layer: .roadEvent, id: e.id, coordinate: coord(e.location))
-                a.icon = e.iconName
-                a.big = !cum.isEmpty && Geo.project(e.location, on: line, cumulative: cum).offset < 60
-                return a
+            let nearest = inView.sorted { a, b in
+                let da = (a.line + [a.location]).map { $0.distance(to: centre) }.min() ?? .infinity
+                let db = (b.line + [b.location]).map { $0.distance(to: centre) }.min() ?? .infinity
+                return da < db
+            }.prefix(80)
+            if map.zoomLevel >= 10 {
+                let cum = line.count >= 2 ? Geo.cumulative(line) : []
+                let anns: [KiteAnnotation] = nearest.map { e in
+                    let a = KiteAnnotation(layer: .roadEvent, id: e.id, coordinate: coord(e.location))
+                    a.icon = e.iconName
+                    a.big = !cum.isEmpty && Geo.project(e.location, on: line, cumulative: cum).offset < 80
+                    return a
+                }
+                replaceAnnotations(&roadAnns, anns, map)
+            } else if !roadAnns.isEmpty {
+                replaceAnnotations(&roadAnns, [], map)
             }
-            replaceAnnotations(&roadAnns, anns, map)
+            var drawn: [StyledLine] = []
+            for e in nearest where e.line.count >= 2 {
+                let color: UIColor
+                switch e.kind {
+                case .closure: color = UIColor(hex: 0xB91C1C)
+                case .warning: color = (e.delayMinutes ?? 0) >= 12 ? UIColor(hex: 0xB91C1C) : UIColor(hex: 0xEF4444)
+                case .roadworks: color = UIColor(hex: 0xF59E0B)
+                }
+                if let l = makeLine(e.line, LineStyle(color: color, width: 8, alpha: 0.92, relative: 1.35)) {
+                    drawn.append(l)
+                }
+            }
+            trafficLines = drawn
+            overlaysDirty = true
         }
 
         /** Closures reported in Apex, for cars or bikes. */
@@ -903,6 +933,8 @@ struct VelaMapView: UIViewRepresentable {
                 ribbon.traveled = navigating ? from : 0
                 ribbon.live = navigating
                 ribbon.spans = r.trafficSpans.map { s in
+                    (max(0, s.startMeters), s.startMeters + max(0, s.lengthMeters), min(max(s.level, 1), 3))
+                } + (model.nav?.jamSpans ?? []).map { s in
                     (max(0, s.startMeters), s.startMeters + max(0, s.lengthMeters), min(max(s.level, 1), 3))
                 }
                 (map.renderer(for: ribbon) as? RouteRibbonRenderer)?.setNeedsDisplay()
