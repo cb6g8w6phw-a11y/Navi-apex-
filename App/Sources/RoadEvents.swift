@@ -17,13 +17,31 @@ struct RoadEvent: Identifiable, Equatable {
     /** The box the event covers (west, south, east, north), when the API gives one. */
     let extent: (w: Double, s: Double, e: Double, n: Double)?
     /** The stretch itself, thinned, so the map can draw where it runs. */
-    let line: [LatLng] = []
+    let line: [LatLng]
     /** How long the stretch is, from the authority's text or from the line. */
-    let lengthMeters: Double? = nil
+    let lengthMeters: Double?
     /** Extra minutes the authority quotes for a jam, when it gives a number. */
-    let delayMinutes: Int? = nil
+    let delayMinutes: Int?
     /** Where it runs, in the authority's own words ("zwischen …"). */
-    let stretch: String = ""
+    let stretch: String
+
+    init(id: String, kind: Kind, road: String, title: String, subtitle: String, details: [String],
+         location: LatLng, blocked: Bool, extent: (w: Double, s: Double, e: Double, n: Double)?,
+         line: [LatLng] = [], lengthMeters: Double? = nil, delayMinutes: Int? = nil, stretch: String = "") {
+        self.id = id
+        self.kind = kind
+        self.road = road
+        self.title = title
+        self.subtitle = subtitle
+        self.details = details
+        self.location = location
+        self.blocked = blocked
+        self.extent = extent
+        self.line = line
+        self.lengthMeters = lengthMeters
+        self.delayMinutes = delayMinutes
+        self.stretch = stretch
+    }
 
     static func == (a: RoadEvent, b: RoadEvent) -> Bool { a.id == b.id }
 
