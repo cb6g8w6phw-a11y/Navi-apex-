@@ -334,17 +334,17 @@ struct InstructionBanner: View {
                     .frame(width: 28, height: 28)
             } else {
                 Image(systemName: maneuverSymbol(m?.type ?? .straight))
-                    .font(.system(size: 22, weight: .heavy))
-                    .frame(width: 28)
+                    .font(.system(size: 26, weight: .heavy))
+                    .frame(width: 32)
             }
             if let p = nav.progress {
                 Text(Fmt.distance(p.distanceToNext))
-                    .font(.system(size: 20, weight: .heavy))
+                    .font(.system(size: 26, weight: .heavy))
                     .monospacedDigit()
                     .lineLimit(1)
             }
             Text(line)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 4)
@@ -352,7 +352,7 @@ struct InstructionBanner: View {
         }
         .foregroundColor(.primary)
         .padding(.horizontal, 14)
-        .frame(minHeight: 44)
+        .frame(minHeight: 54)
         .glass(Capsule())
         .accessibilityElement(children: .combine)
     }
@@ -452,7 +452,7 @@ struct SpeedBadge: View {
         // Red once more than a little over the limit.
         let over = limitKmh.map { mps * 3.6 > $0 + 5 } ?? false
         let speed = VStack(spacing: -2) {
-            Text("\(v)").font(.system(size: 36, weight: .heavy)).monospacedDigit()
+            Text("\(v)").font(.system(size: 26, weight: .heavy)).monospacedDigit()
                 .foregroundColor(over ? .white : .primary)
             Text(metric ? "km/h" : "mph").font(.system(size: 14, weight: .semibold))
                 .foregroundColor(over ? .white.opacity(0.85) : Vela.muted(scheme))
@@ -460,11 +460,11 @@ struct SpeedBadge: View {
         Group {
             if let limitKmh {
                 VStack(spacing: 6) {
-                    SpeedLimitSign(kmh: limitKmh, size: 76)
+                    SpeedLimitSign(kmh: limitKmh, size: 58)
                     speed
                 }
-                .padding(.top, 8).padding(.bottom, 12)
-                .frame(width: 92)
+                .padding(.top, 6).padding(.bottom, 8)
+                .frame(width: 72)
                 .background(Capsule().fill(over ? Vela.closed : Color.clear))
                 .glass(Capsule())
                 .accessibilityElement(children: .ignore)

@@ -419,16 +419,16 @@ struct FuelAheadChip: View {
     var body: some View {
         Button(action: hide) {
             HStack(spacing: 5) {
-                Image(systemName: "fuelpump.fill").font(.system(size: 10)).foregroundColor(Color(hex: 0x16A34A))
-                Text("\(ahead.station.priceText) €").font(.system(size: 12, weight: .bold)).monospacedDigit()
+                Image(systemName: "fuelpump.fill").font(.system(size: 13)).foregroundColor(Color(hex: 0x16A34A))
+                Text("\(ahead.station.priceText) €").font(.system(size: 15, weight: .bold)).monospacedDigit()
                 Text("\(ahead.station.title) · \(Fmt.distance(ahead.meters))")
-                    .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary).lineLimit(1)
+                    .font(.system(size: 14, weight: .medium)).foregroundColor(.secondary).lineLimit(1)
                 if let s = ahead.saving, s >= 1 {
                     Text("−\(String(format: "%.0f", s)) €").font(.system(size: 11, weight: .bold)).foregroundColor(Color(hex: 0x16A34A))
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10).frame(height: 24)
+            .padding(.horizontal, 14).frame(height: 36)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassButton(Capsule())
         }

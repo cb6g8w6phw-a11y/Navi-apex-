@@ -203,7 +203,7 @@ struct MusicPip: View {
                 if active.isApple, let img = music.art {
                     Image(uiImage: img)
                         .resizable().scaledToFill()
-                        .frame(width: 28, height: 28)
+                        .frame(width: 22, height: 22)
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 } else {
                     Image(systemName: active.isApple ? (music.playing ? "waveform" : "music.note") : active.symbol)
@@ -211,7 +211,7 @@ struct MusicPip: View {
                         .foregroundColor(.primary)
                 }
             }
-            .frame(width: 46, height: 46)
+            .frame(width: 36, height: 36)
             .glassButton(shape)
         }
         .buttonStyle(.plain)

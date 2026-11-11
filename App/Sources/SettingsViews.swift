@@ -153,7 +153,7 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
-                .padding(.bottom, 150)
+                .padding(.bottom, 220)
             }
             .background(PageBackdrop())
             .navigationTitle("Ustawienia")
@@ -205,12 +205,11 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
-                    if switchOn == nil {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.secondary.opacity(0.7))
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary.opacity(0.7))
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             if let switchOn {
