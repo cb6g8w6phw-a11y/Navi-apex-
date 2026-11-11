@@ -339,7 +339,9 @@ struct KiteGlass<S: Shape>: ViewModifier {
         if matte {
             content.background(matteBackground)
         } else if #available(iOS 26.0, *) {
-            content.glassEffect(glassStyle, in: shape)
+            content
+                .glassEffect(glassStyle, in: shape)
+                .overlay(lightWash)
         } else {
             content.background(frosted)
         }
@@ -360,12 +362,27 @@ struct KiteGlass<S: Shape>: ViewModifier {
         }
     }
 
+    /** Light Liquid Glass: a pale ombre, white into mint, so the pane stays bright and readable. */
+    @ViewBuilder private var lightWash: some View {
+        if scheme == .light {
+            shape.fill(
+                LinearGradient(colors: [Color(hex: 0xFFFFFF).opacity(0.62),
+                                         Color(hex: 0xDDF6F1).opacity(0.38),
+                                         Color(hex: 0xF4F0FF).opacity(0.16)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .allowsHitTesting(false)
+        }
+    }
+
     /** Before iOS 26: the map blurred behind the pane, a sheen on top and a soft shadow beneath. */
     private var frosted: some View {
         shape.fill(.ultraThinMaterial)
-            .overlay(shape.fill(Vela.surface(scheme).opacity(scheme == .dark ? 0.80 : 0.84)))
-            .overlay(sheen(glow: scheme == .dark ? 0.09 : 0.50, rim: scheme == .dark ? 0.16 : 0.75))
-            .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.16), radius: 14, y: 6)
+            .overlay(scheme == .light
+                     ? AnyView(lightWash)
+                     : AnyView(shape.fill(Vela.surface(scheme).opacity(0.80))))
+            .overlay(sheen(glow: scheme == .dark ? 0.09 : 0.55, rim: scheme == .dark ? 0.16 : 0.8))
+            .shadow(color: .black.opacity(scheme == .dark ? 0.45 : 0.12), radius: 14, y: 6)
     }
 
     /** Matte: a calm frosted pane with no shine. In the Black theme it is smoked black glass. */

@@ -10,7 +10,6 @@ struct NavigationOverlay: View {
     @State private var showPlayer = false
     @State private var showClosure = false
     @State private var tripAside = false
-    @State private var asideWait = 0
     @Namespace private var tripMorph
     @ObservedObject private var music = NowPlay.shared
     @Environment(\.colorScheme) private var scheme
@@ -211,18 +210,9 @@ struct NavigationOverlay: View {
             }
             .ignoresSafeArea()
         )
-        .onChange(of: nav.speedMps) { v in
-            if v > 2, !tripAside, !nav.arrived {
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) { tripAside = true }
-            } else if v < 0.6, tripAside {
-                asideWait += 1
-                let token = asideWait
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_400_000_000)
-                    guard token == asideWait, nav.speedMps < 0.8 else { return }
-                    withAnimation(.spring(response: 0.55, dampingFraction: 0.84)) { tripAside = false }
-                }
-            }
+        .onAppear {
+            guard !nav.arrived else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.78).delay(0.15)) { tripAside = true }
         }
         .task {
             NowPlay.shared.attach()
@@ -616,7 +606,7 @@ struct TripBar: View {
         .foregroundColor(.primary)
         .padding(.horizontal, 10)
         .frame(height: 58)
-        .background(MatteGlass(radius: 22))
+        .glass(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
@@ -651,20 +641,7 @@ struct TripSide: View {
         .foregroundColor(.primary)
         .padding(.vertical, 8)
         .frame(width: 58)
-        .background(MatteGlass(radius: 18))
-    }
-}
-
-/** Frosted glass you can still read: a blur, a matte tint, a thin light edge. */
-struct MatteGlass: View {
-    var radius: CGFloat
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        shape.fill(.ultraThinMaterial)
-            .overlay(shape.fill(Color.black.opacity(scheme == .dark ? 0.42 : 0.08)))
-            .overlay(shape.stroke(Color.white.opacity(scheme == .dark ? 0.22 : 0.55), lineWidth: 1))
+        .glass(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
