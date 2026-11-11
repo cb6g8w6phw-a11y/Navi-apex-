@@ -200,7 +200,7 @@ final class DWDRadarOverlay: MKTileOverlay {
 enum RoadTiles {
     private static let dir: URL = {
         let d = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("road-tiles", isDirectory: true)
+            .appendingPathComponent("road-tiles-osm", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
@@ -229,8 +229,9 @@ enum RoadTiles {
         let n = abs(x &+ y) % 3
         let sub = ["a", "b", "c"][n]
         let urls = [
-            "https://\(sub).basemaps.cartocdn.com/rastertiles/voyager/\(z)/\(x)/\(y)@2x.png",
+            "https://\(sub).tile.openstreetmap.fr/osmfr/\(z)/\(x)/\(y).png",
             "https://tile.openstreetmap.de/\(z)/\(x)/\(y).png",
+            "https://tile.openstreetmap.org/\(z)/\(x)/\(y).png",
         ]
         for s in urls {
             guard let url = URL(string: s) else { continue }

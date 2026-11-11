@@ -41,7 +41,7 @@ struct DirectionsOverlay: View {
                 }
                 if !settings.satellite {
                     HStack {
-                        Text("© OpenStreetMap, CARTO")
+                        Text("© OpenStreetMap")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(.primary.opacity(0.75))
                             .padding(.horizontal, 6).padding(.vertical, 2)
