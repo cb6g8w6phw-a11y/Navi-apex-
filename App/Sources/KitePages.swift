@@ -14,7 +14,7 @@ struct KiteDock: View {
     /** Ties the sliding pane to the item that owns it now, so it travels between them. */
     @Namespace private var pane
 
-    static let height: CGFloat = 80
+    static let height: CGFloat = 58
     /** How far the dock sits above the screen's bottom edge. */
     static func bottomGap(_ inset: CGFloat) -> CGFloat { max(inset - 16, 10) }
 
@@ -59,10 +59,10 @@ struct KiteDock: View {
                 }
                 VStack(spacing: 3) {
                     Image(systemName: chosen ? on : off)
-                        .font(.system(size: 24, weight: chosen ? .semibold : .regular))
-                        .scaleEffect(chosen ? 1.06 : 1)
+                        .font(.system(size: 18, weight: chosen ? .semibold : .regular))
+                        .scaleEffect(chosen ? 1.04 : 1)
                     Text(title)
-                        .font(.system(size: 14, weight: chosen ? .bold : .medium))
+                        .font(.system(size: 11, weight: chosen ? .bold : .medium))
                 }
                 .foregroundColor(chosen ? Vela.accentText(scheme) : Vela.muted(scheme))
             }

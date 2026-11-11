@@ -103,29 +103,24 @@ struct ContentView: View {
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
-                            .padding(.top, 52)
+                            .padding(.top, 8)
                             Spacer()
                         }
                         .padding(.horizontal, 12)
-                        .padding(.top, 78)
+                        .padding(.top, 8)
                     } else {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 8) {
-                                if showFuelChip, let best = model.fuelBest {
-                                    FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
-                                        withAnimation { model.fuelInfo = best }
-                                    }
-                                }
                                 MusicPip(music: music) {
                                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { showPlayer = true }
                                 }
                             }
-                            .padding(.top, 52)
+                            .padding(.top, 8)
                             Spacer()
                             if showWeatherBall { WeatherBall { showWeather = true } }
                         }
                         .padding(.horizontal, 16)
-                        .padding(.top, 78)
+                        .padding(.top, 8)
                     }
                     Spacer()
                 }
@@ -272,9 +267,9 @@ struct ModeMapSwitch: View {
                         Image(systemName: icon(m))
                         Text(title(m))
                     }
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .frame(height: 32)
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 8)
+                    .frame(height: 28)
                     .foregroundColor(on ? .white : .primary)
                     .background(Capsule().fill(on ? Color(hex: tint(m)) : Color.primary.opacity(0.08)))
                 }
@@ -319,6 +314,7 @@ struct BrowseOverlay: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sidePanel) private var panel
     @State private var showClosure = false
+    @State private var keyboard: CGFloat = 0
 
     private var hasSheet: Bool { model.selected != nil || !model.results.isEmpty }
     /** Room on the left of the notice for the weather and fuel pills, when they stand there. */
@@ -373,7 +369,7 @@ struct BrowseOverlay: View {
                         }
                     }
                     // With a side panel the search box isn't above them: they go to the top right.
-                    .padding(.top, panel > 0 ? 10 : idle ? 176 : 86)
+                    .padding(.top, panel > 0 ? 10 : idle ? 64 : 16)
                     Spacer()
                     if sheetH < full * 0.6 || panel > 0 {
                         HStack(alignment: .bottom) {
@@ -402,7 +398,7 @@ struct BrowseOverlay: View {
                         }
                         .padding(.bottom, panel > 0 ? 16
                                  : hasSheet ? max(sheetH - geo.safeAreaInsets.bottom, 0) + 14
-                                 : max(dockTop - geo.safeAreaInsets.bottom, 0) + 16)
+                                 : max(dockTop - geo.safeAreaInsets.bottom, 0) + (idle ? 108 : 16))
                         .padding(.leading, panel)
                     }
                 }
@@ -418,25 +414,39 @@ struct BrowseOverlay: View {
                     .transition(.move(edge: .bottom))
                 }
 
-                if idle {
-                    VStack {
-                        Spacer()
-                        KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
+                if idle || searchFocused || voice.listening {
+                    VStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        if searchFocused {
+                            SuggestionsPanel(model: model) { searchFocused = false }
+                                .frame(maxHeight: min(geo.size.height * 0.42, 300))
+                        }
+                        if voice.listening { ListeningCard(voice: voice) }
+                        if !searchFocused && !voice.listening && !hasSheet {
+                            HStack(spacing: 6) {
+                                ModeMapSwitch(settings: settings)
+                                if settings.fuelOn, let best = model.fuelBest, model.fuelInfo == nil, model.roadInfo == nil {
+                                    FuelChip(station: best, meters: model.userLatLng.map { $0.distance(to: best.location) }) {
+                                        withAnimation { model.fuelInfo = best }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                        }
+                        SearchBar(model: model, voice: voice, focused: $searchFocused)
+                        if idle && keyboard == 0 {
+                            KiteDock(model: model, bottomInset: geo.safeAreaInsets.bottom)
+                        }
                     }
-                    .ignoresSafeArea(edges: .bottom)
+                    .padding(.bottom, keyboard > 0 ? keyboard : 0)
+                    .ignoresSafeArea(edges: keyboard > 0 ? [] : .bottom)
                     .inSidePanel(panel)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 VStack(spacing: 12) {
-                    SearchBar(model: model, voice: voice, focused: $searchFocused)
-                    if !searchFocused && !voice.listening {
-                        ModeMapSwitch(settings: settings)
-                    }
-                    if voice.listening { ListeningCard(voice: voice) }
-                    // Home, Work and recents are one tap away under "Where to?", so the map itself stays clear.
-                    if searchFocused {
-                        SuggestionsPanel(model: model) { searchFocused = false }
+                    if hasSheet && !searchFocused {
+                        SearchBar(model: model, voice: voice, focused: $searchFocused)
                     }
                     if let n = model.notice, !searchFocused {
                         NoticeBanner(text: n) { model.notice = nil }
@@ -451,6 +461,11 @@ struct BrowseOverlay: View {
             .animation(.easeOut(duration: 0.2), value: idle)
         }
         .onChange(of: searchFocused) { model.searchActive = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+            let h = max(0, UIScreen.main.bounds.height - end.origin.y)
+            withAnimation(.easeOut(duration: 0.25)) { keyboard = h }
+        }
         .onDisappear { model.searchActive = false }
         .task {
             // Screenshot run only: the search box open, to check nothing sits on its panel.
@@ -501,12 +516,12 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
             } else {
-                Image(systemName: "magnifyingglass").font(.system(size: 22, weight: .semibold))
+                Image(systemName: "magnifyingglass").font(.system(size: 16, weight: .semibold))
                     .foregroundColor(Vela.muted(scheme))
                     .padding(.leading, 8)
             }
             TextField("Where to?", text: $model.query)
-                .font(.system(size: 21, weight: .medium))
+                .font(.system(size: 16, weight: .medium))
                 .focused(focused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
@@ -536,8 +551,8 @@ struct SearchBar: View {
                         model.search(text)
                     }, onError: { model.notice = $0 })
                 } label: {
-                    Image(systemName: "mic.fill").font(.system(size: 21, weight: .semibold))
-                        .frame(width: 48, height: 48)
+                    Image(systemName: "mic.fill").font(.system(size: 16, weight: .semibold))
+                        .frame(width: 34, height: 34)
                         .background(Circle().fill(Vela.chip(scheme)))
                 }
                 .buttonStyle(.plain)
@@ -547,7 +562,7 @@ struct SearchBar: View {
         .foregroundColor(.primary)
         .padding(.leading, 12)
         .padding(.trailing, 8)
-        .frame(height: 64)
+        .frame(height: 44)
         .glass(Capsule())
         .padding(.horizontal, 16)
     }
