@@ -52,14 +52,7 @@ struct NavigationOverlay: View {
 
     var body: some View {
         // One column, so however many warnings are up, they push the map buttons down rather than cover them.
-        VStack(spacing: 10) {
-            if let f = fuelCorner {
-                HStack {
-                    Spacer(minLength: 0)
-                    FuelAheadChip(ahead: f) { withAnimation { nav.dismissFuel() } }
-                }
-                .padding(.horizontal, 12)
-            }
+        VStack(spacing: 6) {
             if nav.isCouch {
                 HStack(spacing: 10) {
                     Text("Symulacja · \(nav.couchTitle)")
@@ -80,13 +73,16 @@ struct NavigationOverlay: View {
                 }
                 .padding(.horizontal, 4)
             }
-            VStack(spacing: 10) {
+            VStack(spacing: 6) {
                 if nav.arrived {
                     ArrivedCard(name: nav.destination.name, onPark: nav.route.mode == .drive ? { model.saveParking() } : nil,
                                 note: nav.wazeWarned > 0 ? "Waze drivers warned you about \(nav.wazeWarned) report\(nav.wazeWarned == 1 ? "" : "s") on the way" : nil) { model.endNavigation() }
                 } else {
                     InstructionBanner(nav: nav)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let f = fuelCorner {
+                        FuelAheadChip(ahead: f) { withAnimation { nav.dismissFuel() } }
+                    }
                     if let light = nav.signalAhead {
                         SignalCard(ahead: light)
                             .fixedSize(horizontal: false, vertical: true)
@@ -303,47 +299,45 @@ struct InstructionBanner: View {
         let leftTraffic = Geo.drivesOnLeft(m?.location ?? LatLng(0, 0))
         let refs = RoadRefs.find(m?.instruction ?? "")
         VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 16) {
+            HStack(alignment: .center, spacing: 10) {
                 if m?.type == .roundabout {
                     RoundaboutDiagram(shape: m?.roundabout, exit: m?.exit ?? 1, clockwise: leftTraffic)
-                        .frame(width: 100, height: 100)
+                        .frame(width: 52, height: 52)
                 } else {
                     Image(systemName: maneuverSymbol(m?.type ?? .straight))
-                        .font(.system(size: 62, weight: .heavy))
-                        .frame(width: 100, height: 100)
+                        .font(.system(size: 34, weight: .heavy))
+                        .frame(width: 52, height: 52)
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
                     if let p = nav.progress {
                         Text(Fmt.distance(p.distanceToNext))
-                            .font(.system(size: 46, weight: .heavy))
+                            .font(.system(size: 30, weight: .heavy))
                             .monospacedDigit()
                             .lineLimit(1).minimumScaleFactor(0.6)
                     }
                     if let parts = Self.split(Self.headline(m)) {
-                        // "At the end of the road, turn left" small, the road you turn onto big, like Waze.
                         Text(parts.0)
-                            .font(.system(size: 17, weight: .semibold)).opacity(0.9)
-                            .lineLimit(1).minimumScaleFactor(0.75)
+                            .font(.system(size: 13, weight: .semibold)).opacity(0.9)
+                            .lineLimit(1).minimumScaleFactor(0.7)
                         Text(parts.1)
-                            .font(.system(size: 25, weight: .heavy))
-                            .lineLimit(2).minimumScaleFactor(0.7)
+                            .font(.system(size: 16, weight: .heavy))
+                            .lineLimit(1).minimumScaleFactor(0.7)
                     } else {
                         Text(Self.headline(m))
-                            .font(.system(size: 23, weight: .bold))
+                            .font(.system(size: 15, weight: .bold))
                             .lineLimit(2)
-                            .minimumScaleFactor(0.75)
+                            .minimumScaleFactor(0.7)
                     }
                     if !refs.isEmpty {
-                        HStack(spacing: 6) { ForEach(refs, id: \.self) { RoadShield(ref: $0) } }
-                            .padding(.top, 2)
+                        HStack(spacing: 4) { ForEach(refs, id: \.self) { RoadShield(ref: $0) } }
                     } else if m?.type == .roundabout, let road = m?.road {
-                        Text("onto \(road)").font(.system(size: 18, weight: .semibold)).opacity(0.9).lineLimit(1)
+                        Text("na \(road)").font(.system(size: 13, weight: .semibold)).opacity(0.9).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             if let m, let p = nav.progress, p.distanceToNext < 1_500, let lanes = LaneGuide.lanes(for: m, leftTraffic: leftTraffic) {
                 HStack(spacing: 14) {
                     LaneStrip(lanes: lanes.lanes, turn: m.type, exitAngle: m.roundabout.map { $0.exits[$0.taken] })
@@ -372,8 +366,8 @@ struct InstructionBanner: View {
     private var thenView: some View {
         if let then = nav.thenManeuver {
             HStack(spacing: 6) {
-                Text("Potem").font(.system(size: 16, weight: .bold)).opacity(0.85)
-                Image(systemName: maneuverSymbol(then.type)).font(.system(size: 20, weight: .heavy))
+                Text("Potem").font(.system(size: 13, weight: .bold)).opacity(0.85)
+                Image(systemName: maneuverSymbol(then.type)).font(.system(size: 16, weight: .heavy))
                 if then.type == .roundabout, let n = then.exit {
                     // Which exit, so the next roundabout is known before the banner changes.
                     Text("\(n)").font(.system(size: 14, weight: .heavy)).foregroundColor(.white)
@@ -581,7 +575,7 @@ struct TripBar: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Zakończ trasę")
             VStack(spacing: 1) {
-                Text(Fmt.duration(remaining)).font(.system(size: 28, weight: .heavy))
+                Text(Fmt.duration(remaining)).font(.system(size: 22, weight: .heavy))
                     .foregroundColor(.white)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 Text("\(Fmt.distance(meters)) · \(Fmt.arrival(remaining))").font(.system(size: 14, weight: .medium))
@@ -600,8 +594,8 @@ struct TripBar: View {
             .accessibilityLabel("Kroki trasy")
         }
         .foregroundColor(.primary)
-        .padding(.horizontal, 12)
-        .frame(height: 72)
+        .padding(.horizontal, 10)
+        .frame(height: 58)
         .background(TripSheen(progress: tripProgress(nav), capsule: false, radius: 22).opacity(0.92))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 12)

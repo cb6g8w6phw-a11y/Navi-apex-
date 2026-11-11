@@ -22,7 +22,7 @@ struct DirectionsOverlay: View {
             ZStack(alignment: .top) {
                 VStack {
                     Spacer()
-                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: model.directions?.transit == true ? 170 : 286,
+                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: model.directions?.transit == true ? 150 : 228,
                                 topClearance: cardHeight + 16) {
                         TripHeader(model: model)
                     } content: {
@@ -87,7 +87,7 @@ struct EndpointsCard: View {
                             .buttonStyle(.plain).foregroundColor(.secondary)
                             .accessibilityLabel("Usuń postój")
                     }
-                    .frame(height: 38)
+                    .frame(height: 30)
                 }
                 Divider().padding(.leading, 30)
                 endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? L.t("Twoja lokalizacja", "Ihr Standort", "Your location") : state.destination.name)
@@ -96,11 +96,11 @@ struct EndpointsCard: View {
                     Button { model.addingStop = true } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus").font(.system(size: 14, weight: .bold)).frame(width: 18)
-                            Text(L.t("Dodaj postój", "Zwischenhalt", "Add stop")).font(.system(size: 15, weight: .semibold))
+                            Text(L.t("Dodaj postój", "Zwischenhalt", "Add stop")).font(.system(size: 14, weight: .semibold))
                             Spacer()
                         }
                         .foregroundColor(Vela.accentText(scheme))
-                        .frame(height: 34)
+                        .frame(height: 28)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -125,10 +125,10 @@ struct EndpointsCard: View {
     private func endpoint(icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon).font(.system(size: 16, weight: .bold)).foregroundColor(color).frame(width: 18)
-            Text(text).font(.system(size: 16, weight: .semibold)).lineLimit(1)
+            Text(text).font(.system(size: 15, weight: .semibold)).lineLimit(1)
             Spacer()
         }
-        .frame(height: 38)
+        .frame(height: 30)
     }
 }
 
@@ -140,7 +140,7 @@ struct TripHeader: View {
 
     var body: some View {
         if let d = model.directions {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top) {
                     if d.transit {
                         VStack(alignment: .leading, spacing: 2) {
@@ -152,7 +152,7 @@ struct TripHeader: View {
                         VStack(alignment: .leading, spacing: 2) {
                             let seconds = (d.planKind != 0 ? d.forecast?.seconds : nil) ?? r.durationSeconds
                             Text(Fmt.duration(seconds))
-                                .font(.system(size: 32, weight: .heavy))
+                                .font(.system(size: 26, weight: .heavy))
                                 .foregroundColor(TripBody.delayColor(r, scheme))
                                 .lineLimit(1).minimumScaleFactor(0.7)
                             Text(planLine(d, r, seconds))
@@ -208,10 +208,10 @@ struct TripHeader: View {
                     Button { model.startNavigation() } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "location.north.fill").font(.system(size: 19, weight: .bold))
-                            Text(L.t("Jedź", "Los", "Go")).font(.system(size: 21, weight: .heavy))
+                            Text(L.t("Jedź", "Los", "Go")).font(.system(size: 18, weight: .heavy))
                         }
                         .foregroundColor(Vela.onAccent(scheme))
-                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .frame(maxWidth: .infinity, minHeight: 42)
                         .background(Capsule().fill(Vela.accent(scheme)))
                         .contentShape(Capsule())
                     }
@@ -304,7 +304,7 @@ struct ModeTabs: View {
                     Text(time ?? "–").font(.system(size: 13, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 46)
+            .frame(maxWidth: .infinity, minHeight: 38)
             .foregroundColor(on ? Vela.onAccent(scheme) : .primary)
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(on ? Vela.accent(scheme) : Vela.chip(scheme)))
             .contentShape(RoundedRectangle(cornerRadius: 18))
@@ -331,10 +331,10 @@ struct RouteChips: View {
                     let ink = on ? Color.white : (good ? Color(hex: 0x166534) : Color(hex: 0xB91C1C))
                     Button { model.selectRoute(i) } label: {
                         Text(label(r))
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 12, weight: .bold))
                             .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .frame(height: 32)
+                            .padding(.horizontal, 8)
+                            .frame(height: 26)
                             .foregroundColor(ink)
                             .background(Capsule().fill(fill))
                     }
