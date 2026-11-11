@@ -324,10 +324,16 @@ struct BrowseOverlay: View {
             // Room the dock takes at the bottom, from the screen's edge.
             let dockTop = KiteDock.height + KiteDock.bottomGap(geo.safeAreaInsets.bottom)
             ZStack(alignment: .top) {
+                if idle {
+                    WazeMapChips(model: model)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 12)
+                        .padding(.trailing, 96)
+                        .padding(.top, 2)
+                }
                 // Map buttons: layers and the compass on the right, under the top cards.
                 VStack {
                     HStack(alignment: .top) {
-                        if idle { WazeMapChips(model: model).padding(.top, 4) }
                         Spacer()
                         VStack(spacing: 12) {
                             MapFab(icon: "square.3.layers.3d", size: 56) { model.showLayers = true }
