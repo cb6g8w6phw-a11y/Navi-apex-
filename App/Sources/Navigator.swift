@@ -269,6 +269,7 @@ final class Navigator: ObservableObject {
         checkCameras(p)
         checkWaze(p)
         checkRoadEvents(p, loc)
+        checkJamDetour(p, loc)
         checkFuel(p)
         checkRisk(p)
         checkAircraft(loc)
@@ -975,11 +976,68 @@ final class Navigator: ObservableObject {
         offerDetour(here, loc)
     }
 
+    /** A jam painted on the route, or a Waze jam ahead: look for a way around and show it. */
+    private func checkJamDetour(_ p: RouteTracker.Progress, _ loc: CLLocation) {
+        guard route.mode == .drive, !demoAlerts, !rerouting, !detourLoading, detourOffer == nil,
+              AppSettings.shared.traffic else { return }
+        let here = p.alongMeters
+        let spans = (route.trafficSpans + jamSpans).filter {
+            $0.level >= 2 && $0.lengthMeters >= 300 && $0.startMeters + $0.lengthMeters > here + 60
+                && $0.startMeters - here < 18_000 && $0.startMeters + $0.lengthMeters > here
+        }
+        if let jam = spans.min(by: { $0.startMeters < $1.startMeters }) {
+            let id = "jam-\(Int(jam.startMeters / 250))"
+            guard !detourTried.contains(id) else { return }
+            requestAvoid(id: id, fromMeters: max(jam.startMeters, here), toMeters: jam.startMeters + jam.lengthMeters, loc: loc, words: "korka")
+            return
+        }
+        if let w = routeWaze.first(where: { $0.alert.kind == .jam && $0.along > here - 40 && $0.along - here < 12_000 }) {
+            let id = "wazejam-\(w.alert.id)"
+            guard !detourTried.contains(id) else { return }
+            requestAvoid(id: id, fromMeters: w.along, toMeters: w.along + 900, loc: loc, words: "korka")
+        }
+    }
+
+    /** Asks for another way that stays off a slow stretch, then puts the offer on screen. */
+    private func requestAvoid(id: String, fromMeters: Double, toMeters: Double, loc: CLLocation, words: String) {
+        detourTried.insert(id)
+        detourLoading = true
+        let line = route.polyline
+        let from = LatLng(loc.coordinate.latitude, loc.coordinate.longitude)
+        let heading = Self.heading(loc), routeID = route.id
+        let to = destination.location, hw = avoidHighways, tolls = avoidTolls, via = stops.map(\.location)
+        Task {
+            let r = await Directions.routes(from: from, to: to, mode: .drive, avoidHighways: hw, avoidTolls: tolls,
+                                            useGoogle: !AppSettings.shared.noGoogle, via: via, heading: heading)
+            self.detourLoading = false
+            guard !self.stopped, self.route.id == routeID, let now = self.progress else { return }
+            let usable = r.routes.filter { $0.polyline.count >= 2 }
+            let clear = usable.filter { Self.missesStretch(line, from: fromMeters, to: toMeters, alt: $0.polyline) }
+            let best = clear.min(by: { $0.durationSeconds < $1.durationSeconds })
+                ?? usable.filter { now.remainingSeconds - $0.durationSeconds >= 180 }.min(by: { $0.durationSeconds < $1.durationSeconds })
+            guard let best else { return }
+            let extra = best.durationSeconds - now.remainingSeconds
+            if extra > 8 * 60 { return }
+            self.detourOffer = DetourOffer(route: best, extraSeconds: extra, eventID: id)
+            let minutes = Int((abs(extra) / 60).rounded())
+            let cost = extra <= -60 ? "oszczędza \(minutes) minut" : extra >= 60 ? "dokłada \(minutes) minut" : "zajmuje mniej więcej tyle samo"
+            self.speak("Jest objazd \(words), \(cost). Stuknij, żeby go wybrać.")
+        }
+    }
+
+    /// The other line stays off the slow stretch, not just off one point of it.
+    private static func missesStretch(_ line: [LatLng], from: Double, to: Double, alt: [LatLng]) -> Bool {
+        let end = min(max(to, from + 80), Geo.length(line))
+        let start = max(0, min(from, end - 40))
+        let samples = (0..<6).map { i in Geo.point(along: line, meters: start + (end - start) * Double(i) / 5) }
+        return samples.allSatisfy { Geo.project($0, on: alt).offset >= 140 }
+    }
+
     /** A closure within 15 km ahead: ask the router for ways that avoid it, and offer the quickest. */
     private func offerDetour(_ here: Double, _ loc: CLLocation) {
         guard !rerouting, !detourLoading, detourOffer == nil,
               let blocked = routeRoad.first(where: {
-                  let heavy = ($0.event.delayMinutes ?? 0) >= 8
+                  let heavy = ($0.event.delayMinutes ?? 0) >= 3
                   return ($0.event.kind == .closure || $0.event.blocked || heavy) && !detourTried.contains($0.event.id)
                       && $0.end > here && $0.start - here < 15_000
               }) else { return }
@@ -1107,9 +1165,12 @@ final class Navigator: ObservableObject {
             let saving = current - fresh.durationSeconds
             // The same way, more or less: just a better arrival time.
             let sameWay = abs(fresh.distanceMeters - now.remainingMeters) < max(300, now.remainingMeters * 0.03)
-            if !sameWay, saving > max(300, current * 0.1) {
-                self.adopt(fresh)
-                self.speak("Znalazłem szybszą trasę. Oszczędza \(Int((saving / 60).rounded())) minut.")
+            if !sameWay, saving > max(180, current * 0.08) {
+                let id = "traffic-live"
+                guard !self.detourTried.contains(id) else { return }
+                self.detourTried.insert(id)
+                self.detourOffer = DetourOffer(route: fresh, extraSeconds: -saving, eventID: id)
+                self.speak("Jest szybszy objazd, oszczędza \(Int((saving / 60).rounded())) minut. Stuknij, żeby go wybrać.")
             } else if sameWay {
                 self.trafficScale = min(3, max(0.5, fresh.durationSeconds / planned))
             }
@@ -1214,6 +1275,7 @@ final class Navigator: ObservableObject {
 
     /** Drives [fresh] from here on: a reroute, or a faster way found on the way. */
     private func adopt(_ fresh: Route) {
+        detourOffer = nil
         route = fresh
         tracker = RouteTracker(route: fresh)
         spokenStage = [:]

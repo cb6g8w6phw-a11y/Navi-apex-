@@ -256,6 +256,15 @@ struct NavigationOverlay: View {
 
     /** Fotoradar, policja i roboty: cienki pasek nad skrętem, nie duża karta. */
     @ViewBuilder private var topAlerts: some View {
+        if let offer = nav.detourOffer {
+            let minutes = Int((abs(offer.extraSeconds) / 60).rounded())
+            let saved = offer.extraSeconds <= -60 ? "oszczędza \(minutes) min"
+                : offer.extraSeconds >= 60 ? "+\(minutes) min" : "tyle samo"
+            TopPing(icon: "arrow.triangle.branch", tint: Color(hex: 0x16A34A),
+                    title: "Korek · zrób objazd", detail: saved)
+                .onTapGesture { withAnimation { nav.acceptDetour() } }
+                .transition(.move(edge: .top).combined(with: .opacity))
+        }
         if let cam = nav.cameraAhead {
             let title = cam.kind == .speed ? "Fotoradar" : "Kamera tablic"
             let limit = cam.limitKmh.map { "\(Int($0.rounded())) km/h" } ?? ""
