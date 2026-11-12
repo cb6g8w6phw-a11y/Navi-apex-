@@ -218,13 +218,27 @@ final class Navigator: ObservableObject {
         guard !arrived else { return }
         let loc: CLLocation
         if route.mode == .drive, MindSettings.shared.deadReckoning {
+            reckoning.onCoast = { [weak self] fix in
+                self?.consume(fix.location, label: fix.label)
+            }
             let fused = reckoning.fuse(raw, route: route.polyline)
-            loc = fused.tunnel ? fused.location : raw
-            reckoningLabel = fused.tunnel ? fused.label : nil
+            if fused.tunnel {
+                consume(fused.location, label: fused.label)
+                return
+            }
+            loc = raw
+            reckoningLabel = nil
         } else {
             loc = raw
             reckoningLabel = nil
         }
+        consume(loc, label: reckoningLabel)
+    }
+
+    /// One trusted position: a GPS fix, or the motion estimate while the sky is gone.
+    private func consume(_ loc: CLLocation, label: String?) {
+        guard !couch, !arrived else { return }
+        reckoningLabel = label
         lastFix = loc
         // The build's screenshots keep their made-up speed.
         if !demoAlerts { speedMps = max(0, loc.speed) }
@@ -258,9 +272,9 @@ final class Navigator: ObservableObject {
         }
         // Starting in a car park or a driveway, off the road the route begins on: that's not a
         // wrong turn, so no "Rerouting" every few seconds until the car has reached the route once
-        // (or has clearly gone another way).
+        // (or has clearly gone another way). A coast through a tunnel stays on the line.
         if p.offsetMeters < 40 { joinedRoute = true }
-        if p.offRoute && !rerouting && (joinedRoute || p.offsetMeters > 400) && Date().timeIntervalSince(lastReroute) > 8 {
+        if label == nil, p.offRoute && !rerouting && (joinedRoute || p.offsetMeters > 400) && Date().timeIntervalSince(lastReroute) > 8 {
             reroute(from: loc)
             return
         }
