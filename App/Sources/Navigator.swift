@@ -64,6 +64,7 @@ final class Navigator: ObservableObject {
     private var tracker: RouteTracker
     private let speech = AVSpeechSynthesizer()
     private let speechDone = SpeechDone()
+    private var voiceArmed = false
     private var rerouteSpokenAt = Date.distantPast
     private var toldNoSignal = false
     private var spokenStage: [Int: Int] = [:]
@@ -159,10 +160,10 @@ final class Navigator: ObservableObject {
         muted = !settings.voice
         avoidHighways = settings.avoidHighways
         avoidTolls = settings.avoidTolls
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
-        NowPlay.shared.prepareForVoice()
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
         UIApplication.shared.isIdleTimerDisabled = true
         speech.delegate = speechDone
+        speechDone.onIdle = { [weak self] in self?.voiceArmed = false }
         let first = route.maneuvers.first { $0.type != .depart } ?? route.maneuvers.first
         loadCameras()
         loadSchools()
@@ -1319,19 +1320,26 @@ final class Navigator: ObservableObject {
 
     private func speak(_ text: String, urgent: Bool = false) {
         guard !muted, !stopped else { return }
-        if urgent && speech.isSpeaking { speech.stopSpeaking(at: .word) }
-        NowPlay.shared.prepareForVoice()
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers])
-        try? session.setActive(true)
         let said = SpokenText.forVoice(text)
-        // What was said, for checking a drive afterwards (Console, or `log stream` on a simulator).
+        speechDone.hold()
+        if speech.isSpeaking, urgent {
+            speech.stopSpeaking(at: .word)
+        }
+        if !voiceArmed {
+            let session = AVAudioSession.sharedInstance()
+            try? session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+            try? session.setActive(true)
+            voiceArmed = true
+            NowPlay.shared.prepareForVoice()
+        }
         Self.log.info("say: \(said, privacy: .public)")
         let u = AVSpeechUtterance(string: said)
         let voice = Self.speechVoice()
         u.voice = voice
         u.prefersAssistiveTechnologySettings = false
-        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
+        u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.86
+        u.preUtteranceDelay = 0.12
+        u.postUtteranceDelay = 0.16
         if let voice { Self.log.info("voice: \(voice.language, privacy: .public) \(voice.name, privacy: .public)") }
         speech.speak(u)
     }
@@ -1376,15 +1384,21 @@ final class Navigator: ObservableObject {
 
 /** Hands the sound back once Kite stops talking, so music comes back up between instructions. */
 final class SpeechDone: NSObject, AVSpeechSynthesizerDelegate {
+    var onIdle: (() -> Void)?
+    private var generation = 0
+
+    /// Call before a new line, so a release scheduled by the previous one cannot cut this one off.
+    func hold() { generation += 1 }
+
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) { release(synthesizer) }
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) { release(synthesizer) }
 
     private func release(_ synthesizer: AVSpeechSynthesizer) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            guard !synthesizer.isSpeaking else { return }
-            let session = AVAudioSession.sharedInstance()
-            try? session.setCategory(.ambient, options: [.mixWithOthers])
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        let token = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            guard token == self.generation, !synthesizer.isSpeaking else { return }
+            self.onIdle?()
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             Task { @MainActor in NowPlay.shared.restoreAfterVoice() }
         }
     }

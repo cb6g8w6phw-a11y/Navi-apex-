@@ -190,9 +190,9 @@ final class KiteAnnotationView: MKAnnotationView {
     /** A route's trip time in a pill: teal when it's the picked route, white when it's another. */
     private static func pill(_ text: String, selected: Bool) -> UIImage {
         let color = selected ? UIColor.white : UIColor(hex: 0x202124)
-        let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 15, weight: .bold), .foregroundColor: color]
+        let attrs: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 12, weight: .bold), .foregroundColor: color]
         let ts = (text as NSString).size(withAttributes: attrs)
-        let size = CGSize(width: ceil(ts.width) + 26, height: ceil(ts.height) + 12)
+        let size = CGSize(width: ceil(ts.width) + 16, height: ceil(ts.height) + 8)
         return UIGraphicsImageRenderer(size: size).image { _ in
             let rect = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 1)
             let path = UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2)

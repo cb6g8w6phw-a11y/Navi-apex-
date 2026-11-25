@@ -29,19 +29,29 @@ public enum SpokenText {
         s = s.replacingOccurrences(of: "(?<![\\p{L}'])St\\.?(?= \\p{Lu})", with: "Saint", options: .regularExpression)
         // "A57(M)" is said "A57 M".
         s = s.replacingOccurrences(of: "(?<=\\d)\\(M\\)", with: " M", options: .regularExpression)
+        // "A14", "B1", "K1163" as a letter and the number, not one mashed word.
+        s = s.replacingOccurrences(of: "(?<![\\p{L}\\d])([ABKL])\\s?(\\d{1,4})(?![\\p{L}\\d])", with: "$1 $2", options: .regularExpression)
         // "N", "S", "E", "W" after a road number: "A33 N" is "A33 north".
         for (d, w) in [("N", "north"), ("S", "south"), ("E", "east"), ("W", "west")] {
             s = s.replacingOccurrences(of: "(?<=\\d) \(d)(?![\\p{L}'])", with: " \(w)", options: .regularExpression)
         }
-        // The street stays in German. One Polish word after it says what kind of street it is.
-        let gloss: [(String, String)] = [
-            ("straße", "ulica"), ("strasse", "ulica"), ("platz", "plac"), ("allee", "aleja"),
-            ("gasse", "zaułek"), ("chaussee", "szosa"), ("weg", "droga"),
-        ]
-        let low = s.lowercased()
-        var said: [String] = []
-        for (de, pl) in gloss where low.contains(de) && !said.contains(pl) { said.append(pl) }
-        if !said.isEmpty { s += ". " + said.joined(separator: ", ") }
-        return s
+        // A Polish (or English) voice stumbles on German endings, and a second sentence
+        // ("ulica") sounds like the line was cut. Say the ending in place, once.
+        if AppSettings.shared.language != "de" {
+            let folds = [("ä", "e"), ("ö", "o"), ("ü", "u"), ("Ä", "E"), ("Ö", "O"), ("Ü", "U"), ("ß", "s")]
+            for (a, b) in folds { s = s.replacingOccurrences(of: a, with: b) }
+            s = s.replacingOccurrences(of: "strasse", with: " sztrase", options: .caseInsensitive)
+            s = s.replacingOccurrences(of: "(?<=\\p{L})Str\\.", with: " sztrase", options: .regularExpression)
+            s = s.replacingOccurrences(of: "(?<![\\p{L}])Str\\.", with: "sztrase", options: .regularExpression)
+            s = s.replacingOccurrences(of: "(?<![\\p{L}])Str(?![\\p{L}\\d])", with: "sztrase", options: .regularExpression)
+            s = s.replacingOccurrences(of: "platz", with: " plac", options: .caseInsensitive)
+            s = s.replacingOccurrences(of: "gasse", with: " gase", options: .caseInsensitive)
+            s = s.replacingOccurrences(of: "chaussee", with: " szose", options: .caseInsensitive)
+            s = s.replacingOccurrences(of: "allee", with: " alee", options: .caseInsensitive)
+            s = s.replacingOccurrences(of: "(?<![\\p{L}])Weg(?![\\p{L}])", with: "wek", options: .regularExpression)
+            s = s.replacingOccurrences(of: "  +", with: " ", options: .regularExpression)
+            s = s.replacingOccurrences(of: " na (?=\\p{Lu})", with: " na, ", options: .regularExpression)
+        }
+        return s.trimmingCharacters(in: .whitespaces)
     }
 }

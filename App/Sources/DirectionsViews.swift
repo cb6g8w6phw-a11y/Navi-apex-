@@ -8,6 +8,21 @@ struct DirectionsOverlay: View {
     /** How tall the from/to card is, so the sheet at full height stops below it. */
     @State private var cardHeight: CGFloat = 110
 
+    /// Short planner: a few route rows, Go, modes. Not the tall Apple Maps sheet.
+    private var sheetPeek: CGFloat {
+        guard let d = model.directions else { return 150 }
+        if d.transit { return 124 }
+        let rows: CGFloat
+        if d.route != nil {
+            let n = min(3, max(d.current.count, 1))
+            rows = CGFloat(n) * 36 + CGFloat(max(0, n - 1)) * 4
+        } else {
+            rows = 44
+        }
+        let go: CGFloat = (!d.reversed && d.route != nil) ? 36 : 0
+        return 20 + rows + 6 + go + 4 + 32 + 8
+    }
+
     /// The zone this pin or this line still has to enter. Hidden once you're already inside.
     private var zone: RouteMind.Zone? {
         guard mind.umwelt, let d = model.directions else { return nil }
@@ -22,7 +37,7 @@ struct DirectionsOverlay: View {
             ZStack(alignment: .top) {
                 VStack {
                     Spacer()
-                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: model.directions?.transit == true ? 150 : 228,
+                    BottomSheet(detent: $model.detent, containerHeight: full, peekHeight: sheetPeek,
                                 topClearance: cardHeight + 16) {
                         TripHeader(model: model)
                     } content: {
@@ -69,8 +84,8 @@ struct EndpointsCard: View {
     var body: some View {
         HStack(spacing: 10) {
             Button { withAnimation { model.closeDirections() } } label: {
-                Image(systemName: "arrow.left").font(.system(size: 18, weight: .bold))
-                    .frame(width: 38, height: 38)
+                Image(systemName: "arrow.left").font(.system(size: 14, weight: .bold))
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Wróć")
@@ -81,13 +96,13 @@ struct EndpointsCard: View {
                     HStack(spacing: 12) {
                         Text("\(i + 1)").font(.system(size: 11, weight: .bold)).foregroundColor(.white)
                             .frame(width: 18, height: 18).background(Circle().fill(Color.secondary))
-                        Text(stop.name).font(.body.weight(.medium)).lineLimit(1)
+                        Text(stop.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
                         Spacer()
                         Button { model.removeStop(i) } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)) }
                             .buttonStyle(.plain).foregroundColor(.secondary)
                             .accessibilityLabel("Usuń postój")
                     }
-                    .frame(height: 30)
+                    .frame(height: 22)
                 }
                 Divider().padding(.leading, 30)
                 endpoint(icon: "mappin.circle.fill", color: Vela.closed, text: state.reversed ? L.t("Twoja lokalizacja", "Ihr Standort", "Your location") : state.destination.name)
@@ -96,43 +111,43 @@ struct EndpointsCard: View {
                     Button { model.addingStop = true } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus").font(.system(size: 14, weight: .bold)).frame(width: 18)
-                            Text(L.t("Dodaj postój", "Zwischenhalt", "Add stop")).font(.system(size: 14, weight: .semibold))
+                            Text(L.t("Dodaj postój", "Zwischenhalt", "Add stop")).font(.system(size: 12, weight: .semibold))
                             Spacer()
                         }
                         .foregroundColor(Vela.accentText(scheme))
-                        .frame(height: 28)
+                        .frame(height: 22)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
             }
             Button { model.reverseDirections() } label: {
-                Image(systemName: "arrow.up.arrow.down").font(.system(size: 15, weight: .bold))
-                    .frame(width: 38, height: 38)
+                Image(systemName: "arrow.up.arrow.down").font(.system(size: 12, weight: .bold))
+                    .frame(width: 28, height: 28)
                     .background(Circle().fill(Vela.chip(scheme)))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Zamień start i cel")
         }
         .foregroundColor(.primary)
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
-        .padding(.vertical, 4)
-        .glass(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .padding(.horizontal, 16)
+        .padding(.leading, 2)
+        .padding(.trailing, 6)
+        .padding(.vertical, 2)
+        .glass(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 12)
     }
 
     private func endpoint(icon: String, color: Color, text: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 16, weight: .bold)).foregroundColor(color).frame(width: 18)
-            Text(text).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+            Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundColor(color).frame(width: 16)
+            Text(text).font(.system(size: 13, weight: .semibold)).lineLimit(1)
             Spacer()
         }
-        .frame(height: 30)
+        .frame(height: 22)
     }
 }
 
-/** The part of the trip sheet always in view: how long, how you go, and a giant Go. */
+/** The part of the trip sheet always in view: compact routes, a small Go, then how you travel. */
 struct TripHeader: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var settings = AppSettings.shared
@@ -141,98 +156,147 @@ struct TripHeader: View {
     var body: some View {
         if let d = model.directions {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top) {
-                    if d.transit {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(d.pickedTrip.map { Fmt.duration($0.durationSeconds) } ?? "Transit")
-                                .font(.system(size: 30, weight: .heavy)).foregroundColor(Vela.accentText(scheme))
-                            Text("Komunikacją").font(.system(size: 17, weight: .medium)).foregroundColor(Vela.muted(scheme))
-                        }
-                    } else if let r = d.route {
-                        VStack(alignment: .leading, spacing: 2) {
-                            let seconds = (d.planKind != 0 ? d.forecast?.seconds : nil) ?? r.durationSeconds
-                            Text(Fmt.duration(seconds))
-                                .font(.system(size: 26, weight: .heavy))
-                                .foregroundColor(TripBody.delayColor(r, scheme))
-                                .lineLimit(1).minimumScaleFactor(0.7)
-                            Text(planLine(d, r, seconds))
-                                .font(.system(size: 14, weight: .medium)).foregroundColor(Vela.muted(scheme))
-                                .lineLimit(2).minimumScaleFactor(0.8)
-                            if r.mode == .drive {
-                                let fact = TripExtras.costLine(meters: r.distanceMeters, consumption: settings.carConsumption,
-                                                               litresLeft: settings.fuelLeft, price: model.fuelBest?.price)
-                                Text(fact.text)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundColor(fact.short ? Color(hex: 0xDC2626) : Vela.muted(scheme))
-                                    .lineLimit(2)
-                            }
-                        }
-                    } else if d.loading.contains(d.mode) {
-                        HStack(spacing: 10) { ProgressView(); Text("Szukam tras…").font(.system(size: 19, weight: .semibold)) }
-                            .frame(height: 52)
-                    } else {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(d.errors[d.mode] ?? "Nie znaleziono trasy.").font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(Vela.muted(scheme))
-                                .fixedSize(horizontal: false, vertical: true)
+                if d.transit {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(d.pickedTrip.map { Fmt.duration($0.durationSeconds) } ?? "Transit")
+                            .font(.system(size: 18, weight: .heavy)).foregroundColor(Vela.accentText(scheme))
+                        Text("Komunikacją").font(.system(size: 12, weight: .medium)).foregroundColor(Vela.muted(scheme))
+                        Spacer(minLength: 0)
+                    }
+                    .frame(minHeight: 32)
+                } else if d.route != nil {
+                    HStack(alignment: .top, spacing: 6) {
+                        CompactRoutes(model: model, state: d)
+                        options
+                    }
+                } else if d.loading.contains(d.mode) {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Szukam tras…").font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        options
+                    }
+                    .frame(height: 36)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(d.errors[d.mode] ?? "Nie znaleziono trasy.").font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Vela.muted(scheme))
+                            .lineLimit(2)
+                        HStack {
                             if model.location.denied {
                                 PillButton(title: "Otwórz ustawienia", icon: "location.fill", filled: true) { LocationService.openSettings() }
                             } else if d.errors[d.mode] != nil {
                                 PillButton(title: "Spróbuj ponownie", icon: "arrow.clockwise") { model.reloadRoutes() }
                             }
+                            Spacer(minLength: 0)
+                            options
                         }
-                        .frame(minHeight: 52)
                     }
-                    Spacer(minLength: 8)
-                    if !d.transit {
-                        Menu {
-                            Toggle("Unikaj opłat", isOn: $settings.avoidTolls)
-                            Toggle("Unikaj autostrad", isOn: $settings.avoidHighways)
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.primary)
-                                .frame(width: 38, height: 38)
-                                .background(Circle().fill(Vela.chip(scheme)))
-                        }
-                        .accessibilityLabel("Opcje trasy")
-                        .onChange(of: settings.avoidTolls) { _ in model.reloadRoutes() }
-                        .onChange(of: settings.avoidHighways) { _ in model.reloadRoutes() }
-                    }
-                }
-                ModeTabs(model: model, state: d)
-                if !d.transit, d.current.count > 1, let picked = d.route {
-                    RouteChips(model: model, state: d, picked: picked)
                 }
                 if !d.transit, !d.reversed, d.route != nil {
                     Button { model.startNavigation() } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "location.north.fill").font(.system(size: 19, weight: .bold))
-                            Text(L.t("Jedź", "Los", "Go")).font(.system(size: 18, weight: .heavy))
+                        HStack(spacing: 6) {
+                            Image(systemName: "location.north.fill").font(.system(size: 13, weight: .bold))
+                            Text(L.t("Jedź", "Los", "Go")).font(.system(size: 15, weight: .heavy))
                         }
                         .foregroundColor(Vela.onAccent(scheme))
-                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .frame(maxWidth: .infinity, minHeight: 32)
                         .background(Capsule().fill(Vela.accent(scheme)))
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Jedź")
                 }
+                ModeTabs(model: model, state: d)
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
         }
     }
 
-    private func planLine(_ d: DirectionsState, _ r: Route, _ seconds: Double) -> String {
-        let dist = Fmt.distance(r.distanceMeters)
-        guard d.planKind != 0 else { return "\(dist) · przyjazd \(Fmt.arrival(seconds))" }
-        if d.forecastBusy, d.forecast == nil { return "\(dist) · liczę ruch na tę godzinę…" }
-        guard let f = d.forecast else { return "\(dist) · brak prognozy na tę godzinę" }
-        if d.planKind == 2 {
-            return "Wyjedź o \(TripClock.time.string(from: f.depart)) · bądź o \(TripClock.time.string(from: f.arrive))"
+    private var options: some View {
+        Menu {
+            Toggle("Unikaj opłat", isOn: $settings.avoidTolls)
+            Toggle("Unikaj autostrad", isOn: $settings.avoidHighways)
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.primary)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Vela.chip(scheme)))
         }
-        return "\(dist) · na miejscu o \(TripClock.time.string(from: f.arrive))"
+        .accessibilityLabel("Opcje trasy")
+        .onChange(of: settings.avoidTolls) { _ in model.reloadRoutes() }
+        .onChange(of: settings.avoidHighways) { _ in model.reloadRoutes() }
+    }
+}
+
+/** Up to three ways, like the big maps planner, but one short row each. */
+struct CompactRoutes: View {
+    @ObservedObject var model: AppModel
+    let state: DirectionsState
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let routes = Array(state.current.prefix(3))
+        VStack(spacing: 4) {
+            ForEach(Array(routes.enumerated()), id: \.element.id) { i, r in
+                let on = r.id == state.route?.id
+                Button { model.selectRoute(i) } label: { row(r, on: on) }
+                    .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func row(_ r: Route, on: Bool) -> some View {
+        let ink: Color = on ? Vela.onAccent(scheme) : .primary
+        return HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(via(r))
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1)
+                Text(traffic(r))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(on ? Vela.onAccent(scheme).opacity(0.88) : trafficInk(r))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(Fmt.shortDuration(r.durationSeconds))
+                    .font(.system(size: 15, weight: .heavy))
+                Text(Fmt.arrival(r.durationSeconds))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(on ? Vela.onAccent(scheme).opacity(0.88) : Vela.muted(scheme))
+            }
+        }
+        .foregroundColor(ink)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 36, alignment: .center)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Vela.accent(scheme) : Vela.chip(scheme)))
+    }
+
+    private func via(_ r: Route) -> String {
+        if let s = r.summary, !s.isEmpty { return "przez \(s)" }
+        return Fmt.distance(r.distanceMeters)
+    }
+
+    private func traffic(_ r: Route) -> String {
+        let dist = Fmt.distance(r.distanceMeters)
+        guard r.mode == .drive, r.trafficSeconds != nil else { return dist }
+        switch r.delayLevel {
+        case 2: return "Korek · \(dist)"
+        case 1: return "Wolniej · \(dist)"
+        default: return "Ruch lekki · \(dist)"
+        }
+    }
+
+    private func trafficInk(_ r: Route) -> Color {
+        guard r.mode == .drive, r.trafficSeconds != nil else { return Vela.muted(scheme) }
+        switch r.delayLevel {
+        case 2: return Color(hex: 0xDC2626)
+        case 1: return Color(hex: 0xE37400)
+        default: return Color(hex: 0x16A34A)
+        }
     }
 }
 
@@ -296,15 +360,15 @@ struct ModeTabs: View {
 
     private func tile(icon: String, on: Bool, loading: Bool, time: String?, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: icon).font(.system(size: 17, weight: .semibold))
+            VStack(spacing: 1) {
+                Image(systemName: icon).font(.system(size: 13, weight: .semibold))
                 if loading {
-                    ProgressView().scaleEffect(0.7).frame(height: 16)
+                    ProgressView().scaleEffect(0.55).frame(height: 12)
                 } else {
-                    Text(time ?? "–").font(.system(size: 13, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+                    Text(time ?? "–").font(.system(size: 10, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 38)
+            .frame(maxWidth: .infinity, minHeight: 28)
             .foregroundColor(on ? Vela.onAccent(scheme) : .primary)
             .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(on ? Vela.accent(scheme) : Vela.chip(scheme)))
             .contentShape(RoundedRectangle(cornerRadius: 18))
